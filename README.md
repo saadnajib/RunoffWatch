@@ -1,7 +1,8 @@
 # RunoffWatch
 
 Machine learning on ~10,000 pesticide-runoff simulations to learn **when rain
-turns into a pollution spike, and when it does not**.
+washes pesticide off the soil of a field, and when it does not**. Field-level,
+daily resolution; rivers are out of scope.
 
 - **Project scope:** [docs/PROJECT_SCOPE.md](docs/PROJECT_SCOPE.md)
 - **Presentation:** https://claude.ai/artifact/Y82phRAgCapMtktvPri94c
