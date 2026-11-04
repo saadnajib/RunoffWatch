@@ -7,13 +7,13 @@
 ## One-sentence summary
 
 We use machine learning on about 10,000 pesticide-runoff simulations to learn
-when rain turns into a pollution spike, and when it does not.
+when rain washes pesticide off the soil of a field, and when it does not. The focus is the field and its soil, not the river downstream (as agreed with the supervisor).
 
 ## The problem
 
 A farmer sprays a pesticide on a field. Later, a heavy rain produces surface
-runoff, and the water carries pesticide into the nearest stream. Most of the
-pesticide that reaches a stream in a year arrives on only a handful of days.
+runoff, and the water and eroded soil carry pesticide off the field. Most of the
+pesticide that leaves a field in a year does so on only a handful of days.
 The hard part is knowing which days.
 
 ## Research question
@@ -23,8 +23,8 @@ washed off the field, and how much?
 
 1. **When?** How much rain, how soon after spraying, in which season.
 2. **When not?** Which heavy-rain days stay harmless, and why.
-3. **How much?** Can a fast model estimate the amount without running the full
-   simulation?
+3. **How much?** Can a fast model estimate the amount, for other places and
+   years, without running the full simulation?
 
 ## Data
 
@@ -35,8 +35,9 @@ washed off the field, and how much?
 | Inputs per run | daily weather (rain, temperature, wind, sunshine, evaporation); field settings (crop, soil, pesticide, spraying date) |
 | Outputs per run | daily water runoff, eroded soil, pesticide washed off the field |
 
-The simulator is the official EU model for pesticide runoff. The data are
-simulations, not river measurements (see Limits).
+The simulator is the official EU model for pesticide runoff. It works in daily
+steps and stops at the field edge; both match the course focus (daily weather,
+soil rather than water), as confirmed by the supervisor.
 
 ### What a first look at one run shows
 
@@ -69,14 +70,16 @@ were broken and why. Done first, because every later result depends on it.
   "risk calendar".
 - **Metric:** precision and recall for the rare spike days, not plain accuracy.
 
-### Task 3 – A fast emulator of the simulator (supervised regression, stretch goal)
+### Task 3 – A fast emulator of the simulator, run with Agri4Cast weather (supervised regression, stretch goal)
 
 Train a regression model (gradient boosting or a small neural network) to
-predict how much pesticide leaves the field from the same inputs the simulator
-uses. The simulator needs ~4 s per run; the emulator answers in milliseconds,
-so thousands of what-if scenarios become possible (stronger storms, later
-spraying, different field settings). Metric: agreement with the simulator on
-unseen runs.
+predict how much pesticide leaves the field from the same daily inputs the
+simulator uses. The simulator needs ~4 s per run; the emulator answers in
+milliseconds. It can then be fed **Agri4Cast** weather (the EU Joint Research
+Centre's free daily 25 × 25 km grid for all of Europe, 1979–today, the standard
+source named by the supervisor) to estimate pesticide-loss risk for other
+regions and recent years without running the simulator. Metric: agreement with
+the simulator on unseen runs.
 
 ## Workflow
 
@@ -112,22 +115,19 @@ placeholders until the course deadline is known: [deadline].
 
 ## Limits
 
-**Can:** show which weather and timing conditions lead to runoff spikes in the
-official EU model; give a daily spike risk and a seasonal risk calendar; clean
-up a large simulation data set for the whole group; answer what-if questions
-quickly (if the emulator is built).
+**Can:** show which daily weather and timing conditions make pesticide leave
+the soil in the official EU model; give a daily loss risk and a seasonal risk
+calendar; clean up a large simulation data set for the whole group; estimate
+loss risk for other regions and years from Agri4Cast weather (if the emulator
+is built).
 
-**Cannot:** prove what happens in a real river (simulations, not
-measurements); resolve hours (the model works in whole days and puts runoff on
-the same day as the rain); describe how pesticide travels downstream.
-
-**Possible extension:** compare the model's "dangerous conditions" with
-measured stream data (e.g. small-stream monitoring work in Landau) to test
-whether the simulator matches reality.
+**Cannot, by design:** say what happens after the field edge (rivers are out of
+scope); resolve hours (daily is the model's and the course's resolution);
+replace measurements (results describe the official model's behaviour).
 
 ## Deliverables
 
 1. Clean data set with broken runs found automatically
-2. Spike-risk model with the weather drivers ranked
+2. Loss-risk model with the weather drivers ranked
 3. Seasonal risk calendar
 4. Report and re-runnable code in this repository
