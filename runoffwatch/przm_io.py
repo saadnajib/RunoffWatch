@@ -90,9 +90,14 @@ def read_zts_scale_factors(inp_path: str | Path) -> dict[str, float]:
 def read_zts(zts_path: str | Path, inp_path: str | Path | None = None) -> pd.DataFrame:
     """Read the daily PRZM time series (.ZTS) and convert to plain units."""
     lines = Path(zts_path).read_text(errors="replace").splitlines()
-    header = next((l for l in lines[:10] if l.startswith(" TSR") and "RUNF" in l or "PRCP" in l), None)
-    if header is None:
+    # The variable header is the ' TSR' line directly above the first data row.
+    # (Searching for a variable name would also match a run title containing it.)
+    first_data = next((i for i, l in enumerate(lines) if l.startswith(" TSR PRZ")), None)
+    if first_data is None:
+        raise ValueError(f"{zts_path}: no data rows")
+    if first_data == 0 or not lines[first_data - 1].startswith(" TSR"):
         raise ValueError(f"{zts_path}: no variable header line found")
+    header = lines[first_data - 1]
     names = header.split()[1:]
     rows = [l.split() for l in lines if l.startswith(" TSR PRZ")]
     if not rows:
@@ -132,8 +137,13 @@ def check_soil_decay(out_path: str | Path, max_growth: float = 5.0) -> bool:
     vals = read_soil_decay(out_path)
     if len(vals) < 3:
         return False
-    growth = [b / a for a, b in zip(vals[:-1], vals[1:]) if a > 0]
-    unstable = sum(g > max_growth for g in growth) >= 2
+    growth = [b / a if a > 0 else 0.0 for a, b in zip(vals[:-1], vals[1:])]
+    # Unstable = at least two CONSECUTIVE years growing more than max_growth x.
+    streak = longest = 0
+    for g in growth:
+        streak = streak + 1 if g > max_growth else 0
+        longest = max(longest, streak)
+    unstable = longest >= 2
     if unstable:
         log.error("%s: yearly soil decay grows %s - NUMERICAL BLOW-UP, pesticide results unusable",
                   Path(out_path).name, " -> ".join(f"{v:.3g}" for v in vals))

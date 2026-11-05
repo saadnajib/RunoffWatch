@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import multiprocessing
 from collections import Counter, defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -185,7 +186,10 @@ def qc_all(runs: list[Path], out_csv: str | Path, daily_dir: str | Path | None =
     """Quality-check all runs in parallel and write one summary CSV."""
     daily_dir = Path(daily_dir) if daily_dir else None
     rows = []
-    with ProcessPoolExecutor(max_workers=workers, initializer=_silence_worker if quiet else None) as pool:
+    # "spawn" everywhere: what Windows uses anyway, and safe on Linux/macOS.
+    ctx = multiprocessing.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=workers, mp_context=ctx,
+                             initializer=_silence_worker if quiet else None) as pool:
         futures = {pool.submit(qc_run, r, daily_dir): r for r in runs}
         for i, fut in enumerate(as_completed(futures), start=1):
             rows.append(fut.result())
