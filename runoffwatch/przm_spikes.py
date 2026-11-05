@@ -42,6 +42,7 @@ def flag_spikes(df: pd.DataFrame, col: str = "pest_runoff_gha",
     """Mark spike days. Threshold = (1 - top_fraction) quantile of non-zero days."""
     out = df.copy()
     nonzero = out.loc[out[col] > 0, col]
+    out["is_runoff_event"] = out[col] > 0
     if nonzero.empty:
         out["is_spike"] = False
         out.attrs["spike_threshold"] = np.nan
@@ -49,7 +50,6 @@ def flag_spikes(df: pd.DataFrame, col: str = "pest_runoff_gha",
     thr = nonzero.quantile(1 - top_fraction)
     if abs_floor is not None:
         thr = max(thr, abs_floor)
-    out["is_runoff_event"] = out[col] > 0
     out["is_spike"] = out[col] >= thr
     out.attrs["spike_threshold"] = float(thr)
     return out

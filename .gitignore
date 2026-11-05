@@ -1,2 +1,10 @@
-examples/output/
 __pycache__/
+*.egg-info/
+.pytest_cache/
+.venv/
+examples/output/
+reports/
+
+# Data never goes into git (size, and it belongs to the project group)
+data/*
+!data/README.md

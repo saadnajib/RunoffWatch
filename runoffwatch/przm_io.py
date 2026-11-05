@@ -90,9 +90,14 @@ def read_zts_scale_factors(inp_path: str | Path) -> dict[str, float]:
 def read_zts(zts_path: str | Path, inp_path: str | Path | None = None) -> pd.DataFrame:
     """Read the daily PRZM time series (.ZTS) and convert to plain units."""
     lines = Path(zts_path).read_text(errors="replace").splitlines()
-    header = next((l for l in lines[:10] if l.startswith(" TSR") and "RUNF" in l or "PRCP" in l), None)
-    if header is None:
+    # The variable header is the ' TSR' line directly above the first data row.
+    # (Searching for a variable name would also match a run title containing it.)
+    first_data = next((i for i, l in enumerate(lines) if l.startswith(" TSR PRZ")), None)
+    if first_data is None:
+        raise ValueError(f"{zts_path}: no data rows")
+    if first_data == 0 or not lines[first_data - 1].startswith(" TSR"):
         raise ValueError(f"{zts_path}: no variable header line found")
+    header = lines[first_data - 1]
     names = header.split()[1:]
     rows = [l.split() for l in lines if l.startswith(" TSR PRZ")]
     if not rows:
@@ -115,6 +120,12 @@ def read_zts(zts_path: str | Path, inp_path: str | Path | None = None) -> pd.Dat
     return out
 
 
+def read_soil_decay(out_path: str | Path) -> list[float]:
+    """Yearly 'TOTAL SOIL DECAY OF PESTICIDE' values from a PRZM .OUT file."""
+    return [float(l.split()[-1]) for l in Path(out_path).read_text(errors="replace").splitlines()
+            if "TOTAL SOIL DECAY OF PESTICIDE" in l]
+
+
 def check_soil_decay(out_path: str | Path, max_growth: float = 5.0) -> bool:
     """Detect numerical blow-up in a PRZM run.
 
@@ -123,12 +134,16 @@ def check_soil_decay(out_path: str | Path, max_growth: float = 5.0) -> bool:
     more than `max_growth` x per year, the pesticide results are not physical.
     Returns True if the run looks unstable.
     """
-    vals = [float(l.split()[-1]) for l in Path(out_path).read_text(errors="replace").splitlines()
-            if "TOTAL SOIL DECAY OF PESTICIDE" in l]
+    vals = read_soil_decay(out_path)
     if len(vals) < 3:
         return False
-    growth = [b / a for a, b in zip(vals[:-1], vals[1:]) if a > 0]
-    unstable = sum(g > max_growth for g in growth) >= 2
+    growth = [b / a if a > 0 else 0.0 for a, b in zip(vals[:-1], vals[1:])]
+    # Unstable = at least two CONSECUTIVE years growing more than max_growth x.
+    streak = longest = 0
+    for g in growth:
+        streak = streak + 1 if g > max_growth else 0
+        longest = max(longest, streak)
+    unstable = longest >= 2
     if unstable:
         log.error("%s: yearly soil decay grows %s - NUMERICAL BLOW-UP, pesticide results unusable",
                   Path(out_path).name, " -> ".join(f"{v:.3g}" for v in vals))
@@ -143,6 +158,9 @@ def read_run(folder: str | Path) -> pd.DataFrame:
       * per year, pesticide washed off must not exceed what was applied
       * the run log is scanned for ERROR lines
       * the .OUT file is checked for numerical blow-up (df.attrs["unstable"])
+
+    Check results are kept in df.attrs (unstable, soil_decay, weather_mismatch_mm,
+    mass_balance_ok, log_errors) so batch tools can record them per run.
     """
     folder = Path(folder)
     met = read_met(_one(folder, r".*\.met"))
@@ -156,6 +174,7 @@ def read_run(folder: str | Path) -> pd.DataFrame:
         # PRZM stores rain on frozen days as snow (not in PRCP), so skip days <= 0 C.
         warm = met["temp_c"].reindex(zts.index) > 0
         diff = (met["rain_mm"].reindex(zts.index) - zts["rain_mm"])[warm].abs().max()
+        df.attrs["weather_mismatch_mm"] = float(diff) if pd.notna(diff) else 0.0
         if diff > 0.05:
             log.warning("%s: rain in .met and .ZTS differ by up to %.2f mm on warm days - wrong weather file?",
                         folder.name, diff)
@@ -165,6 +184,7 @@ def read_run(folder: str | Path) -> pd.DataFrame:
         yearly = df[["applied_gha", "pest_runoff_gha"]].groupby(df.index.year).sum()
         cum = yearly.cumsum()
         bad = cum[cum["pest_runoff_gha"] > cum["applied_gha"]]
+        df.attrs["mass_balance_ok"] = bad.empty
         if len(bad):
             log.warning("%s: cumulative pesticide runoff exceeds cumulative application in %s "
                         "- mass balance broken, check units/settings", folder.name, list(bad.index))
@@ -172,10 +192,12 @@ def read_run(folder: str | Path) -> pd.DataFrame:
     out_files = [p for p in folder.iterdir() if p.suffix.lower() == ".out"]
     if out_files:
         df.attrs["unstable"] = check_soil_decay(out_files[0])
+        df.attrs["soil_decay"] = read_soil_decay(out_files[0])
 
     logf = folder / "mc.log"
     if logf.exists():
         errs = [l.strip() for l in logf.read_text(errors="replace").splitlines() if "ERROR" in l]
+        df.attrs["log_errors"] = errs
         if errs:
             log.warning("%s: %d ERROR line(s) in mc.log, first: %s", folder.name, len(errs), errs[0][:160])
 

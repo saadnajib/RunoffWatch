@@ -1,4 +1,6 @@
+# Prefer:  pip install -e ".[dev]"   (see pyproject.toml)
 pandas>=2.1
 numpy>=1.24
 matplotlib>=3.7
-openpyxl  # only for .xlsx input
+pyarrow>=14
+py7zr>=0.20
