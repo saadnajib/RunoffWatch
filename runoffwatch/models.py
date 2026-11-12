@@ -239,7 +239,7 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
 
     meta = {"runoff_features": RUNOFF_FEATURES, "conc_features": CONC_FEATURES,
             "classifier_features": CLASSIFIER_FEATURES, "high_loss_threshold_gha": HIGH_LOSS_GHA,
-            "classifier_alarm_threshold": float(threshold), "conc_floor": CONC_FLOOR,
+            "conc_floor": CONC_FLOOR,
             "trained_on": {"application": "2400 g/ha Flufenacet on 1 March, winter cereals, FOCUS R1",
                            "feature_ranges": {c: [float(tr[c].quantile(0.001)), float(tr[c].quantile(0.999))]
                                               for c in CLASSIFIER_FEATURES}}}
@@ -249,6 +249,106 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
     from .figures import model_figures
     model_figures(te, tc, scores, shap_rank, sample, contrib, calendar, Path(figures))
     return metrics
+
+
+# --------------------------------------------------------------------------- #
+# Leave-one-year-out evaluation
+# --------------------------------------------------------------------------- #
+def yearly_cv(features_path: str | Path = "data/processed/features.parquet",
+              results: str | Path = "docs/results", figures: str | Path = "docs/figures",
+              rounds: int = 1500) -> dict:
+    """How well do the models do on a year they have never seen? Answered once per year.
+
+    For each application year Y: train on the training weather files in all other years
+    (the year after Y decides when to stop training), test on the test weather files in Y.
+    Scores differ a lot between years because a year holds only a handful of storms, so
+    the honest summary is the pooled score over all held-out years plus the range.
+    """
+    from .quality import app_year
+
+    t = pd.read_parquet(features_path)
+    files = split_by_weather(t["met_hash"]).to_numpy()
+    year = app_year(pd.DatetimeIndex(t["date"]))
+    with_data = pd.Series(year[t["pest_clean"].to_numpy()]).value_counts()
+    years = sorted(int(y) for y in with_data.index[with_data >= 0.02 * with_data.sum()])
+    rows, pooled = [], []
+    for y in years:
+        stop_year = years[(years.index(y) + 1) % len(years)]
+        tr = t[(files == "train") & (year != y) & (year != stop_year)]
+        va = t[(files != "test") & (year == stop_year)]
+        te = t[(files == "test") & (year == y)].copy()
+        runoff = _fit({"objective": "tweedie", "tweedie_variance_power": 1.2, "metric": "rmse",
+                       "min_data_in_leaf": min(2000, max(20, len(tr) // 200))},
+                      tr[RUNOFF_FEATURES], tr["runoff_mm"], va[RUNOFF_FEATURES], va["runoff_mm"], rounds)
+        ctr, cva = _conc_rows(tr), _conc_rows(va)
+        conc = _fit({"objective": "regression", "metric": "rmse", "num_leaves": 31,
+                     "min_data_in_leaf": min(200, max(20, len(ctr) // 200))},
+                    ctr[CONC_FEATURES], _log_conc(ctr), cva[CONC_FEATURES], _log_conc(cva), rounds)
+        cl_tr, cl_va = tr[tr["pest_clean"]], va[va["pest_clean"]]
+        clf = _fit({"objective": "binary", "metric": "binary_logloss", "learning_rate": 0.03},
+                   cl_tr[CLASSIFIER_FEATURES], cl_tr["high_loss"].astype(int),
+                   cl_va[CLASSIFIER_FEATURES], cl_va["high_loss"].astype(int), rounds, patience=100)
+        a, k = fit_decay_baseline(ctr["runoff_mm"].to_numpy(), ctr["days_since_app"].to_numpy(), ctr["loss_gha"].to_numpy())
+
+        te["runoff_pred"] = runoff.predict(te[RUNOFF_FEATURES])
+        tc = te[te["pest_clean"]].copy()
+        tc["loss_pred"] = tc["runoff_pred"] * 10 ** conc.predict(tc[CONC_FEATURES])
+        tc["loss_base"] = a * tc["cn_runoff_mm"] * np.exp(-k * tc["days_since_app"])
+        tc["clf_score"] = clf.predict(tc[CLASSIFIER_FEATURES])
+        tc["year"] = y
+        pos = tc["high_loss"].to_numpy()
+        alarm = (tc["loss_pred"] >= HIGH_LOSS_GHA).to_numpy()
+        ap = lambda s: float(average_precision_score(pos, s)) if pos.any() else np.nan  # noqa: E731
+        rows.append({
+            "test_year": y, "rain_days": len(te),
+            "runoff_r2": r2_score(te["runoff_mm"], te["runoff_pred"]),
+            "runoff_r2_curve_number": r2_score(te["runoff_mm"], te["cn_runoff_mm"]),
+            "loss_r2": r2_score(tc["loss_gha"], tc["loss_pred"]),
+            "loss_r2_baseline": r2_score(tc["loss_gha"], tc["loss_base"]),
+            "loss_total_pred_over_true": tc["loss_pred"].sum() / tc["loss_gha"].sum(),
+            "high_loss_days": int(pos.sum()),
+            "storm_dates_with_high_loss": int(tc.loc[pos, "date"].nunique()),
+            "pr_auc_surrogate": ap(tc["loss_pred"]), "pr_auc_classifier": ap(tc["clf_score"]),
+            "pr_auc_rain_rule": ap(tc["rain_mm"]),
+            "alarm_precision": float(pos[alarm].mean()) if alarm.any() else np.nan,
+            "alarm_recall": float(alarm[pos].mean()) if pos.any() else np.nan,
+        })
+        pooled.append(tc[["year", "date", "run", "rain_mm", "runoff_mm", "runoff_pred", "cn_runoff_mm", "loss_gha",
+                          "loss_pred", "loss_base", "clf_score", "high_loss"]])
+        log.info("cv year %d: runoff R2 %.3f, loss R2 %.3f, PR-AUC %.3f (%d high-loss days)", y,
+                 rows[-1]["runoff_r2"], rows[-1]["loss_r2"], rows[-1]["pr_auc_surrogate"], rows[-1]["high_loss_days"])
+
+    by_year = pd.DataFrame(rows).set_index("test_year")
+    P = pd.concat(pooled, ignore_index=True)
+    pos = P["high_loss"].to_numpy()
+    alarm = (P["loss_pred"] >= HIGH_LOSS_GHA).to_numpy()
+    rng = lambda c: [float(by_year[c].min()), float(by_year[c].max())]  # noqa: E731
+    summary = {
+        "held_out_years": years, "rows_scored": int(len(P)), "high_loss_days": int(pos.sum()),
+        "storm_dates_with_high_loss": int(P.loc[pos, "date"].nunique()),
+        "pooled": {
+            "runoff_r2": float(r2_score(P["runoff_mm"], P["runoff_pred"])),
+            "runoff_r2_curve_number": float(r2_score(P["runoff_mm"], P["cn_runoff_mm"])),
+            "loss_r2": float(r2_score(P["loss_gha"], P["loss_pred"])),
+            "loss_r2_baseline": float(r2_score(P["loss_gha"], P["loss_base"])),
+            "loss_total_pred_over_true": float(P["loss_pred"].sum() / P["loss_gha"].sum()),
+            "pr_auc_surrogate": float(average_precision_score(pos, P["loss_pred"])),
+            "pr_auc_classifier": float(average_precision_score(pos, P["clf_score"])),
+            "pr_auc_rain_rule": float(average_precision_score(pos, P["rain_mm"])),
+            "alarm_at_1_gha": {"alarms": int(alarm.sum()), "precision": float(pos[alarm].mean()),
+                               "recall": float(alarm[pos].mean())},
+        },
+        "range_over_years": {c: rng(c) for c in ("runoff_r2", "runoff_r2_curve_number", "loss_r2",
+                                                 "loss_total_pred_over_true", "pr_auc_surrogate",
+                                                 "pr_auc_classifier", "alarm_recall")},
+        "years_surrogate_runoff_beats_formula": int((by_year["runoff_r2"] > by_year["runoff_r2_curve_number"]).sum()),
+    }
+    results = Path(results); results.mkdir(parents=True, exist_ok=True)
+    by_year.round(4).to_csv(results / "cv_by_year.csv")
+    (results / "cv_summary.json").write_text(json.dumps(summary, indent=2))
+    from .figures import cv_figure
+    cv_figure(by_year, Path(figures))
+    return summary
 
 
 # --------------------------------------------------------------------------- #
@@ -268,10 +368,10 @@ def _loss_scores(d: pd.DataFrame, col: str) -> dict:
     tot = d.groupby("run", observed=True)[["loss_gha", col]].sum()
     tot = tot[tot["loss_gha"] > 0]
     rel = (tot[col] - tot["loss_gha"]).abs() / tot["loss_gha"]
-    ev = (y > 0) & (p > 0)
+    ev = y > 0                                  # same rows for every model; tiny predictions are floored
     top = np.argsort(-y)[: max(1, int(0.001 * len(y)))]
     return {"r2_daily": float(r2_score(y, p)),
-            "r2_log10_on_runoff_days": float(r2_score(np.log10(y[ev]), np.log10(p[ev]))),
+            "r2_log10_on_runoff_days": float(r2_score(np.log10(y[ev]), np.log10(np.clip(p[ev], 1e-9, None)))),
             "r2_run_totals": float(r2_score(tot["loss_gha"], tot[col])),
             "median_abs_error_of_run_total_pct": float(100 * rel.median()),
             "total_loss_ratio_pred_over_true": float(p.sum() / y.sum()),

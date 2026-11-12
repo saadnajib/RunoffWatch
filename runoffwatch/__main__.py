@@ -48,7 +48,9 @@ def main(argv=None) -> int:
     tr = sub.add_parser("train", help="Tasks 2+3: train and evaluate surrogate and classifier")
     tr.add_argument("--features", default="data/processed/features.parquet")
     tr.add_argument("--models", default="models")
-    tr.add_argument("--rounds", type=int, default=800)
+    tr.add_argument("--rounds", type=int, default=1500)
+    tr.add_argument("--cv", action="store_true",
+                    help="instead of training the final models: leave-one-year-out evaluation (slow)")
 
     wi = sub.add_parser("whatif", help="compare spray days for a weather table")
     wi.add_argument("--weather", help="CSV with date, rain_mm, temp_c[, pan_evap_mm]; omit for a made-up example")
@@ -102,7 +104,11 @@ def main(argv=None) -> int:
         print(f"\n{len(t):,} rain-day rows written to {a.out}")
     elif a.cmd == "train":
         import json
-        from .models import train_all
+        from .models import train_all, yearly_cv
+        if a.cv:
+            print(json.dumps(yearly_cv(a.features, rounds=a.rounds), indent=2))
+            print("per year: docs/results/cv_by_year.csv | figure: docs/figures/m7_scores_by_held_out_year.png")
+            return 0
         m = train_all(a.features, a.models, rounds=a.rounds)
         print(json.dumps({k: m[k] for k in ("split", "runoff", "loss", "high_loss")}, indent=2))
         print("models in", a.models, "| metrics in docs/results/model_metrics.json | figures in docs/figures/m*.png")
@@ -114,8 +120,12 @@ def main(argv=None) -> int:
         cands = [d for d in pd.date_range(first, periods=a.candidates) if d in w.index]
         table = compare_spray_days(w, cands, a.horizon, model_dir=a.models)
         print(table.to_string(index=False))
-        best = table.sort_values("predicted_loss_gha").iloc[0]
-        print(f"\nLowest predicted loss: spray on {best.spray_date} ({best.predicted_loss_gha} g/ha in {a.horizon} days).")
+        ranked = table[table["rank"].notna()].sort_values("predicted_loss_gha")
+        if len(ranked):
+            best = ranked.iloc[0]
+            print(f"\nLowest predicted loss: spray on {best.spray_date} ({best.predicted_loss_gha} g/ha in {a.horizon} days).")
+        for note in table.attrs["notes"]:
+            print("NOTE:", note)
         print("Valid only for Flufenacet, 2400 g/ha, winter cereals, sprayed around 1 March (see docs/MODEL_REPORT.md).")
     elif a.cmd == "run":
         from .report import analyze_run

@@ -49,7 +49,9 @@ CLASSIFIER_FEATURES = HISTORY_FEATURES + WEATHER_FEATURES + SOIL_FEATURES
 # * No calendar feature (day of year, month). The weather files are neighbouring grid
 #   cells of one decade, so "date" identifies a storm; with a calendar feature the trees
 #   memorised storms and failed on new years. The crop calendar is still present through
-#   cn_today, and the time since spraying through days_since_app.
+#   cn_today, and the time since spraying through days_since_app. Note that in this data
+#   set days_since_app IS the calendar (spraying is always on 1 March), so the models
+#   cannot tell "time since spraying" from "time of year".
 # * cn_runoff_mm, the textbook curve-number runoff for today's rain, is given to the
 #   models as an input. PRZM itself computes runoff with a curve number that it adjusts
 #   for soil moisture, so the models only have to learn that adjustment (a physics-

@@ -84,13 +84,20 @@ def quality_figures(rq: pd.DataFrame, envelope: pd.Series, events: pd.DataFrame,
 
     # 4. Breakdown vs subsoil organic carbon
     d = rq[rq["clean_until"].notna() & rq["h3_oc"].notna()]
-    grp = d["first_bad_app_year"].notna().groupby(pd.cut(d["h3_oc"], [-0.01, 0.3, 0.4, 0.5, 1.0, 100])).agg(["mean", "size"])
-    names = ["0 - 0.3", "0.3 - 0.4", "0.4 - 0.5", "0.5 - 1", "over 1"]
-    fig, ax = plt.subplots(figsize=(7, 4))
-    bars = ax.bar(names, 100 * grp["mean"].values, color=ORANGE, width=0.6)
-    for b, (m, n) in zip(bars, grp.values):
-        ax.text(b.get_x() + b.get_width() / 2, 100 * m + 2, f"{100 * m:.0f} %\n({int(n)} runs)", ha="center", color=INK, fontsize=9)
-    ax.set_ylim(0, 118); ax.set_xlabel("Organic carbon in the subsoil, 30-100 cm (%)"); ax.set_ylabel("Runs with broken pesticide results (%)")
+    bins = pd.cut(d["h3_oc"], [-0.01, 0.3, 0.4, 0.5, 1.0, 100])
+    flagged = d["first_bad_app_year"].notna().groupby(bins, observed=False).mean()
+    clearly = (d["worst_ratio_to_reference"].fillna(0) >= 50).groupby(bins, observed=False).mean()
+    size = d.groupby(bins, observed=False).size()
+    names = [f"{n}\n({int(k)} runs)" for n, k in zip(["0 - 0.3", "0.3 - 0.4", "0.4 - 0.5", "0.5 - 1", "over 1"], size)]
+    x = np.arange(len(names))
+    fig, ax = plt.subplots(figsize=(7.6, 4.2))
+    for off, vals, color, label in [(-0.2, flagged, MUTED, "Flagged by the cautious rule (5x)"),
+                                    (0.2, clearly, ORANGE, "Clearly broken (50x or more)")]:
+        bars = ax.bar(x + off, 100 * vals.values, color=color, width=0.38, label=label)
+        for b_, v in zip(bars, vals.values):
+            ax.text(b_.get_x() + b_.get_width() / 2, 100 * v + 1.5, f"{100 * v:.0f}", ha="center", color=INK, fontsize=9)
+    ax.set_xticks(x, names); ax.legend(frameon=False, fontsize=9)
+    ax.set_ylim(0, 100); ax.set_xlabel("Organic carbon in the subsoil, 30-100 cm (%)"); ax.set_ylabel("Share of runs (%)")
     ax.set_title("Low organic carbon in the subsoil goes with the breakdown", loc="left", color=INK, fontsize=12)
     _style(ax)
     _save(fig, out / "q4_breakdown_vs_subsoil_oc.png")
@@ -212,3 +219,25 @@ def model_figures(te, tc, scores, shap_rank, shap_sample, contrib, calendar, out
     ax.set_title("Chance of a high-loss day (%)", loc="left", color=INK, fontsize=12)
     fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02)
     _save(fig, out / "m6_risk_rain_vs_time_since_spraying.png")
+
+
+def cv_figure(by_year: pd.DataFrame, out: Path) -> None:
+    """Scores for each held-out year: shows how much they move from year to year."""
+    yrs = [str(y) for y in by_year.index]
+    x = np.arange(len(yrs))
+    fig, axes = plt.subplots(3, 1, figsize=(8.4, 7.6), sharex=True)
+    axes[0].bar(x - 0.2, by_year["runoff_r2_curve_number"], width=0.38, color=MUTED, label="Curve-number formula")
+    axes[0].bar(x + 0.2, by_year["runoff_r2"], width=0.38, color=BLUE, label="Surrogate")
+    axes[0].set_ylabel("Runoff: daily R2"); axes[0].set_ylim(0.6, 1.0); axes[0].legend(frameon=False, fontsize=9, ncol=2, loc="lower left")
+    axes[1].bar(x, by_year["loss_r2"].clip(lower=0), width=0.6, color=BLUE)
+    axes[1].set_ylabel("Pesticide loss: daily R2"); axes[1].set_ylim(0, 1.0)
+    axes[2].bar(x - 0.2, by_year["pr_auc_classifier"], width=0.38, color=AQUA, label="Classifier")
+    axes[2].bar(x + 0.2, by_year["pr_auc_surrogate"], width=0.38, color=ORANGE, label="Surrogate")
+    axes[2].set_ylabel("High-loss days: PR-AUC"); axes[2].set_ylim(0, 1.0); axes[2].legend(frameon=False, fontsize=9, ncol=2, loc="lower left")
+    for i, n in enumerate(by_year["high_loss_days"]):
+        axes[2].text(i, 1.01, f"{int(n)} days", ha="center", va="bottom", fontsize=8, color=INK)
+    axes[2].set_xticks(x, yrs); axes[2].set_xlabel("Held-out application year (never used in training)")
+    for ax in axes:
+        _style(ax)
+    axes[0].set_title("Scores on each year when that year is kept out of training", loc="left", color=INK, fontsize=12)
+    _save(fig, out / "m7_scores_by_held_out_year.png")

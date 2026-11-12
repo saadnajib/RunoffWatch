@@ -1,15 +1,18 @@
 """
 What-if tool: "given this weather, what happens if I spray on day X?"
 
-Uses the trained surrogate (runoff model x concentration model) and the
-high-loss classifier. No PRZM run is needed.
+Uses the trained surrogate (runoff model x concentration model). No PRZM run is needed.
 
 LIMITS - the tool can only answer what the training simulations cover:
 
 * one pesticide (Flufenacet), one dose (2400 g/ha), one crop (winter cereals),
   always sprayed on 1 March. Other products, doses or crops need new PRZM runs.
 * spray dates are therefore only meaningful in late winter / early spring;
-  `check_inputs` warns outside February-April.
+  `check_inputs` warns outside February-April. Even inside that window, moving the
+  spray day is an extrapolation: in training, "days since spraying" and the calendar
+  date always moved together.
+* soil settings are checked one by one against the training range. Combinations that
+  never occur together in the training runs are not detected.
 * it reproduces PRZM, a model. It was not checked against field measurements.
 """
 
@@ -93,7 +96,8 @@ def predict_days(weather: pd.DataFrame, spray_date, soil: dict | None = None, mo
 
     weather: daily table (index or column `date`; rain_mm, temp_c, optional pan_evap_mm) that
              includes the spray date, ideally starting 30+ days before it.
-    Returns one row per day: rain_mm, runoff_mm, loss_gha, high_loss_chance.
+    Returns one row per day: rain_mm, runoff_mm, loss_gha, high_loss_day (loss >= 1 g/ha).
+    Notes about inputs the models have not seen are in `.attrs["notes"]` and raised as warnings.
     """
     models = models or load_models(model_dir)
     meta = models["meta"]
@@ -102,7 +106,8 @@ def predict_days(weather: pd.DataFrame, spray_date, soil: dict | None = None, mo
     spray_date = pd.Timestamp(spray_date)
     if spray_date not in w.index:
         raise ValueError(f"spray date {spray_date.date()} is not inside the weather table")
-    for note in check_inputs(w, soil, spray_date, meta):
+    notes = check_inputs(w, soil, spray_date, meta)
+    for note in notes:
         warnings.warn(note, stacklevel=2)
 
     f = weather_features(w, [spray_date], CN_SETS[int(soil["cn_2"])])
@@ -114,14 +119,14 @@ def predict_days(weather: pd.DataFrame, spray_date, soil: dict | None = None, mo
     out = pd.DataFrame({"rain_mm": f["rain_mm"], "days_since_spraying": f["days_since_app"].astype(int)}, index=f.index)
     out["runoff_mm"] = 0.0
     out["loss_gha"] = 0.0
-    out["high_loss_chance"] = 0.0
     if rainy.any():
         fr = f[rainy]
         runoff = models["runoff"].predict(fr[meta["runoff_features"]])
         conc = 10 ** models["conc"].predict(fr[meta["conc_features"]])
         out.loc[rainy, "runoff_mm"] = runoff
         out.loc[rainy, "loss_gha"] = runoff * np.where(conc > meta["conc_floor"] * 1.01, conc, 0.0)
-        out.loc[rainy, "high_loss_chance"] = models["high_loss"].predict(fr[meta["classifier_features"]])
+    out["high_loss_day"] = out["loss_gha"] >= meta["high_loss_threshold_gha"]
+    out.attrs["notes"] = notes
     return out
 
 
@@ -129,15 +134,19 @@ def compare_spray_days(weather: pd.DataFrame, candidates, horizon_days: int = 14
                        models: dict | None = None, model_dir: str | Path = "models") -> pd.DataFrame:
     """For each candidate spray date: predicted pesticide loss in the following `horizon_days`.
 
-    Lower is better. `chance_of_high_loss_day` combines the daily chances from the classifier.
+    Lower is better. Only candidates whose whole window lies inside the weather table are
+    ranked; a shorter window would look better only because it adds up fewer days.
+    `.attrs["notes"]` lists every warning about inputs outside what the models have seen.
     """
     models = models or load_models(model_dir)
     w = prepare_weather(weather)
-    rows = []
+    rows, notes = [], []
     for c in pd.to_datetime(list(candidates)):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            days = predict_days(w, c, soil, models).iloc[:horizon_days]
+            days = predict_days(w, c, soil, models)
+        notes += [n for n in days.attrs["notes"] if n not in notes]
+        days = days.iloc[:horizon_days]
         worst = days["loss_gha"].idxmax()
         rows.append({
             "spray_date": c.date(),
@@ -145,12 +154,17 @@ def compare_spray_days(weather: pd.DataFrame, candidates, horizon_days: int = 14
             "rain_in_window_mm": round(float(days["rain_mm"].sum()), 1),
             "predicted_loss_gha": round(float(days["loss_gha"].sum()), 3),
             "loss_pct_of_dose": round(100 * float(days["loss_gha"].sum()) / 2400, 4),
-            "chance_of_high_loss_day": round(float(1 - np.prod(1 - days["high_loss_chance"])), 3),
+            "high_loss_days": int(days["high_loss_day"].sum()),
             "worst_day": worst.date() if days["loss_gha"].max() > 0 else None,
             "worst_day_loss_gha": round(float(days["loss_gha"].max()), 3),
         })
     out = pd.DataFrame(rows)
-    out["rank"] = out["predicted_loss_gha"].rank(method="min").astype(int)
+    full = out["days_covered"] == horizon_days
+    out["rank"] = out.loc[full, "predicted_loss_gha"].rank(method="min").astype("Int64").reindex(out.index)
+    if not full.all():
+        notes.append(f"{int((~full).sum())} candidate day(s) have fewer than {horizon_days} days of weather after "
+                     "them and are not ranked.")
+    out.attrs["notes"] = notes
     return out
 
 

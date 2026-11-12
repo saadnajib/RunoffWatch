@@ -50,6 +50,7 @@ BIN_DAYS = 15
 ENVELOPE_QUANTILE = 0.99
 ENVELOPE_FACTOR = 5.0
 GUARD_YEARS = 1
+CLEARLY_BROKEN_FACTOR = 50.0   # for reporting only: runs this far above the reference are beyond doubt
 APP_MONTH = 3            # application years start on 1 March in this data set
 
 
@@ -197,8 +198,14 @@ def build_run_quality(runs_root: str | Path, interim: str | Path):
     rq["loss_fraction"] = rq["loss_total_gha"] / rq["applied_total_gha"]
     late = events[events["days_since_app"] > 150].groupby("run")["loss_per_mm"].max()
     rq["max_late_loss_per_mm"] = late.reindex(rq.index)
-    start = pd.Timestamp(year=int(events["date"].dt.year.min()), month=1, day=1)
-    rq["clean_years"] = ((rq["clean_until"] - start).dt.days / 365.25).clip(lower=0).round(2)
+    # how far above the reference-year 99th percentile the run ever gets (the rule flags at ENVELOPE_FACTOR)
+    ev = events[events["days_since_app"].notna()]
+    ratio = ev["loss_per_mm"] / (envelope_limit(ev["days_since_app"], envelope) / ENVELOPE_FACTOR)
+    rq["worst_ratio_to_reference"] = ratio.groupby(ev["run"]).max().reindex(rq.index)
+    # pesticide results start with the first spraying, so years are counted from then
+    first_app = pd.Timestamp(year=int(events["date"].dt.year.min()), month=APP_MONTH, day=1)
+    rq["clean_years"] = ((rq["clean_until"] - first_app).dt.days / 365.25).clip(lower=0).round(2)
+    rq["pesticide_years"] = ((pd.to_datetime(rq["end"]) - first_app).dt.days / 365.25).clip(lower=0).round(2)
     rq = rq.join(run_parameters(runs))
     return rq, envelope, events, decay
 
@@ -254,9 +261,15 @@ def audit(runs_root: str | Path = "data/raw/runs", interim: str | Path = "data/i
     rule_bad = readable["first_bad_app_year"].notna()
     both = readable["iforest_anomaly"].fillna(False).astype(bool)
     n_years_total = (readable["n_days"].max() / 365.25)
+    worst = readable["worst_ratio_to_reference"].fillna(0)
+    clearly = worst >= CLEARLY_BROKEN_FACTOR
     sub = readable[readable["h3_oc"].notna()]
-    by_oc = (sub["first_bad_app_year"].notna()
-             .groupby(pd.cut(sub["h3_oc"], [-0.01, 0.3, 0.4, 0.5, 1.0, 100])).agg(["mean", "size"]))
+    oc_bins = pd.cut(sub["h3_oc"], [-0.01, 0.3, 0.4, 0.5, 1.0, 100])
+    by_oc = pd.DataFrame({
+        "runs": sub.groupby(oc_bins, observed=False).size(),
+        "share_flagged": sub["first_bad_app_year"].notna().groupby(oc_bins, observed=False).mean(),
+        "share_clearly_broken": (sub["worst_ratio_to_reference"].fillna(0) >= CLEARLY_BROKEN_FACTOR)
+        .groupby(oc_bins, observed=False).mean()})
 
     summary = {
         "folders": int(len(rq)),
@@ -267,19 +280,26 @@ def audit(runs_root: str | Path = "data/raw/runs", interim: str | Path = "data/i
         "decay_rule_unstable": int(readable["unstable"].sum()),
         "envelope_rule_bad_runs": int(rule_bad.sum()),
         "runs_never_above_envelope": int((~rule_bad).sum()),
+        # the flag count depends on the safety factor: there is no sharp gap between healthy and broken
+        "flagged_runs_by_factor": {str(f): int((worst > f).sum()) for f in (5, 10, 50, 1000)},
+        "clearly_broken_runs": int(clearly.sum()),
+        "clearly_broken_factor": CLEARLY_BROKEN_FACTOR,
         "first_bad_app_year_counts": {int(k): int(v) for k, v in
                                       readable["first_bad_app_year"].value_counts().sort_index().items()},
         "median_decay_growth_per_year": float(readable["decay_growth_per_year"].median()),
         "share_runs_decay_growing_gt_1p5": float((readable["decay_growth_per_year"] > 1.5).mean()),
         "max_loss_fraction_of_applied": float(readable["loss_fraction"].max()),
         "clean_run_years": float(readable["clean_years"].sum()),
-        "total_run_years": float((readable["n_days"] / 365.25).sum()),
+        "total_run_years": float(readable["pesticide_years"].sum()),
         "runs_with_at_least_3_clean_years": int((readable["clean_years"] >= 3).sum()),
         "full_length_years": float(n_years_total),
         "iforest_flagged": int(both.sum()),
         "iforest_agrees_with_decay_rule": float((both == readable["unstable"].astype(bool)).mean()),
         "iforest_recall_of_decay_rule": float(both[readable["unstable"].astype(bool)].mean()),
-        "bad_share_by_subsoil_oc": {str(k): {"share_bad": round(float(v["mean"]), 3), "runs": int(v["size"])}
+        "iforest_recall_of_envelope_flagged": float(both[rule_bad].mean()),
+        "iforest_recall_of_clearly_broken": float(both[clearly].mean()),
+        "bad_share_by_subsoil_oc": {str(k): {"runs": int(v["runs"]), "share_flagged": round(float(v["share_flagged"]), 3),
+                                             "share_clearly_broken": round(float(v["share_clearly_broken"]), 3)}
                                     for k, v in by_oc.iterrows()},
         "drivers": instability_drivers(readable),
         "envelope": {"quantile": ENVELOPE_QUANTILE, "factor": ENVELOPE_FACTOR,

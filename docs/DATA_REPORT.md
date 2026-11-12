@@ -51,8 +51,10 @@ needs new PRZM runs in which they vary.
 4. **The fake mass starts in the deep soil.** In one run we inspected that
    looks healthy at the surface, the lowest soil layer stores 7.5 kg/ha at the
    end of 1999, three times the yearly dose, while the top layer is still normal.
-5. **In about half of the runs it reaches the surface** and then corrupts the
-   runoff losses, which is the quantity this project is about.
+5. **In roughly a third to a half of the runs it reaches the surface** and then
+   corrupts the runoff losses, which is the quantity this project is about.
+   The share depends on how strict the test is (section 3): 1,177 runs (30 %)
+   are broken beyond doubt, 1,966 (50 %) are flagged by the cautious rule.
 
 ![Soil decay growth](figures/q2_soil_decay_growth.png)
 
@@ -70,18 +72,20 @@ constant of **0.03** and an air diffusion coefficient of 4,300 cm²/day
 (echoed by PRZM in each `.OUT` file). Our guess: with this high Henry constant
 the vapour-phase transport calculation becomes unstable.
 
-Supporting evidence: whether a run breaks can be predicted from its settings
-almost perfectly (cross-validated AUC 0.97), and the strongest predictor is
-**organic carbon in the subsoil**. Little organic carbon means little sorption,
-so more pesticide is in the gas phase.
+Supporting evidence: whether a run gets flagged can be predicted from its
+settings almost perfectly (cross-validated AUC 0.97), and the strongest
+predictor is **organic carbon in the subsoil**. Little organic carbon means
+little sorption, so more pesticide is in the gas phase.
 
-| Organic carbon, 30-100 cm | Runs | Broken at some point |
-|---|---|---|
-| 0 - 0.3 % | 957 | 83 % |
-| 0.3 - 0.4 % | 1,621 | 63 % |
-| 0.4 - 0.5 % | 413 | 24 % |
-| 0.5 - 1 % | 524 | 8 % |
-| over 1 % | 443 | 1 % |
+| Organic carbon, 30-100 cm | Runs | Flagged by the cautious rule | Clearly broken |
+|---|---|---|---|
+| 0 - 0.3 % | 957 | 83 % | 68 % |
+| 0.3 - 0.4 % | 1,621 | 63 % | 31 % |
+| 0.4 - 0.5 % | 413 | 24 % | 6 % |
+| 0.5 - 1 % | 524 | 8 % | 1 % |
+| over 1 % | 443 | 1 % | 0 % |
+
+The trend is the same under both definitions; the size of the middle classes is not.
 
 ![Breakdown vs subsoil organic carbon](figures/q4_breakdown_vs_subsoil_oc.png)
 
@@ -103,20 +107,37 @@ trusted, because a year can only be confirmed by a clean following year.
 
 | | |
 |---|---|
-| Runs that go above the envelope at some point | 1,966 of 3,958 |
-| Runs that never do | 1,992 |
-| Trusted pesticide data | **28,363 of 38,766 run-years (73 %)** |
-| Runs with at least 3 trusted years | 3,568 |
+| Runs flagged by the rule (more than 5x above the 1990 limit) | 1,966 of 3,958 |
+| Runs that never are | 1,992 |
+| Trusted pesticide data | **27,730 of 38,100 run-years (73 %)** |
 | Trusted water (runoff) data | all 3,958 runs |
+
+**The rule is cautious on purpose, and the count depends on the factor.**
+There is no sharp gap between healthy and broken runs:
+
+| Run goes above the 1990 limit by more than | 5x (rule used) | 10x | 50x | 1000x |
+|---|---|---|---|---|
+| Runs | 1,966 | 1,648 | 1,177 | 825 |
+
+About half of the flagged runs are only 2x over the flagging limit in their
+first flagged year, and some of those never exceed it again. 1990 is also a
+slightly low reference year (little pesticide is carried over from before).
+So "1,966 broken runs" would overstate it. The safe statements are: **1,177
+runs (30 %) are broken beyond doubt** (50x or more; the older "soil decay"
+rule finds 1,145), and the rule removes another 789 runs' later years as a
+precaution. That precaution costs about 7 % of the data. An independent review
+estimated its effect on the model scores as small (a few percent of the
+high-loss days and of the loss in the test set).
 
 ![Clean runs per year](figures/q5_clean_runs_per_year.png)
 
-**Machine-learning second opinion.** An Isolation Forest (unsupervised
-anomaly detection) on four per-run summary numbers flags 652 runs. It agrees
-with the simple decay rule on 86 % of the runs but finds only 54 % of the runs
-that rule calls unstable. Here the physical rule is the better detector: the
-breakdown is gradual, so many broken runs do not look like outliers. That is a
-result worth reporting, not a failure.
+**Machine-learning comparison.** An Isolation Forest (unsupervised anomaly
+detection) on four per-run summary numbers flags 652 runs. It finds only 52 %
+of the 1,177 clearly broken runs and 31 % of all flagged runs. (It is not an
+independent check: two of its four inputs are the numbers the decay rule is
+built on.) Here the physical rule is the better detector: the breakdown is
+gradual, so many broken runs do not look like outliers. That is a result worth
+reporting, not a failure.
 
 **Limit of the rule.** It finds contamination once it is about 5x above
 normal. Smaller contamination just before that point is removed only by the

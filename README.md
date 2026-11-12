@@ -19,8 +19,8 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
 - Of 9,977 run folders, **3,958 contain results**. Weather (695 files) and soil vary;
   pesticide, dose and spray date are the same in every run.
 - The pesticide part of the simulator is **numerically broken in part of the runs**
-  (fake pesticide mass, losses up to 1e34 g/ha). A physical plausibility rule keeps
-  73 % of the simulated run-years. The water part is sound.
+  (fake pesticide mass, losses up to 1e34 g/ha): 30 % of the runs beyond doubt. A cautious
+  plausibility rule keeps 73 % of the simulated run-years. The water part is sound.
 - On weather files **and years** kept out of training, the surrogate reproduces PRZM's
   daily runoff with R² 0.98 (curve-number formula alone: 0.93) and daily pesticide loss
   with R² 0.94, and it finds high-loss days with PR-AUC 0.91. It underestimates total

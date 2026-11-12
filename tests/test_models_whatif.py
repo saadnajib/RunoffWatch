@@ -218,9 +218,11 @@ def test_predict_days(trained):
     np.testing.assert_array_equal(days["days_since_spraying"], np.arange(len(days)))
     dry = days["rain_mm"] < 1
     assert dry.any() and (~dry).any()
-    assert (days.loc[dry, ["runoff_mm", "loss_gha", "high_loss_chance"]] == 0).all().all()
-    assert (days[["runoff_mm", "loss_gha", "high_loss_chance"]] >= 0).all().all()
-    assert (days["high_loss_chance"] <= 1).all()
+    assert (days.loc[dry, ["runoff_mm", "loss_gha"]] == 0).all().all()
+    assert (days[["runoff_mm", "loss_gha"]] >= 0).all().all()
+    assert not days.loc[dry, "high_loss_day"].any()
+    assert (days["high_loss_day"] == (days["loss_gha"] >= 1.0)).all()
+    assert days.attrs["notes"] == []
     assert days.loc["2026-03-10", "runoff_mm"] > days.loc[~dry, "runoff_mm"].min()   # the 32 mm storm
 
 
@@ -245,13 +247,22 @@ def test_compare_spray_days(trained):
     out = whatif.compare_spray_days(whatif.example_weather(), cands, horizon_days=14, models=trained["models"])
     assert len(out) == len(cands)
     assert [str(d) for d in out["spray_date"]] == cands
-    assert out["rank"].between(1, len(cands)).all()
-    assert out["rank"].min() == 1
     assert (out["predicted_loss_gha"] >= 0).all()
-    assert out["chance_of_high_loss_day"].between(0, 1).all()
+    assert (out["high_loss_days"] >= 0).all()
     assert out["days_covered"].tolist() == [14, 14, 14, 14, 6]     # weather ends 4 April
-    best = out.loc[out["rank"] == 1, "predicted_loss_gha"]
-    assert (best <= out["predicted_loss_gha"].min()).all()
+    # only candidates with a full 14-day window are ranked; the truncated one must not win by default
+    assert out["rank"].isna().tolist() == [False, False, False, False, True]
+    full = out[out["rank"].notna()]
+    assert full["rank"].min() == 1 and full["rank"].between(1, 4).all()
+    best = full.loc[full["rank"] == 1, "predicted_loss_gha"]
+    assert (best <= full["predicted_loss_gha"].min()).all()
+    assert any("not ranked" in n for n in out.attrs["notes"])
+
+
+def test_compare_spray_days_collects_notes(trained):
+    w = whatif.example_weather(start="2026-05-01")
+    out = whatif.compare_spray_days(w, ["2026-06-05", "2026-06-06"], horizon_days=7, models=trained["models"])
+    assert sum("February-April" in n for n in out.attrs["notes"]) == 1      # reported once, not per candidate
 
 
 # --------------------------------------------------------------------------- #
@@ -296,3 +307,17 @@ def test_example_weather_has_storm():
     w = whatif.example_weather()
     assert len(w) == 75 and (w["rain_mm"] >= 0).all()
     assert w.loc["2026-03-10", "rain_mm"] == 32.0
+
+
+def test_yearly_cv_smoke(trained, tmp_path):
+    """Leave-one-year-out evaluation runs end to end and never tests on a trained year."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        out = models.yearly_cv(trained["root"] / "features.parquet", results=tmp_path, figures=tmp_path, rounds=10)
+    by_year = pd.read_csv(tmp_path / "cv_by_year.csv", index_col="test_year")
+    assert list(by_year.index) == out["held_out_years"] and len(by_year) >= 5
+    assert (tmp_path / "cv_summary.json").exists() and (tmp_path / "m7_scores_by_held_out_year.png").exists()
+    assert out["rows_scored"] > 0
+    assert 0 <= out["pooled"]["pr_auc_surrogate"] <= 1
+    lo, hi = out["range_over_years"]["runoff_r2"]
+    assert lo <= out["pooled"]["runoff_r2"] + 0.2 and lo <= hi

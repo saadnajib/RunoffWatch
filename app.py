@@ -14,8 +14,8 @@ import warnings
 import pandas as pd
 import streamlit as st
 
-from runoffwatch.whatif import (CN_SETS, check_inputs, compare_spray_days, example_weather, load_models,
-                                predict_days, prepare_weather, soil_settings)
+from runoffwatch.whatif import (CN_SETS, compare_spray_days, example_weather, load_models, predict_days,
+                                prepare_weather, soil_settings)
 
 st.set_page_config(page_title="RunoffWatch spray-day advisor", layout="wide")
 st.title("RunoffWatch: spray-day advisor")
@@ -65,12 +65,14 @@ if not candidates:
     st.warning("No candidate day lies inside the weather table.")
     st.stop()
 
-for note in check_inputs(weather, soil, pd.Timestamp(candidates[0]), models["meta"]):
-    st.warning(note)
-
 table = compare_spray_days(weather, candidates, horizon, soil, models)
-best = table.sort_values("predicted_loss_gha").iloc[0]
-worst = table.sort_values("predicted_loss_gha").iloc[-1]
+for note in table.attrs["notes"]:
+    st.warning(note)
+ranked = table[table["rank"].notna()].sort_values("predicted_loss_gha")
+if ranked.empty:
+    st.warning("No candidate day has a full window of weather after it. Shorten the window or add forecast days.")
+    st.stop()
+best, worst = ranked.iloc[0], ranked.iloc[-1]
 m1, m2, m3 = st.columns(3)
 m1.metric("Lowest predicted loss", f"{best.predicted_loss_gha:.2f} g/ha")
 m1.caption(f"if sprayed on {best.spray_date}")
@@ -84,11 +86,9 @@ chart = table.assign(day=table["spray_date"].map(lambda d: d.strftime("%Y-%m-%d 
 st.bar_chart(chart["predicted_loss_gha"], y_label="g/ha", x_label="Spray day")
 st.dataframe(table.rename(columns={
     "spray_date": "Spray day", "rain_in_window_mm": "Rain in window (mm)", "predicted_loss_gha": "Predicted loss (g/ha)",
-    "loss_pct_of_dose": "Loss (% of dose)", "chance_of_high_loss_day": "Chance of a high-loss day",
+    "loss_pct_of_dose": "Loss (% of dose)", "high_loss_days": "Days with loss of 1 g/ha or more",
     "worst_day": "Worst day", "worst_day_loss_gha": "Loss on worst day (g/ha)", "rank": "Rank (1 = best)",
     "days_covered": "Days covered"}), hide_index=True, use_container_width=True)
-if table["days_covered"].min() < horizon:
-    st.info("Some candidate days have fewer forecast days than the window; their totals cover fewer days.")
 
 pick = st.selectbox("Show day-by-day detail for spray day", [c.date() for c in candidates])
 with warnings.catch_warnings():
@@ -105,5 +105,10 @@ with st.expander("Limits: read before trusting a number", expanded=True):
 - All simulations used **one herbicide (Flufenacet), one dose (2400 g/ha), winter cereals, sprayed on 1 March**.
   Other products, doses, crops or seasons are **not covered**.
 - "Loss" is pesticide leaving the field edge with runoff water. What reaches a stream is not modelled.
+- Moving the spray day is itself new to the model: in every simulation "days since spraying" and
+  the calendar date moved together.
+- The sliders change one soil property at a time. Real soils change several together; unusual
+  combinations are not covered by the training runs.
+- On years it has not seen, the model underestimates total loss and can miss extreme storms.
 - A weather forecast is uncertain; so is everything computed from it.
 """)
