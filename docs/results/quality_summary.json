@@ -1,0 +1,94 @@
+{
+  "folders": 9977,
+  "status_counts": {
+    "has_output": 3958,
+    "no_field": 3019,
+    "no_output": 2992,
+    "empty_output": 8
+  },
+  "readable_runs": 3958,
+  "distinct_weather_files": 695,
+  "crashed_before_end": 263,
+  "decay_rule_unstable": 1145,
+  "envelope_rule_bad_runs": 1966,
+  "runs_never_above_envelope": 1992,
+  "flagged_runs_by_factor": {
+    "5": 1966,
+    "10": 1648,
+    "50": 1177,
+    "1000": 825
+  },
+  "clearly_broken_runs": 1177,
+  "clearly_broken_factor": 50.0,
+  "first_bad_app_year_counts": {
+    "1990": 3,
+    "1991": 67,
+    "1992": 195,
+    "1993": 125,
+    "1994": 129,
+    "1995": 251,
+    "1996": 396,
+    "1997": 120,
+    "1998": 174,
+    "1999": 506
+  },
+  "median_decay_growth_per_year": 2.50619630102483,
+  "share_runs_decay_growing_gt_1p5": 0.8276907529055079,
+  "max_loss_fraction_of_applied": 1.5014636004841874e+30,
+  "clean_run_years": 27730.0,
+  "total_run_years": 38099.71,
+  "runs_with_at_least_3_clean_years": 3568,
+  "full_length_years": 9.998631074606434,
+  "iforest_flagged": 652,
+  "iforest_agrees_with_decay_rule": 0.8572511369378474,
+  "iforest_recall_of_decay_rule": 0.5379912663755458,
+  "iforest_recall_of_envelope_flagged": 0.3133265513733469,
+  "iforest_recall_of_clearly_broken": 0.5216652506372133,
+  "bad_share_by_subsoil_oc": {
+    "(-0.01, 0.3]": {
+      "runs": 957,
+      "share_flagged": 0.832,
+      "share_clearly_broken": 0.675
+    },
+    "(0.3, 0.4]": {
+      "runs": 1621,
+      "share_flagged": 0.632,
+      "share_clearly_broken": 0.311
+    },
+    "(0.4, 0.5]": {
+      "runs": 413,
+      "share_flagged": 0.235,
+      "share_clearly_broken": 0.058
+    },
+    "(0.5, 1.0]": {
+      "runs": 524,
+      "share_flagged": 0.082,
+      "share_clearly_broken": 0.006
+    },
+    "(1.0, 100.0]": {
+      "runs": 443,
+      "share_flagged": 0.011,
+      "share_clearly_broken": 0.0
+    }
+  },
+  "drivers": {
+    "cv_auc_mean": 0.970521484044365,
+    "share_bad": 0.4967155128852956,
+    "importance": {
+      "h3_oc": 0.386,
+      "rain_mm_per_year": 0.184,
+      "h1_oc": 0.135,
+      "h3_bd": 0.101,
+      "h3_fc": 0.057,
+      "slope_pct": 0.03,
+      "h1_sand": 0.022,
+      "usle_k": 0.018
+    }
+  },
+  "envelope": {
+    "quantile": 0.99,
+    "factor": 5.0,
+    "bin_days": 15,
+    "guard_years": 1
+  }
+}

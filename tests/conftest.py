@@ -13,7 +13,11 @@ Raw units written to disk:
 
 from __future__ import annotations
 
+import os
 import sys
+
+# Keep LightGBM / OpenMP light in tests (must be set before lightgbm is imported).
+os.environ.setdefault("OMP_NUM_THREADS", "2")
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -74,6 +78,83 @@ def write_inp(path: Path, factors: dict[str, str]) -> None:
         *tser,
     ]
     path.write_text("\n".join(lines) + "\n")
+
+
+DEFAULT_HORIZONS = [
+    # thick_cm, bd, fc, wp, oc, kd, sand, clay   (made-up values)
+    dict(thick=10, bd=1.410, fc=0.270, wp=0.117, oc=0.600, kd=2.265, sand=34, clay=18),
+    dict(thick=20, bd=1.420, fc=0.260, wp=0.110, oc=0.550, kd=2.076, sand=35, clay=19),
+    dict(thick=30, bd=1.430, fc=0.250, wp=0.105, oc=0.400, kd=1.510, sand=36, clay=20),
+    dict(thick=40, bd=1.440, fc=0.240, wp=0.100, oc=0.300, kd=1.133, sand=37, clay=21),
+]
+
+
+def full_inp_lines(*, usle_k=0.34, usle_ls=0.11, usle_p=0.50, slope=2.5,
+                   cn=(81, 81, 86, 91), pesticide="Synthocide", n_apps=10,
+                   app_day=1, app_month=3, app_rate=2.40, app_rates=None,
+                   henry_field="0.30E-01", decay=0.01663, horizons=None,
+                   n_horizons=None, factors=None) -> list[str]:
+    """The 73 lines of a PRZM 3 `.inp` in the layout xLandscape writes (all values made up).
+
+    `n_horizons` overrides only the horizon-count line (to build broken files);
+    `app_rates` gives one rate per application year.
+    """
+    horizons = DEFAULT_HORIZONS if horizons is None else horizons
+    factors = DEFAULT_FACTORS if factors is None else factors
+    rates = app_rates if app_rates is not None else [app_rate] * n_apps
+    crop_years = [f"  1211{89 + i:02d}  1006{90 + i:02d}  3107{90 + i:02d}       1" for i in range(10)]
+    lines = [
+        "Run 1",
+        "                    Simulation Location: R1Crop: Synthetic",
+        "    0.84    0.20       0      15       1       1",
+        "       4",
+        f"{usle_k:8.2f}{usle_ls:8.2f}{usle_p:8.2f}    0.45               3{slope:8g}      20",
+        "       1",
+        "       1    0.15     100      90       3   0   0   0       0     110",
+        "       1       4",
+        "1211 1006 3107 0111",
+        "0.20 0.20 0.40 0.90",
+        "0.10 0.10 0.10 0.10",
+        "".join(f"{c:5g}" for c in cn),
+        f"{len(crop_years):8d}",
+        *crop_years,
+        "Chemical Input Data: ",
+        f"{n_apps:8d}       1       0       0",
+        f"{pesticide:<12}",
+        *[f"  {app_day:02d}{app_month:02d}{90 + i:02d}  0 2    5  {rates[i]:.2f}    1    0" for i in range(n_apps)],
+        "       0       1       0",
+        "       0    0.07    0.50",
+        "Soil Series:         R1",
+        "     100           0   0   2   0   0   0   2   1   0",
+        f"    4300{henry_field:>8}   22.70",
+        "    0.92",
+        " 0.18 0.18 0.18 0.18 0.18 0.18 0.18 0.18 0.18 0.18 0.18 0.18 0.96   10",
+        "   10   10   10   10   10   10   10   10   10   10   10   10",
+        "    2.20      20",
+        "       2    0.70     100",
+        f"{len(horizons) if n_horizons is None else n_horizons:8d}",
+    ]
+    for h, hz in enumerate(horizons, start=1):
+        lines += [
+            f"{h:8d}{hz['thick']:8g}{hz['bd']:8.3f}   0.270       0       0       0",
+            f"        {decay:8.5f}{decay:8.5f}       0",
+            f"        {5:8g}{hz['fc']:8.3f}{hz['wp']:8.3f}{hz['oc']:8.3f}{hz['kd']:8.3f}",
+            f"        {10:8d}{hz['sand']:8g}{hz['clay']:8g}       0       0",
+        ]
+    lines += [
+        "       0",
+        "    WATR    YEAR      10    PEST    YEAR      10    CONC    YEAR      10   0",
+        f"{len(factors):8d}    DAY ",
+        *[f"    {name:<7} TSER   0   0  {fac}" for name, fac in factors.items()],
+    ]
+    return lines
+
+
+def write_full_inp(path: Path, lines: list[str] | None = None, **kwargs) -> Path:
+    """Write a full synthetic PRZM .inp (see full_inp_lines) and return its path."""
+    path = Path(path)
+    path.write_text("\n".join(lines if lines is not None else full_inp_lines(**kwargs)) + "\n")
+    return path
 
 
 def write_out(path: Path, decay: list[float]) -> None:

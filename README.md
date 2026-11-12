@@ -1,13 +1,35 @@
 # RunoffWatch
 
-Machine learning on ~10,000 PRZM pesticide simulations to learn **when rain
-washes pesticide off the soil of a field, and when it does not**. Field-level,
-daily resolution; rivers are out of scope.
+A fast machine-learning **surrogate of the PRZM pesticide model**: from daily
+weather and soil it predicts how much pesticide is washed off a field after
+spraying, and a small **spray-day advisor** uses it to compare spray days.
 
-- **Plan, step by step:** [docs/ROADMAP.md](docs/ROADMAP.md)
-- **Project scope:** [docs/PROJECT_SCOPE.md](docs/PROJECT_SCOPE.md)
-- **Presentation:** https://claude.ai/artifact/Y82phRAgCapMtktvPri94c
-- Course: ETX8 Landscape-modelling project, RPTU Kaiserslautern-Landau
+Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
+
+| Read this | For |
+|---|---|
+| [docs/DATA_REPORT.md](docs/DATA_REPORT.md) | What the simulation data contains and which part can be trusted |
+| [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md) | Models, evaluation, drivers, risk calendar, limits |
+| [docs/RELATED_WORK.md](docs/RELATED_WORK.md) | Existing tools and surrogates, baselines |
+| [docs/PROJECT_SCOPE.md](docs/PROJECT_SCOPE.md) | Scope and research questions |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | What is done and what is next |
+
+## Main results so far
+
+- Of 9,977 run folders, **3,958 contain results**. Weather (695 files) and soil vary;
+  pesticide, dose and spray date are the same in every run.
+- The pesticide part of the simulator is **numerically broken in part of the runs**
+  (fake pesticide mass, losses up to 1e34 g/ha): 30 % of the runs beyond doubt. A cautious
+  plausibility rule keeps 73 % of the simulated run-years. The water part is sound.
+- Tested by leaving out one year at a time (and weather files never used in training), the
+  surrogate reproduces PRZM's daily runoff with R² 0.97 (curve-number formula alone: 0.92) and
+  daily pesticide loss with R² 0.87 (0.68 to 0.97 depending on the year; simple baseline: 0.49).
+  It finds high-loss days with PR-AUC 0.91: 94 % of its alarms are real, and it finds 74 % of
+  the high-loss days. It underestimates total loss by about 15 %.
+- It is a few hundred times faster than PRZM.
+
+Everything describes the PRZM model for Flufenacet at 2.4 kg/ha on winter cereals
+sprayed on 1 March. It is not validated against measurements.
 
 ## Install
 
@@ -15,11 +37,29 @@ daily resolution; rivers are out of scope.
 pip install -e ".[dev]"
 ```
 
-Add `ml` for the machine-learning phases: `pip install -e ".[dev,ml]"`.
+## Try the advisor (models are included in the repository)
 
-## Use
+```bash
+python -m runoffwatch whatif
+```
+```bash
+pip install -e ".[app]"
+```
+```bash
+streamlit run app.py
+```
 
-Put the `.7z` archives in `data/raw/archives/`, then run the steps in order:
+Use your own weather: a CSV with the columns `date, rain_mm, temp_c` (optional
+`pan_evap_mm`), one row per day, starting about 30 days before the first spray day.
+
+```bash
+python -m runoffwatch whatif --weather my_weather.csv --first-day 2027-03-01 --candidates 7
+```
+
+## Reproduce everything from the raw data
+
+Put the ten `.7z` archives from the project Drive into `data/raw/archives/`
+(data is never committed), then:
 
 ```bash
 python -m runoffwatch extract
@@ -30,14 +70,20 @@ python -m runoffwatch inventory
 ```bash
 python -m runoffwatch qc
 ```
-
-Analyse a single run folder (tables + two plots in `reports/`):
-
 ```bash
-python -m runoffwatch run data/raw/runs/<archive>/<run folder>
+python -m runoffwatch audit
+```
+```bash
+python -m runoffwatch features
+```
+```bash
+python -m runoffwatch train
+```
+```bash
+python -m runoffwatch train --cv
 ```
 
-Run the tests:
+About 10 minutes on 4 cores plus 25 minutes for the last step (leave-one-year-out evaluation); 5 GB of disk. Tests:
 
 ```bash
 python -m pytest -q
@@ -47,17 +93,16 @@ python -m pytest -q
 
 | Path | Purpose |
 |---|---|
-| `runoffwatch/przm_io.py` | Reads one FOCUS PRZM run folder (`.met`, `.inp`, `.ZTS`, `.OUT`, `mc.log`) into a daily table in plain units, with sanity checks |
-| `runoffwatch/przm_spikes.py` | Daily features (antecedent rain, days since spraying) and high-loss-day flags (`is_spike` in code) |
-| `runoffwatch/batch.py` | Unpack archives, inventory what differs between runs, quality-check all runs |
-| `runoffwatch/report.py` | Report for one run: tables and plots |
-| `runoffwatch/__main__.py` | Command line (`extract`, `inventory`, `qc`, `run`) |
-| `tests/` | Tests on small synthetic run folders (no real data in git) |
-| `data/` | Local data folders, not in git; see `data/README.md` |
-| `runoffwatch/pipeline.py`, `plots.py`, `examples/demo_synthetic.py` | Earlier pipeline for *measured* river data; out of scope now, kept for reference |
+| `runoffwatch/przm_io.py`, `przm_inp.py` | Read PRZM run folders: daily results in plain units, field and soil settings |
+| `runoffwatch/batch.py` | Unpack archives, inventory what differs between runs, quality-check every run |
+| `runoffwatch/quality.py` | Task 1: which results can be trusted (envelope rule, Isolation Forest, causes) |
+| `runoffwatch/features.py` | One row per rain day: weather, spray history and soil inputs |
+| `runoffwatch/models.py` | Surrogate (runoff x concentration), high-loss classifier, baselines, evaluation |
+| `runoffwatch/whatif.py`, `app.py` | Spray-day advisor: library, command line and Streamlit app |
+| `runoffwatch/figures.py`, `report.py` | Figures and single-run report |
+| `models/` | Trained models (LightGBM text files, 2 MB) |
+| `docs/figures/`, `docs/results/` | Figures and result tables used in the reports |
+| `tests/` | 163 tests on synthetic run folders (no project data in git) |
+| `runoffwatch/pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code, kept for reference |
 
-## Status
-
-Phase 0 (setup) is done. Next is Phase 1: download the archives and run
-`extract`, `inventory` and `qc`. The one run checked so far failed the
-stability check (yearly soil decay grows from 0.17 to 1.3 million).
+Code and documents were written with the help of an AI assistant (Claude).

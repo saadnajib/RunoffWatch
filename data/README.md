@@ -12,8 +12,9 @@ data/
     inventory_varying_inp_lines.csv
     runs_qc.csv                             <- python -m runoffwatch qc
     daily/<run>.parquet                     (one daily table per run)
+    run_quality.csv                         <- python -m runoffwatch audit
   processed/
-    features.parquet                        (one row per rain day; step 4, not built yet)
+    features.parquet                        <- python -m runoffwatch features
 ```
 
-Expected size: archives ~350 MB, unpacked runs ~8 GB, daily parquet ~1 GB.
+Size: archives 350 MB, unpacked runs 3.7 GB, daily parquet 0.5 GB, features 0.15 GB.
