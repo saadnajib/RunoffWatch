@@ -36,11 +36,12 @@ weather, spray history and soil; nothing from PRZM output.
 
 ## Phase 4 – Tasks 2 + 3: surrogate and high-loss detection ✅ (first version)
 `python -m runoffwatch train`. Two-stage surrogate (runoff x concentration),
-high-loss classifier, baselines, SHAP ranking, risk calendar. Tested on weather
-files and years the models never saw.
+high-loss classifier, baselines, SHAP ranking, risk calendar. Tested by leaving
+out one year at a time, on weather files never used in training.
 
 Still to do:
-- [ ] Error bars: repeat training with different test years (currently 1992 and 1996)
+- [x] Leave-one-year-out evaluation (`train --cv`): scores now come with a range over nine years
+- [ ] Fix the underestimation of large events; train the final models on all years
 - [ ] Try a sequence model (LSTM) as a second surrogate and compare; the related work uses LSTMs
 - [ ] Look at the days where the surrogate is most wrong; are they special (snow, very long dry spells)?
 - [ ] SHAP for the surrogate itself, not only for the classifier

@@ -21,10 +21,11 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
 - The pesticide part of the simulator is **numerically broken in part of the runs**
   (fake pesticide mass, losses up to 1e34 g/ha): 30 % of the runs beyond doubt. A cautious
   plausibility rule keeps 73 % of the simulated run-years. The water part is sound.
-- On weather files **and years** kept out of training, the surrogate reproduces PRZM's
-  daily runoff with R² 0.98 (curve-number formula alone: 0.93) and daily pesticide loss
-  with R² 0.94, and it finds high-loss days with PR-AUC 0.91. It underestimates total
-  loss by about 17 %.
+- Tested by leaving out one year at a time (and weather files never used in training), the
+  surrogate reproduces PRZM's daily runoff with R² 0.97 (curve-number formula alone: 0.92) and
+  daily pesticide loss with R² 0.87 (0.68 to 0.97 depending on the year; simple baseline: 0.49).
+  It finds high-loss days with PR-AUC 0.91: 94 % of its alarms are real, and it finds 74 % of
+  the high-loss days. It underestimates total loss by about 15 %.
 - It is a few hundred times faster than PRZM.
 
 Everything describes the PRZM model for Flufenacet at 2.4 kg/ha on winter cereals
@@ -78,8 +79,11 @@ python -m runoffwatch features
 ```bash
 python -m runoffwatch train
 ```
+```bash
+python -m runoffwatch train --cv
+```
 
-About 10 minutes in total on 4 cores, 5 GB of disk. Tests:
+About 10 minutes on 4 cores plus 25 minutes for the last step (leave-one-year-out evaluation); 5 GB of disk. Tests:
 
 ```bash
 python -m pytest -q
@@ -98,7 +102,7 @@ python -m pytest -q
 | `runoffwatch/figures.py`, `report.py` | Figures and single-run report |
 | `models/` | Trained models (LightGBM text files, 2 MB) |
 | `docs/figures/`, `docs/results/` | Figures and result tables used in the reports |
-| `tests/` | 161 tests on synthetic run folders (no project data in git) |
+| `tests/` | 163 tests on synthetic run folders (no project data in git) |
 | `runoffwatch/pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code, kept for reference |
 
 Code and documents were written with the help of an AI assistant (Claude).

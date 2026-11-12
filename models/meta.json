@@ -96,7 +96,6 @@
     "h3_oc"
   ],
   "high_loss_threshold_gha": 1.0,
-  "classifier_alarm_threshold": 0.011947067492046132,
   "conc_floor": 1e-07,
   "trained_on": {
     "application": "2400 g/ha Flufenacet on 1 March, winter cereals, FOCUS R1",

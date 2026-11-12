@@ -56,8 +56,8 @@ Two stages that follow the physics:
 
 Physics-informed: the textbook curve-number runoff is an input, so the model
 only learns PRZM's soil-moisture correction. Compared against the curve-number
-formula alone and a simple decay formula. Tested on weather files **and** years
-kept out of training.
+formula alone and a simple decay formula. Tested by leaving out one year at a
+time, on weather files never used in training.
 
 ### Task 3 – High-loss days and their drivers (first version done)
 Classifier for days with at least 1 g/ha pesticide loss; comparison with a

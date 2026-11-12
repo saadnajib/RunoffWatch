@@ -73,7 +73,7 @@
     },
     "decay_x_curve_number_baseline": {
       "r2_daily": 0.30717741677412214,
-      "r2_log10_on_runoff_days": -0.044116408336583035,
+      "r2_log10_on_runoff_days": -4.063427818796568,
       "r2_run_totals": 0.025270164012908936,
       "median_abs_error_of_run_total_pct": 62.177490234375,
       "total_loss_ratio_pred_over_true": 0.5462871547875453,
@@ -142,8 +142,8 @@
     "1996": {
       "runoff_r2_daily": 0.9802165188223316,
       "runoff_r2_daily_curve_number": 0.9090282863894719,
-      "loss_r2_daily": 0.9478297830507523,
-      "loss_total_ratio": 0.8698469532400284,
+      "loss_r2_daily": 0.9478297830507524,
+      "loss_total_ratio": 0.8698469532400285,
       "high_loss_days": 122,
       "high_loss_pr_auc_surrogate": 0.8498745391438104,
       "high_loss_pr_auc_gradient_boosting": 0.8945038804747669
@@ -177,7 +177,7 @@
       },
       "chemistry_stage_alone": {
         "r2_daily": 0.9802228751991596,
-        "r2_log10_on_runoff_days": 0.9814100904176369,
+        "r2_log10_on_runoff_days": 0.9814074270549934,
         "r2_run_totals": 0.9851170408975144,
         "median_abs_error_of_run_total_pct": 7.532284513706388,
         "total_loss_ratio_pred_over_true": 0.9566606752859463,
@@ -185,7 +185,7 @@
       },
       "decay_x_curve_number_baseline": {
         "r2_daily": 0.5011780551572631,
-        "r2_log10_on_runoff_days": 0.03457520786150392,
+        "r2_log10_on_runoff_days": -2.831034450775433,
         "r2_run_totals": 0.4742375612258911,
         "median_abs_error_of_run_total_pct": 53.835166931152344,
         "total_loss_ratio_pred_over_true": 0.5114222631183141,
@@ -253,7 +253,7 @@
     "h1_oc": 0.0643
   },
   "speed": {
-    "surrogate_seconds_per_10_year_run": 0.009871914700011076,
+    "surrogate_seconds_per_10_year_run": 0.01190802400001303,
     "przm_seconds_per_run_from_logs": "about 2-4"
   }
 }

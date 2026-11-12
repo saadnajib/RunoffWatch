@@ -1,7 +1,9 @@
 # Model report: surrogate of PRZM, high-loss days, spray-day advisor
 
-All numbers are from `python -m runoffwatch train` on 12 Nov 2026.
-Machine-readable version: [`results/model_metrics.json`](results/model_metrics.json).
+All numbers are from `python -m runoffwatch train --cv` (leave-one-year-out) and
+`python -m runoffwatch train` (final models, figures) on 12 Nov 2026. Machine-readable:
+[`results/cv_summary.json`](results/cv_summary.json), [`results/cv_by_year.csv`](results/cv_by_year.csv),
+[`results/model_metrics.json`](results/model_metrics.json).
 Which data went in: [DATA_REPORT.md](DATA_REPORT.md).
 
 ## 1. What was built
@@ -21,79 +23,95 @@ of its inputs, so it only has to learn how PRZM corrects that for soil moisture.
 
 **High-loss classifier**: is today a day with at least 1 g/ha pesticide loss
 (0.04 % of the dose)? Such days are 0.17 % of all rain days and carry 55 % of
-the pesticide loss.
+the pesticide loss. It turned out to be the weaker of the two ways to find such
+days (section 3) and is kept for comparison and for the driver ranking.
 
 ## 2. How it was tested, and a mistake worth knowing about
 
-The test set contains **weather files and years that training never saw**:
-153 of the 695 weather files, application years 1992 and 1996. The year 1994
-is used to decide when to stop training.
+**Leave one year out.** For each application year from 1990 to 1998 in turn,
+the models are trained without that year and tested on it, using only weather
+files that were also kept out of training (153 of the 695). The scores below
+are for all nine held-out years together, with the range over the years.
 
-Why both: the first test held out weather files only. It gave near-perfect
-scores. Then we checked how different the test weather really was: for 97 % of
-the test weather files, a training file exists whose daily rain is more than
-90 % correlated. The weather files are neighbouring grid cells of the same
-decade, so the "unseen" files contained the same storms on the same days.
+Why so strict: the first test held out weather files only and gave
+near-perfect scores. Then we checked how different the test weather really
+was. For 97 % of the test weather files, a training file exists whose daily
+rain is more than 90 % correlated: the files are neighbouring grid cells of
+the same decade, so the "unseen" files contained the same storms on the same
+days. On genuinely unseen years the picture changed:
 
-Holding out whole years as well changed the picture:
-
-| Runoff model, daily R² | Same years, unseen files | Unseen years and files |
+| Runoff model, daily R² | Same years, unseen files | Unseen years and files (1992, 1996) |
 |---|---|---|
 | First version (calendar features, large trees) | 0.97 | 0.90 |
 | Curve-number formula alone (no ML) | 0.93 | 0.93 |
-| Final version (formula as input, no calendar, small trees) | 0.98 | **0.98** |
+| Final version (formula as input, no calendar, small trees) | 0.98 | 0.98 |
 
 The first version had memorised storms by their date and was **worse than the
 plain formula** on new years. Removing the calendar features and giving the
-model the formula as an input fixed it. The lesson for the report: millions of
-rows, but only ten years of regional weather behind them.
+model the formula as an input fixed it. The lesson: millions of rows, but only
+ten years of regional weather behind them. The 1,619 high-loss days in the
+test data fall on just 86 dates.
 
-## 3. Results on unseen weather files and unseen years
+One caveat: the final design was chosen while looking at the years 1992, 1994
+and 1996. The leave-one-year-out scores for those three years are therefore
+slightly optimistic; the other six years were not used for any design choice.
+
+## 3. Results on years and weather files never used in training
+
+![Scores by held-out year](figures/m7_scores_by_held_out_year.png)
 
 ### Water runoff
 
-| | Daily R² | RMSE (mm) | Median error of a run's total |
-|---|---|---|---|
-| **Surrogate** | **0.981** | 0.16 | **6 %** |
-| Curve-number formula | 0.927 | 0.31 | 25 % |
+| | Daily R², all years | Range over the 9 years |
+|---|---|---|
+| **Surrogate** | **0.97** | 0.92 - 0.99 |
+| Curve-number formula | 0.92 | 0.83 - 0.97 |
+
+The surrogate beats the formula in every one of the nine years.
 
 ![Runoff](figures/m1_runoff_surrogate.png)
 
 ### Pesticide loss
 
-| | Daily R² | R² of log loss on runoff days | Median error of a run's total | Sum of all loss, predicted / PRZM |
-|---|---|---|---|---|
-| **Surrogate (both stages)** | **0.941** | 0.855 | 22 % | 0.83 |
-| Concentration stage with PRZM's own runoff | 0.960 | 0.955 | 18 % | 0.86 |
-| Baseline: decay formula x curve-number runoff | 0.307 | below 0 | 62 % | 0.55 |
+| | Daily R², all years | Range over the 9 years |
+|---|---|---|
+| **Surrogate (both stages)** | **0.87** | 0.68 - 0.97 |
+| Baseline: decay formula x curve-number runoff | 0.49 | 0.24 - 0.63 |
+
+| Sum of all loss, surrogate / PRZM | All years | Range |
+|---|---|---|
+| | 0.85 | 0.60 - 1.12 |
 
 ![Loss](figures/m2_loss_surrogate.png)
 
 Honest reading:
-- The surrogate follows PRZM closely day by day, far better than the simple baseline.
-- It **underestimates the total loss by about 17 %** on new years, and by about 10 % on the
-  largest days. For a risk tool that is the wrong direction; it needs fixing or a safety margin.
-- Per held-out year: daily R² 0.93 (1992) and 0.95 (1996). Two years are a small sample.
+- The surrogate follows PRZM far better than the simple baseline in every year.
+- How well depends strongly on the year: R² 0.97 in the best, 0.68 in the worst. A year's score is
+  decided by a handful of storms.
+- It **underestimates the total loss by about 15 %** on average, and by 40 % in the worst year (1991).
+  For a risk tool that is the wrong direction; it needs fixing or a safety margin.
+- The weak years have large losses from unusual events, for example a 56 mm summer storm in August
+  1994, 167 days after spraying, heavier than almost anything in the training years.
 
-### Finding high-loss days (288 such days in the test set)
+### Finding high-loss days (1,619 days on 86 dates)
 
-| Method | PR-AUC | Precision at 80 % recall |
+| Method | PR-AUC, all years | Range over the 9 years |
 |---|---|---|
-| Rule: rain today | 0.04 | 3 % |
-| Logistic regression | 0.65 | 64 % |
-| Gradient-boosting classifier | 0.87 | 66 % |
-| **Surrogate: predicted loss ≥ 1 g/ha** | **0.91** | **88 %** |
+| Rule: rain today | 0.06 | 0.03 - 0.27 |
+| Gradient-boosting classifier | 0.81 | 0.50 - 0.99 |
+| **Surrogate: predicted loss** | **0.91** | 0.79 - 0.98 |
+
+(Logistic regression, tested on 1992 and 1996 only: 0.65, against 0.87 and 0.91 for the two models above.)
 
 ![Precision-recall](figures/m3_high_loss_precision_recall.png)
 
 - Rain today alone is nearly useless. A high-loss day needs rain **and** fresh pesticide.
-- Using the surrogate's predicted amount with the 1 g/ha limit: 230 alarms, 95 % of them
-  real, 76 % of the high-loss days found.
-- Predicting the amount and then applying the limit works at least as well as predicting
-  yes/no directly. The amount model learns from 226,000 runoff days; the yes/no model has
-  only 4,000 positive examples.
-- By year the ranking is not stable: PR-AUC 0.97 vs 0.89 in 1992 (surrogate vs classifier),
-  0.85 vs 0.90 in 1996.
+- Alarm when the surrogate predicts 1 g/ha or more: 1,272 alarms, **94 % of them real**, and
+  **74 % of the high-loss days found** (between 35 % and 95 % depending on the year). So an alarm
+  can be trusted, but no alarm does not mean no risk.
+- Predicting the amount and then applying the limit is more reliable than predicting yes/no
+  directly. The amount model learns from about 226,000 runoff days; the yes/no model has about
+  4,000 positive examples from a few dozen storms.
 
 ### Speed
 
@@ -106,7 +124,8 @@ inside xLandscape (from the run logs): a few hundred times faster.
 
 The classifier relies most on: how much runoff today's rain would cause, the
 days since spraying, the rain itself, and recent temperature and evaporation
-(how wet the soil is). SHAP shows **what the model uses**, not what causes
+(how wet the soil is). The ranking comes from the classifier, tested on 1992 and
+1996. SHAP shows **what the model uses**, not what causes
 runoff in nature; and since the model copies PRZM, it shows PRZM's logic.
 "Temperature yesterday" ranking second needs an environmental explanation
 (frozen or wet soil in early March?) before it goes into a report.
@@ -145,9 +164,13 @@ on 19-23 February loses almost nothing in the following 14 days; spraying on
 1. **It copies a model.** PRZM is the "truth" here. Nothing was compared with measurements.
 2. **One pesticide, one dose, one crop, one spray date (1 March).** The advisor moves the spray
    date by days or weeks around that; it cannot say anything about spraying in May or October,
-   about another product, or about another dose. That needs new PRZM runs.
-3. **Underestimates totals by about 17 %** on unseen years.
-4. **Small effective sample.** Ten years of weather from one region; two held-out years.
+   about another product, or about another dose. That needs new PRZM runs. Even a small shift is
+   an extrapolation: in the data, "days since spraying" and the calendar date always move together,
+   so the models cannot separate them.
+3. **Underestimates totals by about 15 %** on unseen years, and misses a quarter of the high-loss
+   days (two thirds in the worst year). Extreme storms unlike those in training are its weak point.
+4. **Small effective sample.** Ten years of weather from one region; all high-loss days fall on 86 dates.
+   The models in `models/` are trained without the years 1992, 1994 and 1996.
 5. **Part of the training targets may be slightly contaminated** by the simulator problem
    described in DATA_REPORT.md, below what the quality rule can detect.
 6. **The advisor has not been evaluated as a decision tool.** We tested how well the surrogate
@@ -156,7 +179,7 @@ on 19-23 February loses almost nothing in the following 14 days; spraying on
 
 ## 7. Next steps
 
-- Repeat the evaluation with other held-out years to get error bars.
+- Train the final models on all years (the year-by-year evaluation now gives the honest score).
 - Fix the underestimation of large events (for example train the amount directly, or calibrate on the validation year).
 - Compare with a sequence model (LSTM); related work uses them for this kind of surrogate.
 - Ask Landau for runs with varied spray date, dose and pesticide, and for a rerun without the numerical problem.
