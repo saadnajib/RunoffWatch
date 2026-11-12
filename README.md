@@ -85,40 +85,6 @@ About 10 minutes in total on 4 cores, 5 GB of disk. Tests:
 python -m pytest -q
 ```
 
-## Install
-
-```bash
-pip install -e ".[dev]"
-```
-
-Add `ml` for the machine-learning phases: `pip install -e ".[dev,ml]"`.
-
-## Use
-
-Put the `.7z` archives in `data/raw/archives/`, then run the steps in order:
-
-```bash
-python -m runoffwatch extract
-```
-```bash
-python -m runoffwatch inventory
-```
-```bash
-python -m runoffwatch qc
-```
-
-Analyse a single run folder (tables + two plots in `reports/`):
-
-```bash
-python -m runoffwatch run data/raw/runs/<archive>/<run folder>
-```
-
-Run the tests:
-
-```bash
-python -m pytest -q
-```
-
 ## What is here
 
 | Path | Purpose |
