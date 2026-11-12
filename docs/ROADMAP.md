@@ -1,81 +1,72 @@
 # RunoffWatch – Roadmap
 
-Step-by-step plan. Each phase ends with something we can show.
-"High-loss day" = a day with an unusually large amount of pesticide leaving
-the field (currently: top 10 % of all days with any loss; to be agreed with Sarah).
+Updated after the project presentation (4 Nov 2026) and the first full run on
+the real data (12 Nov 2026). Results so far: [DATA_REPORT.md](DATA_REPORT.md),
+[MODEL_REPORT.md](MODEL_REPORT.md).
+
+**What the supervisor asked for, and where it stands**
+
+| Feedback from the presentation | Status |
+|---|---|
+| The surrogate model is what makes this project different; make it the core | First version trained and evaluated (Phase 4) |
+| Frame it as a decision tool for farmers ("spray today or wait?") | Prototype works for spray-day comparison; product / dose comparison is **not possible with this data** (Phase 5) |
+| Look into the extreme days and the odd decay numbers; ask Landau | Done: it is a numerical problem in the simulator, see DATA_REPORT.md. Questions for Landau are listed there |
+| Check related work, find baselines to beat | First review in [RELATED_WORK.md](RELATED_WORK.md); two baselines implemented |
+| Visualise the data | 11 figures in `docs/figures/` |
 
 ## Phase 0 – Repository setup ✅
+Reader, tests, CI, data layout.
 
-- [x] Reader for one PRZM run folder, with sanity checks (`runoffwatch/przm_io.py`)
-- [x] Single-run analysis and plots (`python -m runoffwatch run <folder>`)
-- [x] Batch tools: `extract`, `inventory`, `qc` (`runoffwatch/batch.py`)
-- [x] Installable package (`pip install -e ".[dev]"`), tests, CI on GitHub
-- [x] Data folder layout (`data/README.md`); data never goes into git
+## Phase 1 – Get to know the data ✅
+`extract`, `inventory`, `qc`. Answered: 3,958 usable runs (not 10,000); weather
+and soil vary; pesticide, dose and spray date do not.
 
-## Phase 1 – Get to know the data (week 1)
+## Phase 2 – Task 1: which results can be trusted ✅ (first version)
+`python -m runoffwatch audit`. Envelope rule per run and year, Isolation Forest
+as a second opinion, analysis of which settings cause the breakdown.
 
-1. Download the 10 `.7z` archives from the Drive into `data/raw/archives/`.
-2. `python -m runoffwatch extract`
-3. `python -m runoffwatch inventory` → **what differs between the runs?**
-   - one weather file for all runs → the model can only learn the effect of *field settings*
-   - many weather files → it can learn the effect of *weather* too
-   - check whether the **spraying date** varies (needed for any "when to spray" advice)
-4. `python -m runoffwatch qc` → how many runs are unstable, have log errors, broken mass balance.
-5. Meet Sarah: go through the inventory and QC results; agree on the high-loss definition.
+Still to do:
+- [ ] Send the questions in DATA_REPORT.md §4 to the Landau group (Sarah)
+- [ ] Sarah reviews about 20 flagged and 20 unflagged runs by eye
+- [ ] If Landau reruns the simulations without the volatilisation problem: rerun everything
 
-**Output:** a one-page data report: what varies, how many runs are usable.
+## Phase 3 – Feature table ✅
+`python -m runoffwatch features`. One row per rain day, 33 inputs, all from
+weather, spray history and soil; nothing from PRZM output.
 
-## Phase 2 – Task 1: find broken runs automatically (week 2)
+## Phase 4 – Tasks 2 + 3: surrogate and high-loss detection ✅ (first version)
+`python -m runoffwatch train`. Two-stage surrogate (runoff x concentration),
+high-loss classifier, baselines, SHAP ranking, risk calendar. Tested on weather
+files and years the models never saw.
 
-1. Per-run features from `runs_qc.csv` and the yearly soil-decay series (growth rate, last-year value, loss/applied ratio, ...).
-2. Physical rules first (they are explainable): blow-up, mass balance, weather mismatch.
-3. Isolation Forest on the per-run features to find runs that are odd in ways the rules miss.
-4. Sarah reviews ~20 flagged and ~20 unflagged runs: is "odd" really "wrong"?
+Still to do:
+- [ ] Error bars: repeat training with different test years (currently 1992 and 1996)
+- [ ] Try a sequence model (LSTM) as a second surrogate and compare; the related work uses LSTMs
+- [ ] Look at the days where the surrogate is most wrong; are they special (snow, very long dry spells)?
+- [ ] SHAP for the surrogate itself, not only for the classifier
+- [ ] Sarah: do the driver ranking and the risk calendar make physical sense?
 
-**Output:** `clean_runs.csv` + a short report on broken runs (useful for the whole project group).
+## Phase 5 – Farmer tool ✅ (prototype)
+`streamlit run app.py` or `python -m runoffwatch whatif`. Compares candidate
+spray days for a weather table and a soil.
 
-## Phase 3 – Feature table (week 3)
+Still to do:
+- [ ] Ask Landau for runs with **different spray dates, doses and pesticides**. Without them the tool
+      cannot compare products or doses, and is only valid for spraying around 1 March
+- [ ] Feed real forecast weather (and Agri4Cast history for the 30 days before)
+- [ ] Show uncertainty (for example a range from several forecast members)
 
-1. One row per rain day (≥ 1 mm) per clean run: rain today, last 1–3 days, last 7 days, days since spraying, month, temperature, field settings that vary (from the inventory).
-2. Label: high-loss day yes/no (classification) and loss in g/ha (regression).
-3. Check how often runoff happens on dry days (snowmelt) before dropping dry days.
-4. **Split train/test by run, not by row.** Rows from the same run are near-copies; a row split would give falsely good scores.
+## Phase 6 – Agri4Cast
+- [ ] Get access to Agri4Cast; check whether the 695 weather files are Agri4Cast/MARS grid cells
+- [ ] Run the surrogate with Agri4Cast weather for other regions and recent years → risk map
 
-**Output:** `data/processed/features.parquet` (~14 million rows).
-
-## Phase 4 – Task 2: predict high-loss days (weeks 4–6)
-
-1. Baseline: logistic regression.
-2. Main model: gradient-boosted trees (LightGBM).
-3. Metrics: precision, recall, PR-AUC on unseen runs (not accuracy: high-loss days are ~1 % of rain days).
-4. SHAP: ranking of drivers; check with Sarah that it makes physical sense.
-5. Risk calendar: high-loss risk by month and condition.
-
-**Output:** model, driver ranking, risk calendar, plots for the report.
-
-## Phase 5 – Task 3: emulator (weeks 7–8, if time allows)
-
-1. Regression model for daily pesticide loss from the same daily inputs.
-2. Validate on runs the model has never seen.
-3. Run it with Agri4Cast weather for other regions / recent years.
-
-**Output:** emulator + a risk map or table for other places/years.
-
-## Phase 6 – Farmer app prototype (stretch goal)
-
-A small demo (e.g. Streamlit): enter a weather forecast and a planned spraying date → risk of high loss.
-Only possible if Phase 1 shows that the spraying date varies between runs;
-otherwise the app can show *risky days after spraying*, but not *when to spray*.
-It also needs forecast weather as input, not past weather.
-
-## Phase 7 – Report and presentation (week 9)
-
-Report (Sarah leads the environmental part, Saad the methods), final slides, tagged code release.
+## Phase 7 – Report and presentation
+- [ ] Report (Sarah: environmental part; Saad: methods)
+- [ ] Final slides
+- [ ] Verify the entries marked "[not verified]" in RELATED_WORK.md before citing them
 
 ## Open questions
-
-- [ ] What differs between the 9,977 runs? (Phase 1, `inventory`)
-- [ ] How many runs are numerically broken? (Phase 1, `qc`)
-- [ ] Is the `runoff_grd.tif` error in `mc.log` in every run? (Phase 1, `qc` → `n_log_errors`)
-- [ ] Definition of a high-loss day (with Sarah)
+- [ ] Answers from Landau (DATA_REPORT.md §4)
+- [ ] Is "1 g/ha in one day" a sensible definition of a high-loss day? (Sarah)
 - [ ] Course deadline
+- [ ] New team member on the Kaiserslautern side?

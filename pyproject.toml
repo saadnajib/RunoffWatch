@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "runoffwatch"
-version = "0.2.0"
-description = "Machine learning on PRZM simulations: when does rain wash pesticide off the soil?"
+version = "0.3.0"
+description = "Machine-learning surrogate of the PRZM pesticide runoff model, with a spray-day advisor"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,10 +14,12 @@ dependencies = [
     "matplotlib>=3.7",
     "pyarrow>=14",
     "py7zr>=0.20",
+    "scikit-learn>=1.4",
+    "lightgbm>=4.3",
 ]
 
 [project.optional-dependencies]
-ml = ["scikit-learn>=1.4", "lightgbm>=4.3", "shap>=0.45"]
+app = ["streamlit>=1.36"]
 dev = ["pytest>=8"]
 
 [project.scripts]
