@@ -223,23 +223,23 @@ def model_figures(te, tc, scores, shap_rank, shap_sample, contrib, calendar, out
 
 def cv_figure(by_year: pd.DataFrame, out: Path) -> None:
     """Scores for each held-out year: shows how much they move from year to year."""
-    yrs = [str(y) for y in by_year.index]
-    x = np.arange(len(yrs))
-    fig, axes = plt.subplots(3, 1, figsize=(8.4, 7.6), sharex=True)
+    x = np.arange(len(by_year))
+    fig, axes = plt.subplots(3, 1, figsize=(8.4, 8.0), sharex=True)
+    above = dict(frameon=False, fontsize=9, ncol=2, loc="lower right", bbox_to_anchor=(1.0, 1.0), borderaxespad=0.2)
     axes[0].bar(x - 0.2, by_year["runoff_r2_curve_number"], width=0.38, color=MUTED, label="Curve-number formula")
     axes[0].bar(x + 0.2, by_year["runoff_r2"], width=0.38, color=BLUE, label="Surrogate")
-    axes[0].set_ylabel("Runoff: daily R2"); axes[0].set_ylim(0.6, 1.0); axes[0].legend(frameon=False, fontsize=9, ncol=2, loc="lower left")
-    axes[1].bar(x, by_year["loss_r2"].clip(lower=0), width=0.6, color=BLUE)
-    axes[1].set_ylabel("Pesticide loss: daily R2"); axes[1].set_ylim(0, 1.0)
+    axes[0].set_ylabel("Runoff: daily R2"); axes[0].set_ylim(0.6, 1.0); axes[0].legend(**above)
+    axes[1].bar(x - 0.2, by_year["loss_r2_baseline"].clip(lower=0), width=0.38, color=MUTED, label="Decay formula x curve number")
+    axes[1].bar(x + 0.2, by_year["loss_r2"].clip(lower=0), width=0.38, color=BLUE, label="Surrogate")
+    axes[1].set_ylabel("Pesticide loss: daily R2"); axes[1].set_ylim(0, 1.0); axes[1].legend(**above)
     axes[2].bar(x - 0.2, by_year["pr_auc_classifier"], width=0.38, color=AQUA, label="Classifier")
     axes[2].bar(x + 0.2, by_year["pr_auc_surrogate"], width=0.38, color=ORANGE, label="Surrogate")
-    axes[2].set_ylabel("High-loss days: PR-AUC"); axes[2].set_ylim(0, 1.0); axes[2].legend(frameon=False, fontsize=9, ncol=2, loc="lower left")
-    for i, n in enumerate(by_year["high_loss_days"]):
-        axes[2].text(i, 1.01, f"{int(n)} days", ha="center", va="bottom", fontsize=8, color=INK)
-    axes[2].set_xticks(x, yrs); axes[2].set_xlabel("Held-out application year (never used in training)")
+    axes[2].set_ylabel("High-loss days: PR-AUC"); axes[2].set_ylim(0, 1.0); axes[2].legend(**above)
+    axes[2].set_xticks(x, [f"{y}\n{int(n)} days" for y, n in zip(by_year.index, by_year["high_loss_days"])])
+    axes[2].set_xlabel("Held-out application year (never used in training) and its number of high-loss days")
     for ax in axes:
         _style(ax)
-    axes[0].set_title("Scores on each year when that year is kept out of training", loc="left", color=INK, fontsize=12)
+    axes[0].set_title("Scores on each held-out year", loc="left", color=INK, fontsize=12)
     _save(fig, out / "m7_scores_by_held_out_year.png")
 
 

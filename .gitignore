@@ -8,3 +8,4 @@ reports/
 # Data never goes into git (size, and it belongs to the project group)
 data/*
 !data/README.md
+models/lstm.pt
