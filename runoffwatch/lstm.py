@@ -96,7 +96,9 @@ def build_dataset(interim: str | Path = "data/interim", limit: int | None = None
     X, Y, M, S, rows = [], [], [], [], []
     for i, run in enumerate(runs, start=1):
         daily = pd.read_parquet(interim / "daily" / f"{run}.parquet",
-                                columns=["rain_mm", "temp_c", "pan_evap_mm", "runoff_mm", "pest_runoff_gha", "days_since_app"])
+                                columns=["rain_mm", "temp_c", "pan_evap_mm", "runoff_mm", "pest_runoff_gha", "applied_gha"])
+        last_app = pd.Series(daily.index.where(daily["applied_gha"] > 0), index=daily.index).ffill()
+        daily["days_since_app"] = (daily.index - last_app).dt.days
         cn = tuple(rq.at[run, f"cn_{k}"] for k in range(1, 5))
         years = list(range(daily.index[0].year, daily.index[-1].year))
         x, y, m, meta = run_sequences(daily, cn, rq.at[run, "clean_until"], years)

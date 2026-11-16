@@ -145,17 +145,33 @@ one-year guard. The late-season level of the kept data is flat from 1991 to
 1998, which supports the rule, but this is not proof that every kept value is
 exact.
 
-## 4. Questions for the Landau group
+## 4. What the project documentation added (16 Nov 2026)
 
-1. Is a Henry constant of 0.03 intended for Flufenacet? (In the run we
-   inspected, PRZM reports about 2.0 of the 2.4 kg/ha leaving through the air
-   each year, and the gas-diffusion numbers are `NaN` from the first year.)
-2. Can the runs be repeated with volatilisation switched off or with a
-   realistic Henry constant? That would likely make all years usable.
-3. Why do 2,992 folders have inputs but no result files?
-4. Is the weather real (for example MARS/Agri4Cast grid cells) or generated?
-   There are 695 different weather files, all 1990-1999.
-5. Can new runs vary the spray date, the dose and the pesticide? Without that,
-   no tool can compare products, doses or seasons.
-6. The log of nearly every run ends with a missing-file error
+The technical notes of the modelling group answered some of our questions:
+
+- **The weather is Agri4Cast.** The weather files are grid cells of the JRC
+  "Gridded Daily Agro-Meteorological Data in Europe" (MARS). So the 695
+  weather files are real, measured-and-interpolated weather, not generated.
+- **The Henry constant 0.03 is the template value.** The example run file in
+  the notes, written for a different pesticide, has the same Henry constant,
+  the same dose and the same spray date as our runs. It was most likely never
+  chosen for Flufenacet. This supports the hypothesis in section 2.
+- **Each run is defined by a small parameter file**, and about 30 settings
+  can be varied, including substance properties and dose. New runs are
+  possible ([NEW_RUNS_PLAN.md](NEW_RUNS_PLAN.md)).
+- **The spray date is fixed in the model configuration** ("03-01"), not read
+  from the run file. That is why it never varies.
+
+## 5. Questions for the Landau group
+
+1. Is a Henry constant of 0.03 intended for Flufenacet, or is it the template
+   default? (In the run we inspected, PRZM reports about 2.0 of the 2.4 kg/ha
+   leaving through the air each year, and the gas-diffusion numbers are `NaN`
+   from the first year.)
+2. May we submit our own runs? A design is prepared: 200 control runs that
+   change only the Henry constant, and 2,000 runs with varied spray date, dose,
+   half-life and sorption.
+3. Can the model configuration read the spray date from the run file?
+4. Why do 2,992 folders have inputs but no result files?
+5. The log of nearly every run ends with a missing-file error
    (`..._runoff_grd.tif`). Is the step after PRZM needed for anything we use?
