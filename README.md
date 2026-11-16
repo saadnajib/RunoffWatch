@@ -31,35 +31,107 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
 Everything describes the PRZM model for Flufenacet at 2.4 kg/ha on winter cereals
 sprayed on 1 March. It is not validated against measurements.
 
-## Install
+## How to run it, step by step
+
+There are two ways to use this repository:
+
+- **Part A: try it in 5 minutes.** No data needed. The trained models are already in the repository.
+- **Part B: redo the whole project from the raw simulation data.** About 45 minutes, most of it waiting.
+
+You need Python 3.10 or newer and Git. All commands are typed in a terminal
+(on Windows: "PowerShell" or "Command Prompt").
+
+### Part A: try it in 5 minutes
+
+**Step 1. Download the repository.**
 
 ```bash
-pip install -e ".[dev]"
+git clone https://github.com/saadnajib/RunoffWatch.git
+```
+```bash
+cd RunoffWatch
 ```
 
-## Try the advisor (models are included in the repository)
+**Step 2. Make a private Python environment** (keeps this project's packages apart from your others).
+
+```bash
+python -m venv .venv
+```
+
+Switch it on. On Windows:
+
+```bash
+.venv\Scripts\activate
+```
+
+On Mac or Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+Your prompt now starts with `(.venv)`. Do this "switch on" step again each time you open a new terminal.
+
+**Step 3. Install the project.** Takes 1-2 minutes.
+
+```bash
+pip install -e ".[dev,app]"
+```
+
+**Step 4. Check that it works.** This runs the 163 automatic tests (about 15 seconds).
+
+```bash
+python -m pytest -q
+```
+
+You should see `163 passed`.
+
+**Step 5. Ask the model a question.** This compares 7 possible spray days for a made-up weather example.
 
 ```bash
 python -m runoffwatch whatif
 ```
-```bash
-pip install -e ".[app]"
-```
+
+You get a table with one row per spray day and the predicted pesticide loss
+in the 14 days after it. Lower is better.
+
+**Step 6. Open the app** (same thing, with sliders).
+
 ```bash
 streamlit run app.py
 ```
 
-Use your own weather: a CSV with the columns `date, rain_mm, temp_c` (optional
-`pan_evap_mm`), one row per day, starting about 30 days before the first spray day.
+Your browser opens the spray-day advisor. Stop it with `Ctrl+C` in the terminal.
+
+**Optional: use your own weather.** Make a CSV file with the columns
+`date, rain_mm, temp_c` (and `pan_evap_mm` if you have it), one row per day,
+starting about 30 days before the first spray day. Then:
 
 ```bash
 python -m runoffwatch whatif --weather my_weather.csv --first-day 2027-03-01 --candidates 7
 ```
 
-## Reproduce everything from the raw data
+### Part B: redo the whole project from the raw data
 
-Put the ten `.7z` archives from the project Drive into `data/raw/archives/`
-(data is never committed), then:
+Do Part A, steps 1-3, first.
+
+**Step 1. Get the data.** Download the ten `.7z` files (`run_000000_to_000999__....7z`
+to `run_009000_to_009976__....7z`, 350 MB in total) from the project's Google Drive
+folder and put them into the folder `data/raw/archives/` (create it if it does not
+exist). Do not rename or unpack them. The data is never uploaded to GitHub.
+
+**Step 2. Run the seven commands below, one after the other, in this order.**
+Each one needs the results of the one before.
+
+| # | Command | What it does | Time | What you get |
+|---|---|---|---|---|
+| 1 | `extract` | Unpacks the archives | 1 min | 9,977 run folders in `data/raw/runs/` (3.7 GB) |
+| 2 | `inventory` | Finds what is different between the runs | 5 s | `data/interim/inventory_*.csv` |
+| 3 | `qc` | Reads every run and does basic checks | 1 min | `data/interim/runs_qc.csv` and one daily table per run |
+| 4 | `audit` | **Task 1:** decides which results can be trusted | 30 s | `data/interim/run_quality.csv`, figures `docs/figures/q*.png` |
+| 5 | `features` | Builds the table the models learn from (one row per rain day) | 2 min | `data/processed/features.parquet` |
+| 6 | `train` | **Tasks 2 and 3:** trains the emulator and the high-loss classifier | 2 min | `models/`, figures `docs/figures/m*.png`, `docs/results/model_metrics.json` |
+| 7 | `train --cv` | Honest test: leaves out one year at a time | 25 min | `docs/results/cv_summary.json`, `cv_by_year.csv` |
 
 ```bash
 python -m runoffwatch extract
@@ -83,11 +155,33 @@ python -m runoffwatch train
 python -m runoffwatch train --cv
 ```
 
-About 10 minutes on 4 cores plus 25 minutes for the last step (leave-one-year-out evaluation); 5 GB of disk. Tests:
+Times are for a laptop with 4 cores. You need about 5 GB of free disk space.
 
-```bash
-python -m pytest -q
-```
+**Step 3. Look at the results.**
+
+| The three project tasks | Where to look |
+|---|---|
+| **Task 1.** Find the broken simulations | [docs/DATA_REPORT.md](docs/DATA_REPORT.md), numbers in `docs/results/quality_summary.json` |
+| **Task 2.** Predict high-loss days and explain them | [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md), sections 3 and 4 |
+| **Task 3.** Fast copy of the simulator (emulator) | [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md), sections 1 to 3; try it with Part A, steps 5 and 6 |
+
+Running Part B overwrites the models, figures and result files that came with
+the repository. The numbers should come out the same as in the reports.
+
+### If something goes wrong
+
+| Message | What to do |
+|---|---|
+| `No module named runoffwatch` | The environment is not switched on (Part A, step 2), or step 3 was skipped |
+| `No .7z or .zip archives in data/raw/archives` | The data files are not in that folder (Part B, step 1) |
+| `No run folders ... under data/raw/runs` | Run `extract` first |
+| `... runs_qc.csv` or `run_quality.csv` not found | A step was skipped; run the seven commands in order |
+| `missing [...]. Run python -m runoffwatch train first` | The `models/` folder is empty; run `git checkout models` to get the shipped models back, or run `train` |
+| `python` is not recognised (Windows) | Use `py` instead of `python` |
+
+Other useful commands: `python -m runoffwatch --help` lists everything;
+`python -m runoffwatch run data/raw/runs/<archive>/<run folder>` makes a
+report for one single run.
 
 ## What is here
 
