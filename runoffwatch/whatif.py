@@ -122,7 +122,9 @@ def predict_days(weather: pd.DataFrame, spray_date, soil: dict | None = None, mo
     if rainy.any():
         fr = f[rainy]
         runoff = models["runoff"].predict(fr[meta["runoff_features"]])
-        conc = 10 ** models["conc"].predict(fr[meta["conc_features"]])
+        conc = models["conc"].predict(fr[meta["conc_features"]])
+        if meta.get("conc_output") != "g_per_ha_per_mm":          # models saved by an older version
+            conc = 10 ** conc
         out.loc[rainy, "runoff_mm"] = runoff
         out.loc[rainy, "loss_gha"] = runoff * np.where(conc > meta["conc_floor"] * 1.01, conc, 0.0)
     out["high_loss_day"] = out["loss_gha"] >= meta["high_loss_threshold_gha"]

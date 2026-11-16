@@ -12,7 +12,9 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
 | [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md) | Models, evaluation, drivers, risk calendar, limits |
 | [docs/RELATED_WORK.md](docs/RELATED_WORK.md) | Existing tools and surrogates, baselines |
 | [docs/PROJECT_SCOPE.md](docs/PROJECT_SCOPE.md) | Scope and research questions |
+| [docs/NEW_RUNS_PLAN.md](docs/NEW_RUNS_PLAN.md) | Prepared experiment: new simulations with varied spray date, dose and substance |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What is done and what is next |
+| [Progress slides](https://claude.ai/artifact/VzutykKbE1M1tja2ZrZHcj) · [first pitch](https://claude.ai/artifact/Y82phRAgCapMtktvPri94c) | Presentations (private until shared by the owner) |
 
 ## Main results so far
 
@@ -23,10 +25,12 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
   plausibility rule keeps 73 % of the simulated run-years. The water part is sound.
 - Tested by leaving out one year at a time (and weather files never used in training), the
   surrogate reproduces PRZM's daily runoff with R² 0.97 (curve-number formula alone: 0.92) and
-  daily pesticide loss with R² 0.87 (0.68 to 0.97 depending on the year; simple baseline: 0.49).
-  It finds high-loss days with PR-AUC 0.91: 94 % of its alarms are real, and it finds 74 % of
-  the high-loss days. It underestimates total loss by about 15 %.
+  daily pesticide loss with R² 0.91 (0.75 to 0.97 depending on the year; simple baseline: 0.49).
+  It finds high-loss days with PR-AUC 0.92: 91 % of its alarms are real, and it finds 76 % of
+  the high-loss days. It underestimates total loss by about 8 %.
 - It is a few hundred times faster than PRZM.
+- A second surrogate, a small LSTM, matches the trees on daily pesticide loss and finds more
+  high-loss days in a first test on two years; it still needs the year-by-year test.
 
 Everything describes the PRZM model for Flufenacet at 2.4 kg/ha on winter cereals
 sprayed on 1 March. It is not validated against measurements.
@@ -78,13 +82,13 @@ Your prompt now starts with `(.venv)`. Do this "switch on" step again each time 
 pip install -e ".[dev,app]"
 ```
 
-**Step 4. Check that it works.** This runs the 163 automatic tests (about 15 seconds).
+**Step 4. Check that it works.** This runs the automatic tests (about 15 seconds).
 
 ```bash
 python -m pytest -q
 ```
 
-You should see `163 passed`.
+You should see `199 passed, 1 skipped` (the skipped one needs PyTorch).
 
 **Step 5. Ask the model a question.** This compares 7 possible spray days for a made-up weather example.
 
@@ -157,6 +161,13 @@ python -m runoffwatch train --cv
 
 Times are for a laptop with 4 cores. You need about 5 GB of free disk space.
 
+**Optional extras** (need the steps above):
+
+| Command | What it does | Time |
+|---|---|---|
+| `pip install -e ".[lstm]"` then `python -m runoffwatch lstm` | Trains a second surrogate, an LSTM neural network, and compares it with the tree surrogate on the same test data | 10-20 min |
+| `python -m runoffwatch design` | Writes run files for NEW simulations (varied spray date, dose, substance) into `data/design/`. Nothing is uploaded; see [docs/NEW_RUNS_PLAN.md](docs/NEW_RUNS_PLAN.md) | 1 min |
+
 **Step 3. Look at the results.**
 
 | The three project tasks | Where to look |
@@ -196,7 +207,9 @@ report for one single run.
 | `runoffwatch/figures.py`, `report.py` | Figures and single-run report |
 | `models/` | Trained models (LightGBM text files, 2 MB) |
 | `docs/figures/`, `docs/results/` | Figures and result tables used in the reports |
-| `tests/` | 163 tests on synthetic run folders (no project data in git) |
+| `runoffwatch/lstm.py` | Second surrogate: an LSTM, compared with the trees |
+| `runoffwatch/design.py` | Generator for new simulation runs (run files and task archives) |
+| `tests/` | 203 tests on synthetic run folders (no project data in git) |
 | `runoffwatch/pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code, kept for reference |
 
 Code and documents were written with the help of an AI assistant (Claude).

@@ -3,7 +3,7 @@
 **Course:** ETX8 Landscape-modelling project, RPTU Kaiserslautern-Landau, winter 2026/27
 **Team:** Saad Najib (Computer Science) · Sarah [surname] (Environmental Science)
 **Slides:** https://claude.ai/artifact/Y82phRAgCapMtktvPri94c
-**Version:** 2, after the project presentation on 4 Nov 2026 and the first run on the full data
+**Version:** 3 (16 Nov 2026), after the project presentation on 4 Nov 2026 and two rounds of work on the full data
 
 ## One-sentence summary
 
@@ -68,9 +68,13 @@ risk calendar by month and by rain amount x time since spraying.
 Streamlit app and command line: for a weather table and a soil, compare the
 predicted loss for several candidate spray days.
 
-### Task 5 – Extensions (if time allows)
-Agri4Cast weather for other regions and years; a sequence model (LSTM) as a
-second surrogate; new PRZM runs with varied spray date, dose and pesticide.
+### Task 5 – Extensions
+- **Second surrogate (LSTM), done:** a sequence model that reads the daily weather directly,
+  compared with the tree surrogate on the same test data (MODEL_REPORT.md).
+- **New PRZM runs, prepared:** a designed experiment with varied spray date, dose and substance
+  properties, plus a control group for the Henry constant ([NEW_RUNS_PLAN.md](NEW_RUNS_PLAN.md)).
+  Needs the agreement of the model owners.
+- **More weather, open:** test the surrogate on the 1979-2024 Agri4Cast weather for France.
 
 ## Team roles
 
@@ -91,6 +95,7 @@ A third team member on the Kaiserslautern side may join (approved by the supervi
 - **Daily resolution.** As in PRZM.
 - **Part of the pesticide results is unusable** because of a numerical problem in the simulator; about
   73 % of the simulated run-years are kept.
+- **Large losses are underestimated** (by about 8 % overall, more in years with extreme storms).
 - **Ten years of regional weather.** The 695 weather files share the same storms, so there are far fewer
   independent weather events than rows. Scores differ noticeably from one held-out year to another.
 

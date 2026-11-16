@@ -7,7 +7,9 @@ Commands (run in this order):
   audit      Task 1: which results are trusted -> data/interim/run_quality.csv, docs/figures
   features   one row per rain day             -> data/processed/features.parquet
   train      Tasks 2+3: surrogate + classifier -> models/, docs/results, docs/figures
+  lstm       second surrogate (LSTM) compared with the trees (needs PyTorch)
   whatif     spray-day comparison from a weather file (uses the trained surrogate)
+  design     run files for new simulations (spray date, dose, substance); nothing is uploaded
   run        analyse a single run folder (tables + plots)
 """
 
@@ -51,6 +53,24 @@ def main(argv=None) -> int:
     tr.add_argument("--rounds", type=int, default=1500)
     tr.add_argument("--cv", action="store_true",
                     help="instead of training the final models: leave-one-year-out evaluation (slow)")
+
+    ls = sub.add_parser("lstm", help="train an LSTM surrogate and compare it with the tree surrogate (needs PyTorch)")
+    ls.add_argument("--interim", default="data/interim")
+    ls.add_argument("--features", default="data/processed/features.parquet")
+    ls.add_argument("--epochs", type=int, default=20)
+    ls.add_argument("--limit", type=int, help="only the first N runs (quick test)")
+
+    de = sub.add_parser("design", help="write run files for NEW simulations (nothing is uploaded)")
+    de.add_argument("--n", type=int, default=2000, help="number of new runs with varied spray date, dose and substance")
+    de.add_argument("--controls", type=int, default=200, help="existing runs repeated with only the Henry constant changed")
+    de.add_argument("--henry", type=float, default=None, help="Henry constant for all new runs (default: see design.py)")
+    de.add_argument("--seed", type=int, default=1)
+    de.add_argument("--name", default="rw_exp1", help="prefix of the task archives; must be new for every submission")
+    de.add_argument("--out", default="data/design/exp1")
+    de.add_argument("--interim", default="data/interim")
+    de.add_argument("--runs", default="data/raw/runs")
+    de.add_argument("--weather-dir", help="folder with the original MARS weather CSVs (<met_hash>.csv), if you have them")
+    de.add_argument("--overwrite", action="store_true")
 
     wi = sub.add_parser("whatif", help="compare spray days for a weather table")
     wi.add_argument("--weather", help="CSV with date, rain_mm, temp_c[, pan_evap_mm]; omit for a made-up example")
@@ -112,6 +132,21 @@ def main(argv=None) -> int:
         m = train_all(a.features, a.models, rounds=a.rounds)
         print(json.dumps({k: m[k] for k in ("split", "runoff", "loss", "high_loss")}, indent=2))
         print("models in", a.models, "| metrics in docs/results/model_metrics.json | figures in docs/figures/m*.png")
+    elif a.cmd == "lstm":
+        import json
+        from .lstm import train_and_compare
+        m = train_and_compare(a.interim, a.features, epochs=a.epochs, limit=a.limit)
+        print(json.dumps({k: m[k] for k in ("rows_compared", "epochs_run", "train_minutes", "lstm", "trees")}, indent=2))
+        print("details: docs/results/lstm_vs_trees.json | figure: docs/figures/m8_lstm_vs_trees.png")
+    elif a.cmd == "design":
+        import pandas as pd
+        from . import design as dz
+        rq = pd.read_csv(Path(a.interim) / "run_quality.csv", index_col="run", dtype={"met_hash": str})
+        kw = {} if a.henry is None else {"henry": a.henry}
+        d = dz.make_design(rq, a.n, a.seed, n_controls=a.controls, weather_dir=a.weather_dir, **kw)
+        info = dz.write_design(d, a.out, a.runs, a.weather_dir, name=a.name, overwrite=a.overwrite)
+        print(dz.readme_text(d, n_archives=len(info["archives"])))
+        print(f"written to {a.out}: {len(d)} run files, {len(info['archives'])} task archive(s). Nothing was uploaded.")
     elif a.cmd == "whatif":
         import pandas as pd
         from .whatif import compare_spray_days, example_weather, prepare_weather
