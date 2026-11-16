@@ -44,6 +44,7 @@ Still to do:
 - [x] Final models trained on all years
 - [x] Underestimation of large losses reduced (concentration model now trained on amounts, not logarithms); not removed
 - [x] Sequence model (LSTM) as a second surrogate, compared on the same test rows (`python -m runoffwatch lstm`)
+- [ ] Year-by-year test for the LSTM (about 2 hours); if its lead holds, make it the main surrogate
 - [ ] Look at the days where the surrogate is most wrong; are they special (snow, very long dry spells)?
 - [ ] SHAP for the surrogate itself, not only for the classifier
 - [ ] Sarah: do the driver ranking and the risk calendar make physical sense?
@@ -71,6 +72,7 @@ Still to do:
 
 ## Phase 7 – Report and presentation
 - [ ] Report (Sarah: environmental part; Saad: methods)
+- [x] Progress slides (16 Nov 2026): https://claude.ai/artifact/VzutykKbE1M1tja2ZrZHcj
 - [ ] Final slides
 - [ ] Verify the entries marked "[not verified]" in RELATED_WORK.md before citing them
 

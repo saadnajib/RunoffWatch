@@ -1,7 +1,8 @@
 # Model report: surrogate of PRZM, high-loss days, spray-day advisor
 
 All numbers are from `python -m runoffwatch train --cv` (leave-one-year-out) and
-`python -m runoffwatch train` (final models, figures) on 16 Nov 2026. Machine-readable:
+`python -m runoffwatch train` (final models, figures) on 16 Nov 2026; the LSTM comparison is in
+[`results/lstm_vs_trees.json`](results/lstm_vs_trees.json). Machine-readable:
 [`results/cv_summary.json`](results/cv_summary.json), [`results/cv_by_year.csv`](results/cv_by_year.csv),
 [`results/model_metrics.json`](results/model_metrics.json).
 Which data went in: [DATA_REPORT.md](DATA_REPORT.md).
@@ -130,6 +131,38 @@ Honest reading:
 About 0.01 s for a 10-year run on one laptop core, against 2-4 s for PRZM
 inside xLandscape (from the run logs): a few hundred times faster.
 
+### A second surrogate: LSTM
+
+`python -m runoffwatch lstm`. An LSTM is a neural network that reads the daily weather day by day
+and keeps its own memory, instead of using hand-made inputs such as "rain in the previous 7 days".
+Ours is small (24,000 parameters, 12 minutes of training on a laptop). Both surrogates were
+trained without the years 1992, 1994 and 1996 and compared on exactly the same test rows
+(test weather files, years 1992 and 1996; 278,370 rain days, 288 high-loss days).
+
+| | Trees (main surrogate) | LSTM |
+|---|---|---|
+| Runoff, daily R² | 0.98 | 0.98 |
+| Runoff, median error of a run's total | 6 % | 3 % |
+| Pesticide loss, daily R² | 0.93 | 0.94 |
+| Pesticide loss, R² of the logarithm (small losses count as much as large ones) | 0.85 | 0.68 |
+| Pesticide loss, median error of a run's total | 18 % | 11 % |
+| Sum of all loss, surrogate / PRZM | 0.89 | 1.05 |
+| High-loss days, PR-AUC | 0.91 | 0.97 |
+| Alarm at 1 g/ha: share of alarms that are real / share of high-loss days found | 91 % / 78 % | 89 % / 90 % |
+
+![LSTM vs trees](figures/m8_lstm_vs_trees.png)
+
+Reading:
+- On the large losses, which decide the totals and the high-loss days, the LSTM is at least as
+  good as the trees and finds clearly more high-loss days. On small losses it is much less exact.
+- **This is one test on two years.** The trees were tested by leaving out each of nine years; the
+  LSTM was not (that takes about two hours). A year's score depends on a handful of storms, so the
+  LSTM's lead may shrink or grow on other years.
+- The result depends on training length: stopped after 25 rounds instead of 44, the same LSTM
+  scored only 0.79 on daily pesticide loss.
+- The advisor still uses the trees: they are tested more thoroughly and need no extra software.
+  Running the year-by-year test for the LSTM is the obvious next step.
+
 ## 4. What drives high-loss days
 
 ![SHAP ranking](figures/m4_shap_ranking.png)
@@ -193,5 +226,6 @@ on 19-23 February loses almost nothing in the following 14 days; spraying on
 - New PRZM runs with varied spray date, dose and substance, and a control group for the Henry
   constant: prepared in [NEW_RUNS_PLAN.md](NEW_RUNS_PLAN.md), waiting for the model owners.
 - Test the surrogate on the 1979-2024 Agri4Cast weather for France (46 years it has never seen).
+- Year-by-year test for the LSTM; if its lead holds, make it the main surrogate.
 - Reduce the remaining underestimation in years with extreme storms.
 - SHAP for the surrogate itself, not only for the classifier.

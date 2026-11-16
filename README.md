@@ -14,6 +14,7 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
 | [docs/PROJECT_SCOPE.md](docs/PROJECT_SCOPE.md) | Scope and research questions |
 | [docs/NEW_RUNS_PLAN.md](docs/NEW_RUNS_PLAN.md) | Prepared experiment: new simulations with varied spray date, dose and substance |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What is done and what is next |
+| [Progress slides](https://claude.ai/artifact/VzutykKbE1M1tja2ZrZHcj) · [first pitch](https://claude.ai/artifact/Y82phRAgCapMtktvPri94c) | Presentations (private until shared by the owner) |
 
 ## Main results so far
 
@@ -28,6 +29,8 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
   It finds high-loss days with PR-AUC 0.92: 91 % of its alarms are real, and it finds 76 % of
   the high-loss days. It underestimates total loss by about 8 %.
 - It is a few hundred times faster than PRZM.
+- A second surrogate, a small LSTM, matches the trees on daily pesticide loss and finds more
+  high-loss days in a first test on two years; it still needs the year-by-year test.
 
 Everything describes the PRZM model for Flufenacet at 2.4 kg/ha on winter cereals
 sprayed on 1 March. It is not validated against measurements.
