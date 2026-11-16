@@ -7,6 +7,10 @@ Surrogate of PRZM (Task 3), built in two physically meaningful stages:
     conc model     history since spraying + soil   -> g/ha of pesticide per mm runoff (chemistry)
     pesticide loss = runoff x concentration
 
+Three sets of models are trained: one without the years 1992/1994/1996 (to test and to make
+the figures), one per held-out year in `yearly_cv` (the honest score), and the final set on
+all years (saved in models/ and used by the what-if tool).
+
 The runoff model is trained on every readable run (the water side of PRZM is
 sound). The conc model is trained only on rows whose pesticide results passed
 the quality audit.
@@ -97,13 +101,25 @@ def fit_decay_baseline(runoff_mm, days_since_app, loss_gha) -> tuple[float, floa
 # --------------------------------------------------------------------------- #
 # Training
 # --------------------------------------------------------------------------- #
-def _fit(params: dict, Xtr, ytr, Xva, yva, rounds: int, patience: int = 40) -> lgb.Booster:
-    dtr = lgb.Dataset(Xtr, ytr, free_raw_data=False)
-    dva = lgb.Dataset(Xva, yva, reference=dtr)
-    # Small trees on purpose: millions of rows, but only ten years of regional weather behind them.
-    base = {"learning_rate": 0.05, "num_leaves": 15, "min_data_in_leaf": 100, "feature_fraction": 0.8,
-            "bagging_fraction": 0.8, "bagging_freq": 1, "verbose": -1, "seed": 0}
-    return lgb.train({**base, **params}, dtr, num_boost_round=rounds, valid_sets=[dva],
+RUNOFF_PARAMS = {"objective": "tweedie", "tweedie_variance_power": 1.2, "metric": "rmse"}
+# The concentration model is trained on the amount itself (g/ha per mm), weighted by the mm of
+# runoff, so that its errors are counted in g/ha lost. An earlier version was trained on the
+# logarithm; that made small values very accurate but underestimated the large ones that matter.
+CONC_PARAMS = {"objective": "tweedie", "tweedie_variance_power": 1.5, "metric": "tweedie", "num_leaves": 31}
+CLF_PARAMS = {"objective": "binary", "metric": "binary_logloss", "learning_rate": 0.03}
+BASE_PARAMS = {"learning_rate": 0.05, "num_leaves": 15, "min_data_in_leaf": 100, "feature_fraction": 0.8,
+               "bagging_fraction": 0.8, "bagging_freq": 1, "verbose": -1, "seed": 0}
+# Small trees on purpose: millions of rows, but only ten years of regional weather behind them.
+
+
+def _fit(params: dict, Xtr, ytr, Xva=None, yva=None, rounds: int = 1500, patience: int = 40,
+         wtr=None, wva=None) -> lgb.Booster:
+    """Train with early stopping on (Xva, yva); without a validation set, train exactly `rounds` trees."""
+    dtr = lgb.Dataset(Xtr, ytr, weight=wtr, free_raw_data=False)
+    if Xva is None:
+        return lgb.train({**BASE_PARAMS, **params}, dtr, num_boost_round=rounds)
+    dva = lgb.Dataset(Xva, yva, weight=wva, reference=dtr)
+    return lgb.train({**BASE_PARAMS, **params}, dtr, num_boost_round=rounds, valid_sets=[dva],
                      callbacks=[lgb.early_stopping(patience, verbose=False)])
 
 
@@ -111,8 +127,38 @@ def _conc_rows(d: pd.DataFrame) -> pd.DataFrame:
     return d[d["pest_clean"] & (d["runoff_mm"] > 0)]
 
 
-def _log_conc(d: pd.DataFrame) -> np.ndarray:
-    return np.log10((d["loss_gha"] / d["runoff_mm"]).clip(lower=CONC_FLOOR))
+def _conc(d: pd.DataFrame) -> pd.Series:
+    """Pesticide lost per mm of runoff water (g/ha per mm)."""
+    return (d["loss_gha"] / d["runoff_mm"]).clip(lower=0)
+
+
+def _leaf(n_rows: int, most: int) -> int:
+    return min(most, max(20, n_rows // 200))
+
+
+def fit_runoff(tr, va=None, rounds: int = 1500) -> lgb.Booster:
+    p = {**RUNOFF_PARAMS, "min_data_in_leaf": _leaf(len(tr), 2000)}
+    if va is None:
+        return _fit(p, tr[RUNOFF_FEATURES], tr["runoff_mm"], rounds=rounds)
+    return _fit(p, tr[RUNOFF_FEATURES], tr["runoff_mm"], va[RUNOFF_FEATURES], va["runoff_mm"], rounds)
+
+
+def fit_conc(tr, va=None, rounds: int = 1500) -> lgb.Booster:
+    c = _conc_rows(tr)
+    p = {**CONC_PARAMS, "min_data_in_leaf": _leaf(len(c), 200)}
+    if va is None:
+        return _fit(p, c[CONC_FEATURES], _conc(c), rounds=rounds, wtr=c["runoff_mm"])
+    v = _conc_rows(va)
+    return _fit(p, c[CONC_FEATURES], _conc(c), v[CONC_FEATURES], _conc(v), rounds, wtr=c["runoff_mm"], wva=v["runoff_mm"])
+
+
+def fit_classifier(tr, va=None, rounds: int = 1500) -> lgb.Booster:
+    c = tr[tr["pest_clean"]]
+    if va is None:
+        return _fit(CLF_PARAMS, c[CLASSIFIER_FEATURES], c["high_loss"].astype(int), rounds=rounds)
+    v = va[va["pest_clean"]]
+    return _fit(CLF_PARAMS, c[CLASSIFIER_FEATURES], c["high_loss"].astype(int),
+                v[CLASSIFIER_FEATURES], v["high_loss"].astype(int), rounds, patience=100)
 
 
 def train_all(features_path: str | Path = "data/processed/features.parquet", model_dir: str | Path = "models",
@@ -130,29 +176,16 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
                                "weather_files": count("met_hash"), "runs": count("run")},
                      "high_loss_threshold_gha": HIGH_LOSS_GHA}
 
-    # ---------------- Stage 1: runoff (water) --------------------------------
+    # ---------------- Models for the evaluation (trained without the held-out years) ----
     log.info("training runoff model on %d rows", len(tr))
-    runoff = _fit({"objective": "tweedie", "tweedie_variance_power": 1.2, "metric": "rmse",
-                   "min_data_in_leaf": min(2000, max(20, len(tr) // 200))},
-                  tr[RUNOFF_FEATURES], tr["runoff_mm"], va[RUNOFF_FEATURES], va["runoff_mm"], rounds)
-    runoff.save_model(model_dir / MODEL_FILES["runoff"])
-
-    # ---------------- Stage 2: pesticide per mm of runoff --------------------
-    ctr, cva = _conc_rows(tr), _conc_rows(va)
+    runoff = fit_runoff(tr, va, rounds)
+    ctr = _conc_rows(tr)
     log.info("training concentration model on %d rows", len(ctr))
-    conc = _fit({"objective": "regression", "metric": "rmse", "num_leaves": 31,
-                 "min_data_in_leaf": min(200, max(20, len(ctr) // 200))},
-                ctr[CONC_FEATURES], _log_conc(ctr), cva[CONC_FEATURES], _log_conc(cva), rounds)
-    conc.save_model(model_dir / MODEL_FILES["conc"])
+    conc = fit_conc(tr, va, rounds)
     a, k = fit_decay_baseline(ctr["runoff_mm"].to_numpy(), ctr["days_since_app"].to_numpy(), ctr["loss_gha"].to_numpy())
-
-    # ---------------- Task 2: high-loss classifier ---------------------------
     cl_tr, cl_va = tr[tr["pest_clean"]], va[va["pest_clean"]]
     log.info("training high-loss classifier on %d rows (%d positives)", len(cl_tr), int(cl_tr["high_loss"].sum()))
-    clf = _fit({"objective": "binary", "metric": "binary_logloss", "learning_rate": 0.03},
-               cl_tr[CLASSIFIER_FEATURES], cl_tr["high_loss"].astype(int),
-               cl_va[CLASSIFIER_FEATURES], cl_va["high_loss"].astype(int), rounds, patience=100)
-    clf.save_model(model_dir / MODEL_FILES["high_loss"])
+    clf = fit_classifier(tr, va, rounds)
     neg = cl_tr[~cl_tr["high_loss"]].sample(min(300_000, int((~cl_tr["high_loss"]).sum())), random_state=0)
     lr_train = pd.concat([cl_tr[cl_tr["high_loss"]], neg])
     logreg = make_pipeline(StandardScaler(), LogisticRegression(max_iter=500, class_weight="balanced"))
@@ -167,7 +200,7 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
         te["runoff_pred"] = runoff.predict(te[RUNOFF_FEATURES])
         te["runoff_cn"] = te["cn_runoff_mm"]
         tc = te[te["pest_clean"]].copy()
-        conc_pred = 10 ** conc.predict(tc[CONC_FEATURES])
+        conc_pred = conc.predict(tc[CONC_FEATURES])
         tc["loss_pred"] = tc["runoff_pred"] * conc_pred                 # full surrogate: no PRZM output used
         tc["loss_pred_true_runoff"] = tc["runoff_mm"] * conc_pred       # diagnostic: chemistry stage alone
         tc["loss_base"] = a * tc["runoff_cn"] * np.exp(-k * tc["days_since_app"])
@@ -237,9 +270,25 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
     calendar["by_month"].to_csv(results / "risk_calendar_month.csv")
     calendar["by_rain_and_weeks"].to_csv(results / "risk_by_rain_and_weeks_since_spraying.csv")
 
+    # ---------------- Final models: all weather files, all years -------------
+    # The models above exist only to be tested. The models that are saved and used by the
+    # what-if tool are trained again on everything, with the number of trees found above
+    # (plus 10 %, because there is more data). Their expected accuracy is the leave-one-
+    # year-out score (`train --cv`); they cannot be tested themselves, as no data is left over.
+    more = lambda b: int(round(1.1 * b.num_trees()))  # noqa: E731
+    log.info("training the final models on all %d rows", len(t))
+    final = {"runoff": fit_runoff(t, rounds=more(runoff)), "conc": fit_conc(t, rounds=more(conc)),
+             "high_loss": fit_classifier(t, rounds=more(clf))}
+    for name, booster in final.items():
+        booster.save_model(model_dir / MODEL_FILES[name])
+    metrics["final_models"] = {"trained_on": "all weather files, all years", "rain_day_rows": int(len(t)),
+                               "runoff_days_with_trusted_pesticide": int(len(_conc_rows(t))),
+                               "trees": {n: b.num_trees() for n, b in final.items()}}
+    tr = t                                             # feature ranges below describe the final training data
+
     meta = {"runoff_features": RUNOFF_FEATURES, "conc_features": CONC_FEATURES,
             "classifier_features": CLASSIFIER_FEATURES, "high_loss_threshold_gha": HIGH_LOSS_GHA,
-            "conc_floor": CONC_FLOOR,
+            "conc_floor": CONC_FLOOR, "conc_output": "g_per_ha_per_mm",
             "trained_on": {"application": "2400 g/ha Flufenacet on 1 March, winter cereals, FOCUS R1",
                            "feature_ranges": {c: [float(tr[c].quantile(0.001)), float(tr[c].quantile(0.999))]
                                               for c in CLASSIFIER_FEATURES}}}
@@ -277,22 +326,13 @@ def yearly_cv(features_path: str | Path = "data/processed/features.parquet",
         tr = t[(files == "train") & (year != y) & (year != stop_year)]
         va = t[(files != "test") & (year == stop_year)]
         te = t[(files == "test") & (year == y)].copy()
-        runoff = _fit({"objective": "tweedie", "tweedie_variance_power": 1.2, "metric": "rmse",
-                       "min_data_in_leaf": min(2000, max(20, len(tr) // 200))},
-                      tr[RUNOFF_FEATURES], tr["runoff_mm"], va[RUNOFF_FEATURES], va["runoff_mm"], rounds)
-        ctr, cva = _conc_rows(tr), _conc_rows(va)
-        conc = _fit({"objective": "regression", "metric": "rmse", "num_leaves": 31,
-                     "min_data_in_leaf": min(200, max(20, len(ctr) // 200))},
-                    ctr[CONC_FEATURES], _log_conc(ctr), cva[CONC_FEATURES], _log_conc(cva), rounds)
-        cl_tr, cl_va = tr[tr["pest_clean"]], va[va["pest_clean"]]
-        clf = _fit({"objective": "binary", "metric": "binary_logloss", "learning_rate": 0.03},
-                   cl_tr[CLASSIFIER_FEATURES], cl_tr["high_loss"].astype(int),
-                   cl_va[CLASSIFIER_FEATURES], cl_va["high_loss"].astype(int), rounds, patience=100)
+        runoff, conc, clf = fit_runoff(tr, va, rounds), fit_conc(tr, va, rounds), fit_classifier(tr, va, rounds)
+        ctr = _conc_rows(tr)
         a, k = fit_decay_baseline(ctr["runoff_mm"].to_numpy(), ctr["days_since_app"].to_numpy(), ctr["loss_gha"].to_numpy())
 
         te["runoff_pred"] = runoff.predict(te[RUNOFF_FEATURES])
         tc = te[te["pest_clean"]].copy()
-        tc["loss_pred"] = tc["runoff_pred"] * 10 ** conc.predict(tc[CONC_FEATURES])
+        tc["loss_pred"] = tc["runoff_pred"] * conc.predict(tc[CONC_FEATURES])
         tc["loss_base"] = a * tc["cn_runoff_mm"] * np.exp(-k * tc["days_since_app"])
         tc["clf_score"] = clf.predict(tc[CLASSIFIER_FEATURES])
         tc["year"] = y

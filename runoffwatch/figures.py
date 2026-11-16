@@ -241,3 +241,22 @@ def cv_figure(by_year: pd.DataFrame, out: Path) -> None:
         _style(ax)
     axes[0].set_title("Scores on each year when that year is kept out of training", loc="left", color=INK, fontsize=12)
     _save(fig, out / "m7_scores_by_held_out_year.png")
+
+
+def lstm_figure(te: pd.DataFrame, tc: pd.DataFrame, out_metrics: dict, out: Path) -> None:
+    """Tree surrogate and LSTM against PRZM on the same test rows (pesticide loss, log scale)."""
+    e = tc[(tc["loss_gha"] > 1e-6)]
+    e = e.sample(min(40_000, len(e)), random_state=0)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.8), sharex=True, sharey=True)
+    for ax, col, key, title, color in [(axes[0], "loss_trees", "trees", "Gradient-boosted trees", BLUE),
+                                       (axes[1], "loss_lstm", "lstm", "LSTM", ORANGE)]:
+        ax.scatter(e["loss_gha"], e[col].clip(lower=1e-6), s=3, alpha=0.15, color=color, rasterized=True)
+        ax.plot([1e-6, 100], [1e-6, 100], color=INK, lw=1)
+        ax.set_xscale("log"); ax.set_yscale("log"); ax.set_xlim(1e-6, 100); ax.set_ylim(1e-6, 100)
+        r2 = out_metrics[key]["loss"]["r2_daily"]
+        ax.set_title(f"{title}  (daily R2 {r2:.2f})", loc="left", color=INK, fontsize=11)
+        ax.set_xlabel("PRZM pesticide loss (g/ha per day)"); _style(ax, "both")
+    axes[0].set_ylabel("Surrogate (g/ha per day)")
+    fig.suptitle("Two surrogates on the same test rows (unseen weather files, years 1992 and 1996)",
+                 x=0.01, ha="left", color=INK, fontsize=12)
+    _save(fig, out / "m8_lstm_vs_trees.png")
