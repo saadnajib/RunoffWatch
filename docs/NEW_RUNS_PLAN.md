@@ -4,6 +4,12 @@
 own computer. Uploading them to the modelling workstation needs the agreement
 of the model owners in Landau first.
 
+**Update 17 Nov 2026:** the PRZM program (`WINPRZM.exe`, with one example run folder) is in this
+year's folder of the project cloud. PRZM reads the `.inp` / `.met` / `.run` files directly, so runs
+can probably be made on any Windows computer by editing the `.inp` file (Henry constant, spray
+dates, dose), without the workstation and without the run files described below. This has not been
+tried yet. The design below stays useful as the list of which runs to make.
+
 ## Why new runs are needed
 
 In all existing runs three things never change: the pesticide (Flufenacet),

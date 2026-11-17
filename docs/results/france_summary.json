@@ -1,0 +1,78 @@
+{
+  "weather": {
+    "grid_cells_in_table": 1003,
+    "first_day": "1979-01-01",
+    "last_day": "2024-12-31"
+  },
+  "year_shift_check": {
+    "runs_checked": 26,
+    "max_abs_difference": {
+      "rain_mm": 0.0,
+      "temp_c": 7.629394538355427e-07,
+      "pan_evap_mm": 4.5776367230132564e-07
+    },
+    "matches": true
+  },
+  "year_shift": 16,
+  "fields": 3958,
+  "grid_cells_used": 695,
+  "application_years": [
+    1979,
+    2023
+  ],
+  "field_years": 178110,
+  "by_period": {
+    "after (2016-2023)": {
+      "years": 8,
+      "loss_gha_mean": 1.9959,
+      "loss_gha_median": 0.8422,
+      "runoff_mm_mean": 30.8958,
+      "rain_mm_mean": 707.9104003906,
+      "high_loss_days_per_field_year": 0.3655,
+      "max_rain_mm": 145.0
+    },
+    "before (1979-2005)": {
+      "years": 27,
+      "loss_gha_mean": 1.2255,
+      "loss_gha_median": 0.5226,
+      "runoff_mm_mean": 23.5029,
+      "rain_mm_mean": 644.9277954102,
+      "high_loss_days_per_field_year": 0.2124,
+      "max_rain_mm": 189.0
+    },
+    "training years (2006-2015)": {
+      "years": 10,
+      "loss_gha_mean": 1.4877,
+      "loss_gha_median": 0.6254,
+      "runoff_mm_mean": 29.6065,
+      "rain_mm_mean": 708.8189697266,
+      "high_loss_days_per_field_year": 0.2341,
+      "max_rain_mm": 158.0
+    }
+  },
+  "worst_years_by_mean_loss": {
+    "2013": 3.626,
+    "1986": 3.598,
+    "2001": 3.278,
+    "2020": 3.27,
+    "2018": 3.057
+  },
+  "best_years_by_mean_loss": {
+    "1990": 0.307,
+    "1997": 0.319,
+    "1994": 0.441,
+    "1992": 0.52,
+    "1993": 0.539
+  },
+  "ratio_worst_to_median_year": 3.523567744239562,
+  "share_of_all_loss_in_worst_5_years": 0.26324309046189887,
+  "field_years_with_a_rain_day_heavier_than_99.9pct_of_training_rain_days_pct": 11.435629667059683,
+  "training_rain_99.9pct_mm": 47.0,
+  "consistency_with_przm_2006_2015_not_a_test": {
+    "field_years": 38867,
+    "field_years_trusted_pesticide": 27730,
+    "runoff_r2_yearly": 0.9516287478638559,
+    "loss_r2_yearly": 0.9850101883734689,
+    "loss_sum_ratio": 0.9820347968894637
+  }
+}

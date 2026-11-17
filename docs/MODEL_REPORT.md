@@ -163,6 +163,47 @@ Reading:
 - The advisor still uses the trees: they are tested more thoroughly and need no extra software.
   Running the year-by-year test for the LSTM is the obvious next step.
 
+### The surrogate on 45 years of real weather (France, 1979-2023)
+
+`python -m runoffwatch france`. Every one of the 3,958 fields gets the full Agri4Cast weather
+record of its own grid cell, a spraying on 1 March of every year, and the surrogate's prediction:
+178,110 field-years in about 8 minutes. PRZM would need roughly 15 hours for the same.
+
+A note on years: the PRZM runs label their weather 1990-1999, but it is the real weather of
+2006-2015 (DATA_REPORT.md). This section uses real years.
+
+![Loss by year](figures/f1_france_by_year.png)
+
+| Period | Years | Mean predicted loss (g/ha per field and year) | High-loss days per field and year |
+|---|---|---|---|
+| Before the PRZM runs (1979-2005) | 27 | 1.23 | 0.21 |
+| Years PRZM simulated (2006-2015) | 10 | 1.49 | 0.23 |
+| After (2016-2023) | 8 | 2.00 | 0.37 |
+
+- **Years differ far more than the average suggests.** The worst year (2013) has 3.5 times the
+  loss of a typical year; the best (1990) a third of it. The five worst years (2013, 1986, 2001,
+  2020, 2018) carry 26 % of the loss of all 45 years.
+- **What decides a year** is whether heavy rain falls in the weeks after 1 March, not how wet the
+  year is as a whole.
+- **Do not read a climate trend into the table.** Eight years are few, the yearly rain is the same
+  as in 2006-2015, and one or two storms in March move a year's value a lot.
+
+![Map](figures/f2_france_map.png)
+
+The map shows the mean predicted loss per weather grid cell. It mixes two things: the weather of
+the cell and the soils of the sampled fields that lie in it.
+
+**How far to trust this**
+- For 2006-2015 the surrogate reproduces PRZM's yearly totals closely (R² 0.95 for runoff, 0.99
+  for pesticide loss). That is **not a test**: the final models were trained on these years.
+- For the other 35 years there is no PRZM result to compare with. The expected accuracy is the
+  leave-one-year-out score above (pesticide loss R² 0.91, totals 8 % too low on average).
+- 11 % of the field-years contain a rain day heavier than 99.9 % of the rain days in training
+  (above 47 mm; the maximum is 189 mm against 158 mm in training). Those are the cases where the
+  surrogate is weakest and tends to underestimate.
+- With `WINPRZM.exe` available, a real test is possible: run PRZM for a few hundred field-years
+  outside 2006-2015 and compare.
+
 ## 4. What drives high-loss days
 
 ![SHAP ranking](figures/m4_shap_ranking.png)
@@ -225,7 +266,8 @@ on 19-23 February loses almost nothing in the following 14 days; spraying on
 
 - New PRZM runs with varied spray date, dose and substance, and a control group for the Henry
   constant: prepared in [NEW_RUNS_PLAN.md](NEW_RUNS_PLAN.md), waiting for the model owners.
-- Test the surrogate on the 1979-2024 Agri4Cast weather for France (46 years it has never seen).
+- Check the long-run predictions against PRZM itself for a sample of field-years outside 2006-2015
+  (the PRZM program is available to this year's students).
 - Year-by-year test for the LSTM; if its lead holds, make it the main surrogate.
 - Reduce the remaining underestimation in years with extreme storms.
 - SHAP for the surrogate itself, not only for the classifier.

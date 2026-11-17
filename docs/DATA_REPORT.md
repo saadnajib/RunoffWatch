@@ -11,13 +11,37 @@ archives from the project Drive (run on 12 Nov 2026). Machine-readable version:
 | Run folders | 9,977 |
 | ... with PRZM results | **3,958** readable (+ 8 with an empty result file) |
 | ... with inputs but no results kept | 2,992 |
-| ... with only a log file (PRZM never started for this grid cell) | 3,019 |
-| Simulated period | 1 Jan 1990 - 31 Dec 1999, daily |
+| ... with only a log file (PRZM never started) | 3,019 |
+| Simulated period | labelled 1 Jan 1990 - 31 Dec 1999, daily; the weather is really 2006 - 2015 (see below) |
 | Different weather files | **695** (one weather file is shared by 1 to 77 runs) |
 
 ![Folder contents](figures/q1_folder_status.png)
 
 So the data set is about 4,000 simulations, not 10,000.
+
+### Where the runs come from (added 17 Nov 2026, from the project cloud folder)
+
+- **Each run is a real field in France.** The 9,977 runs are a random sample of
+  9,977 real pesticide applications in France. The number in a run's name is the
+  field's id; `grid_...` is the Agri4Cast weather grid cell the field lies in.
+- **Soil and slope are the field's own**: soil from the European soil database
+  at the field's location, slope from an elevation map of France.
+- **Weather is the field's Agri4Cast grid cell.** The Agri4Cast table for
+  France (1,003 grid cells, 1979-2024) contains all 695 cells used.
+- **The years are mislabelled by 16.** The weather labelled 1990-1999 in the
+  runs is identical, value for value, to the Agri4Cast record of **2006-2015**
+  (checked for 25 fields; rain, temperature and evaporation agree exactly).
+  Dates in this report and in the code keep PRZM's labels; add 16 years to get
+  the real year. The storm labelled 15 August 1994 happened on 15 August 2010.
+- **The real pesticides were not simulated.** The sample comes with the
+  substances and doses actually applied to each field (215 substances). The
+  runs nevertheless all use Flufenacet at 2.4 kg/ha on 1 March.
+- **The failed runs stopped at the very start.** A separate archive holds the
+  working folders of 936 failed runs. In all 200 we opened, PRZM stopped
+  within the first simulated month. The cause is not known.
+- **The PRZM program itself is available** to this year's students
+  (`WINPRZM.exe` with one example run). New runs could therefore be made on
+  any Windows computer, without the modelling workstation.
 
 ### What differs between runs
 
@@ -152,6 +176,9 @@ The technical notes of the modelling group answered some of our questions:
 - **The weather is Agri4Cast.** The weather files are grid cells of the JRC
   "Gridded Daily Agro-Meteorological Data in Europe" (MARS). So the 695
   weather files are real, measured-and-interpolated weather, not generated.
+- **Volatilisation is confirmed by the earlier group's own table**: for the
+  first run it lists 1.82 of the 2.4 kg/ha leaving through the air in the
+  first year.
 - **The Henry constant 0.03 is the template value.** The example run file in
   the notes, written for a different pesticide, has the same Henry constant,
   the same dose and the same spray date as our runs. It was most likely never
@@ -172,6 +199,8 @@ The technical notes of the modelling group answered some of our questions:
    change only the Henry constant, and 2,000 runs with varied spray date, dose,
    half-life and sorption.
 3. Can the model configuration read the spray date from the run file?
-4. Why do 2,992 folders have inputs but no result files?
+4. Why do 2,992 runs stop within the first simulated month?
 5. The log of nearly every run ends with a missing-file error
    (`..._runoff_grd.tif`). Is the step after PRZM needed for anything we use?
+6. Why were the real substances and doses of the sampled fields not used, and is the 16-year
+   shift of the weather labels intended?

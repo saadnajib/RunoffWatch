@@ -33,7 +33,9 @@ after spraying, and we use it for a spray-day advisor prototype.
 ## Data
 
 About 10,000 run folders of the FOCUS PRZM model from the project cloud, of
-which 3,958 contain results: 10 years (1990-1999) of daily weather, field and
+which 3,958 contain results. Each run is a real field in France (a random sample
+of real pesticide applications) with its own soil, slope and Agri4Cast weather:
+10 years of daily weather (labelled 1990-1999, really 2006-2015), field and
 soil settings, and daily runoff and pesticide loss. 695 different weather
 files; slope and soil vary; pesticide (Flufenacet), dose (2.4 kg/ha), crop
 (winter cereals) and spray date (1 March) are the same in every run.
