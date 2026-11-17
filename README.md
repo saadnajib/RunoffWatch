@@ -18,8 +18,9 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
 
 ## Main results so far
 
-- Of 9,977 run folders, **3,958 contain results**. Weather (695 files) and soil vary;
-  pesticide, dose and spray date are the same in every run.
+- The data: 9,977 real fields in France (a random sample of real pesticide applications), each
+  with its own soil, slope and Agri4Cast weather. **3,958 runs contain results.** Pesticide, dose
+  and spray date are the same in every run. The weather is labelled 1990-1999 but is really 2006-2015.
 - The pesticide part of the simulator is **numerically broken in part of the runs**
   (fake pesticide mass, losses up to 1e34 g/ha): 30 % of the runs beyond doubt. A cautious
   plausibility rule keeps 73 % of the simulated run-years. The water part is sound.
@@ -29,6 +30,8 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
   It finds high-loss days with PR-AUC 0.92: 91 % of its alarms are real, and it finds 76 % of
   the high-loss days. It underestimates total loss by about 8 %.
 - It is a few hundred times faster than PRZM.
+- Run on 45 years of real weather (1979-2023) for all fields, the surrogate shows that single
+  years differ by a factor of ten, and that five years carry a quarter of all loss.
 - A second surrogate, a small LSTM, matches the trees on daily pesticide loss and finds more
   high-loss days in a first test on two years; it still needs the year-by-year test.
 
@@ -88,7 +91,7 @@ pip install -e ".[dev,app]"
 python -m pytest -q
 ```
 
-You should see `199 passed, 1 skipped` (the skipped one needs PyTorch).
+You should see `204 passed, 1 skipped` (the skipped one needs PyTorch).
 
 **Step 5. Ask the model a question.** This compares 7 possible spray days for a made-up weather example.
 
@@ -166,6 +169,7 @@ Times are for a laptop with 4 cores. You need about 5 GB of free disk space.
 | Command | What it does | Time |
 |---|---|---|
 | `pip install -e ".[lstm]"` then `python -m runoffwatch lstm` | Trains a second surrogate, an LSTM neural network, and compares it with the tree surrogate on the same test data | 10-20 min |
+| `python -m runoffwatch france` | Runs the surrogate on the 1979-2024 Agri4Cast weather for France (needs `france_weather_1979_2024.csv` in `data/raw/france_weather/`; pass it with `--weather`) | 8 min |
 | `python -m runoffwatch design` | Writes run files for NEW simulations (varied spray date, dose, substance) into `data/design/`. Nothing is uploaded; see [docs/NEW_RUNS_PLAN.md](docs/NEW_RUNS_PLAN.md) | 1 min |
 
 **Step 3. Look at the results.**
@@ -208,8 +212,9 @@ report for one single run.
 | `models/` | Trained models (LightGBM text files, 2 MB) |
 | `docs/figures/`, `docs/results/` | Figures and result tables used in the reports |
 | `runoffwatch/lstm.py` | Second surrogate: an LSTM, compared with the trees |
+| `runoffwatch/longrun.py` | Surrogate on 45 years of Agri4Cast weather for France |
 | `runoffwatch/design.py` | Generator for new simulation runs (run files and task archives) |
-| `tests/` | 203 tests on synthetic run folders (no project data in git) |
+| `tests/` | 208 tests on synthetic run folders (no project data in git) |
 | `runoffwatch/pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code, kept for reference |
 
 Code and documents were written with the help of an AI assistant (Claude).

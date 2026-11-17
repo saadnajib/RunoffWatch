@@ -8,6 +8,7 @@ Commands (run in this order):
   features   one row per rain day             -> data/processed/features.parquet
   train      Tasks 2+3: surrogate + classifier -> models/, docs/results, docs/figures
   lstm       second surrogate (LSTM) compared with the trees (needs PyTorch)
+  france     surrogate on 46 years of Agri4Cast weather for France -> docs/results/france_*.csv
   whatif     spray-day comparison from a weather file (uses the trained surrogate)
   design     run files for new simulations (spray date, dose, substance); nothing is uploaded
   run        analyse a single run folder (tables + plots)
@@ -71,6 +72,11 @@ def main(argv=None) -> int:
     de.add_argument("--runs", default="data/raw/runs")
     de.add_argument("--weather-dir", help="folder with the original MARS weather CSVs (<met_hash>.csv), if you have them")
     de.add_argument("--overwrite", action="store_true")
+
+    fr = sub.add_parser("france", help="run the surrogate on the 1979-2024 Agri4Cast weather for France")
+    fr.add_argument("--weather", default="data/raw/france_weather/france_weather.parquet",
+                    help="the Agri4Cast table (france_weather_1979_2024.csv, or a parquet copy)")
+    fr.add_argument("--limit", type=int, help="only the first N fields (quick test)")
 
     wi = sub.add_parser("whatif", help="compare spray days for a weather table")
     wi.add_argument("--weather", help="CSV with date, rain_mm, temp_c[, pan_evap_mm]; omit for a made-up example")
@@ -147,6 +153,13 @@ def main(argv=None) -> int:
         info = dz.write_design(d, a.out, a.runs, a.weather_dir, name=a.name, overwrite=a.overwrite)
         print(dz.readme_text(d, n_archives=len(info["archives"])))
         print(f"written to {a.out}: {len(d)} run files, {len(info['archives'])} task archive(s). Nothing was uploaded.")
+    elif a.cmd == "france":
+        import json
+        from .longrun import run_france
+        m = run_france(a.weather, limit=a.limit)
+        print(json.dumps(m, indent=2))
+        print("per year: docs/results/france_by_year.csv | per grid cell: docs/results/france_by_grid.csv | "
+              "figures: docs/figures/f1_france_by_year.png, f2_france_map.png")
     elif a.cmd == "whatif":
         import pandas as pd
         from .whatif import compare_spray_days, example_weather, prepare_weather

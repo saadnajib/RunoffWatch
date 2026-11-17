@@ -89,7 +89,7 @@ the GitHub repository.
 | ... with PRZM results | 3,958 readable (+ 8 with an empty result file) |
 | ... with inputs but no results | 2,992 |
 | ... with only a log file (PRZM never started for that grid cell) | 3,019 |
-| Simulated period | 1 Jan 1990 – 31 Dec 1999, daily (3,652 days) |
+| Simulated period | labelled 1 Jan 1990 – 31 Dec 1999, daily (3,652 days); the weather is really 2006–2015 (labels are 16 years off; exact match checked) |
 | Different weather files | 695 (shared by 1 to 77 runs each); they are Agri4Cast/MARS grid cells |
 
 **Files in one run folder:**
@@ -101,6 +101,15 @@ the GitHub repository.
 | `*.ZTS` | Daily results: runoff, eroded soil, rain, infiltration, pesticide lost in runoff, pesticide lost with eroded soil, amount applied |
 | `*.OUT` | Long text report with yearly water and pesticide balances |
 | `Run 1.run`, `mc.log` | Run definition and log |
+
+**Where the runs come from (from the project cloud folder, 17 Nov 2026):** each run is a real
+field in France: a random sample of 9,977 real pesticide applications. Soil comes from the
+European soil database at the field, slope from an elevation map, weather from the field's
+Agri4Cast grid cell (the number after `grid_` in the run name). The sample also lists the real
+substances and doses applied to each field (215 substances), but the runs do not use them. The
+cloud folder also contains the PRZM program itself (`WINPRZM.exe`) for this year's students, the
+Agri4Cast table for France 1979–2024, and the working folders of 936 failed runs (all stopped in
+the first simulated month).
 
 **What changes between runs and what does not (measured):**
 
@@ -287,6 +296,18 @@ explanation.
 
 ---
 
+### 6.6 The surrogate on 45 years of real weather
+- `python -m runoffwatch france`: all 3,958 fields × application years 1979–2023 (178,110
+  field-years) with the Agri4Cast weather of each field's grid cell, spraying on 1 March.
+- Mean predicted loss per field and year: 1.23 g/ha (1979–2005), 1.49 (2006–2015), 2.00
+  (2016–2023). Worst year 2013 (3.5× a typical year), best 1990. The five worst years carry 26 %
+  of all loss. Do not read a climate trend into this.
+- For 2006–2015 it matches PRZM's yearly totals (R² 0.95 runoff, 0.99 loss), which is not a test
+  because the models were trained on those years. For the other 35 years no PRZM result exists.
+  11 % of field-years contain a rain day above 47 mm, where the surrogate is weakest.
+
+---
+
 ## 7. The spray-day advisor (Task 4, prototype)
 
 - `python -m runoffwatch whatif` (command line) and `streamlit run app.py`.
@@ -365,6 +386,7 @@ Full pipeline from the raw data (put the ten archives in `data/raw/archives/`):
 | 6 | `python -m runoffwatch train` | Trains surrogate and classifier, saves final models | 3 min |
 | 7 | `python -m runoffwatch train --cv` | Leave-one-year-out evaluation | 25–30 min |
 | – | `python -m runoffwatch lstm` (needs `pip install -e ".[lstm]"`) | LSTM vs trees | 12–20 min |
+| – | `python -m runoffwatch france` | Surrogate on 45 years of France weather | 8 min |
 | – | `python -m runoffwatch design` | Run files for new simulations | 1 min |
 
 Modules (`runoffwatch/`):
@@ -432,7 +454,8 @@ Open, in order of value:
    surrogate.
 3. If permitted: submit the control group and the new runs; retrain with
    dose, DT50 and Koc as inputs.
-4. If permitted: run the surrogate on the 1979–2024 France weather.
+4. Try `WINPRZM.exe` on Windows; if it works, run the Henry control group locally and check a
+   sample of the long-run predictions against PRZM.
 5. Sarah: confirm the high-loss definition; check whether the driver ranking
    makes physical sense; review flagged runs by eye.
 6. Verify the related-work entries; write the report; final slides.

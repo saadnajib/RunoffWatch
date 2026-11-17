@@ -260,3 +260,36 @@ def lstm_figure(te: pd.DataFrame, tc: pd.DataFrame, out_metrics: dict, out: Path
     fig.suptitle("Two surrogates on the same test rows (unseen weather files, years 1992 and 1996)",
                  x=0.01, ha="left", color=INK, fontsize=12)
     _save(fig, out / "m8_lstm_vs_trees.png")
+
+
+def france_figures(by_year: pd.DataFrame, by_grid: pd.DataFrame, out: Path) -> None:
+    """Long-run prediction on 1979-2023 weather: yearly course and map."""
+    yrs = by_year.index.to_numpy()
+    fig, axes = plt.subplots(2, 1, figsize=(9, 6.2), sharex=True)
+    for ax in axes:
+        ax.axvspan(2005.5, 2015.5, color=GRID, alpha=0.8, lw=0)
+    axes[0].bar(yrs, by_year["rain_mm_median"], color=BLUE, width=0.7)
+    axes[0].set_ylabel("Rain per year\n(mm, median field)")
+    axes[0].text(2010.5, axes[0].get_ylim()[1] * 0.97, "years PRZM simulated\n(surrogate trained here)", ha="center",
+                 va="top", fontsize=8.5, color=INK)
+    axes[1].fill_between(yrs, by_year["loss_gha_p10"], by_year["loss_gha_p90"], color=ORANGE, alpha=0.2, lw=0,
+                         label="10-90 % of fields")
+    axes[1].plot(yrs, by_year["loss_gha_median"], color=ORANGE, lw=2, marker="o", ms=3.5, label="Median field")
+    axes[1].set_ylabel("Predicted pesticide loss\n(g/ha per year)"); axes[1].set_yscale("log")
+    axes[1].legend(frameon=False, fontsize=9, loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=2, borderaxespad=0.2)
+    axes[1].set_xlabel("Application year (1 March to end of February), real calendar years")
+    for ax in axes:
+        _style(ax)
+    axes[0].set_title("Surrogate run on 45 years of real weather, spraying on 1 March each year",
+                      loc="left", color=INK, fontsize=12)
+    _save(fig, out / "f1_france_by_year.png")
+
+    g = by_grid.sort_values("loss_gha_per_year")
+    fig, ax = plt.subplots(figsize=(7.4, 6.6))
+    sc = ax.scatter(g["LONGITUDE"], g["LATITUDE"], c=g["loss_gha_per_year"], cmap="Blues", s=34,
+                    norm=matplotlib.colors.LogNorm(), edgecolors=MUTED, linewidths=0.3)
+    ax.set_aspect(1.4); ax.set_xlabel("Longitude"); ax.set_ylabel("Latitude")
+    cb = fig.colorbar(sc, ax=ax, fraction=0.04, pad=0.02); cb.set_label("Predicted pesticide loss (g/ha per year)")
+    ax.set_title("Mean predicted loss per weather grid cell, 1979-2023", loc="left", color=INK, fontsize=12)
+    _style(ax, "both")
+    _save(fig, out / "f2_france_map.png")

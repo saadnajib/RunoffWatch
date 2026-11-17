@@ -65,10 +65,17 @@ Still to do:
 - [ ] Submit, read the results with the existing pipeline, add dose / DT50 / Koc as model inputs
 - [ ] Then the advisor can compare days, doses and substances
 
-## Phase 6b – More weather (Agri4Cast)
-- [x] The 695 weather files are Agri4Cast/MARS grid cells (confirmed by the project documentation)
-- [ ] Run the surrogate on the 1979-2024 Agri4Cast weather for France from the project cloud:
-      46 years of weather it has never seen
+## Phase 6b – More weather (Agri4Cast) ✅
+`python -m runoffwatch france`.
+- [x] The 695 weather files are Agri4Cast grid cells; the runs' "1990-1999" is really 2006-2015
+- [x] Surrogate run on the 1979-2024 Agri4Cast weather for France: 3,958 fields x 45 years
+- [ ] Check a sample of those predictions against PRZM itself (`WINPRZM.exe` is available)
+
+## Phase 6c – Things the project cloud folder made possible
+- [ ] Try `WINPRZM.exe` on a Windows computer with the example run
+- [ ] If it works: run the Henry-constant control group locally instead of waiting for the workstation
+- [ ] Use the real substances and doses of the sampled fields (available per field, with properties
+      for 17 substances) for a realistic scenario
 
 ## Phase 7 – Report and presentation
 - [ ] Report (Sarah: environmental part; Saad: methods)
