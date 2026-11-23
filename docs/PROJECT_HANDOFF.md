@@ -486,6 +486,27 @@ the top twelve.
   sorption, Henry constant) can now also be varied locally, by editing the
   `.inp` file of a run before starting PRZM (the `.inp` file holds the
   application dates and the pesticide settings).
+- **Varied spray dates and doses (tool written 23 Nov 2026, not yet run with
+  the real program):** `rerun --variants 2` makes two extra copies of every
+  field. By default each copy gets one of two spray windows (15 Feb to 30 Apr,
+  or 1 Oct to 30 Nov), one of three doses (0.24 / 1.20 / 2.40 kg/ha) and,
+  inside its window, a different random spray day in each of the ten years.
+  With two copies a field gets one spring and one autumn copy. The plan
+  depends only on the seed, the field name and the copy number, so the same
+  command always makes the same runs and can be stopped and restarted.
+  Results go to `data/raw/runs_varied/` (folders `<field>__v1`, `<field>__v2`),
+  the plan to `rerun_plan.csv`. Only fields with a finished result in
+  `data/raw/runs_fixed/` are used (5,609), so two copies are 11,218 runs:
+  about 2.6 hours (3.4 s per run, four at a time) and about 6.5 GB (the
+  weather file is not copied again). Try `--limit 10` (20 runs) first.
+  Half-life, sorption and other substance settings are not varied by this
+  tool. The feature table, models and advisor still assume spraying on
+  1 March in a few places (application years start on 1 March) and must be
+  adapted once these runs exist.
+- **Unconfirmed:** the delivered dose of 2.4 kg/ha looks about ten times
+  higher than usual field rates of flufenacet products (a few hundred grams
+  per hectare). This is from general knowledge, not checked against a label
+  or with the model owners. It is why 0.24 kg/ha is among the default doses.
 
 ### 8.2 Runs for the Landau workstation (prepared, NOT submitted)
 
@@ -554,7 +575,7 @@ Full pipeline from the raw data (put the ten archives in `data/raw/archives/`):
 | – | `python -m runoffwatch lstm` (needs `pip install -e ".[lstm]"`) | LSTM vs trees | 12–20 min |
 | – | `python -m runoffwatch france` | Surrogate on 45 years of France weather | 8 min |
 | – | `python -m runoffwatch design` | Run files for new simulations | 1 min |
-| – | `python -m runoffwatch rerun --exe ...` (Windows only) | Runs PRZM again on every folder with inputs, with the two corrected settings | about 1.5 h for 6,958 folders, four at a time |
+| – | `python -m runoffwatch rerun --exe ...` (Windows only) | Runs PRZM again on every folder with inputs, with the two corrected settings; with `--variants N`, N extra copies per field with varied spray dates and dose (`--spray-windows`, `--doses`, `--seed`) | about 1.5 h for 6,958 folders, four at a time; `--variants 2`: about 2.6 h for 11,218 runs |
 
 The `rerun` command, first as a test on 20 folders, then on all (it skips
 folders that are already done, so it can be stopped with Ctrl+C and started
@@ -571,6 +592,17 @@ in `data/raw/runs_fixed/` in the same layout as the originals, with a log in
 `rerun_log.csv`. `--henry keep` or `--moisture-ref keep` leaves one setting as
 delivered. Afterwards the other commands are pointed at the new folder, for
 example `python -m runoffwatch qc --runs data/raw/runs_fixed --out data/interim_fixed`.
+
+For extra copies with varied spray dates and dose (section 8.1; not yet run
+with the real program), again first a test on 10 fields (20 runs):
+```bash
+python -m runoffwatch rerun --exe C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe --variants 2 --limit 10
+python -m runoffwatch rerun --exe C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe --variants 2
+```
+Results go to `data/raw/runs_varied/`, the plan to `rerun_plan.csv`. Options:
+`--variants` (copies per field), `--spray-windows` (default
+`15.02-30.04,01.10-30.11`), `--doses` (default `0.24,1.20,2.40` kg/ha),
+`--seed` (fixes the random spray dates), `--limit` (only the first N fields).
 
 Modules (`runoffwatch/`):
 
@@ -658,14 +690,22 @@ decks. New since 17 Nov:
   comparison and the 45-year run), and the reports are rewritten with the
   corrected numbers. The delivered-data results are kept in
   `docs/results/delivered/` and `docs/figures/delivered/`.
+- Tool for varied spray dates and doses written (`rerun --variants`,
+  section 8.1), not yet run with the real program.
 
 Next, in this order:
-1. Confirmation from the modelling group in Landau of both corrections (the
-   updated questions in section 5; the contact goes through the team member
-   in Landau).
-2. New simulations with varied spray date and dose (and DT50, Koc), now
-   possible locally (section 8.1); then retrain with these as inputs.
-3. Presentation 2, with the corrected numbers. It should also correct the
+1. Try the varied re-run with `--limit 10` (20 runs) on the Windows PC.
+2. If that works, run it for all 5,609 fields (11,218 runs, about 2.6 hours).
+3. Upload the results (`data/raw/runs_varied/`).
+4. Adapt the feature table, models and advisor to varied spray dates and
+   dose (they still assume spraying on 1 March in a few places, for example
+   application years start on 1 March); then retrain.
+5. Confirmation from the modelling group in Landau, now three questions:
+   the Henry constant, the reference soil moisture (questions in section 5)
+   and the dose (2.4 kg/ha looks about ten times higher than usual field
+   rates, unconfirmed, section 8.1). The contact goes through the team member
+   in Landau.
+6. Presentation 2, with the corrected numbers. It should also correct the
    statement from the first progress presentation that 73 % of the data can
    be trusted: the plausibility check kept 73 % of the run-years, but those
    were wrong too.

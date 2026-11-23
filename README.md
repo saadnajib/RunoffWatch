@@ -181,6 +181,43 @@ run and goes on, so nobody has to click. These fields are skipped on the next st
 data either. By default the Henry constant becomes `0.37E-06` and the reference soil moisture
 `1`; `--henry keep` or `--moisture-ref keep` leaves one of them as delivered.
 
+**Optional: runs with other spray dates and doses.** In all delivered runs every field is sprayed
+on 1 March with 2.4 kg/ha, so the models cannot say anything about another spray day or another
+dose. `rerun --variants N` makes N extra copies of every field, each with a varied spray date and
+dose. By default each copy gets one of two spray windows (15 Feb to 30 Apr, or 1 Oct to 30 Nov),
+one of three doses (0.24, 1.20 or 2.40 kg/ha) and, inside its window, a different random spray day
+in each of the ten simulated years. With two copies, a field gets one spring and one autumn copy.
+
+This has not been tried with the real PRZM program yet. Try 10 fields first (that is 20 runs):
+
+```bash
+python -m runoffwatch rerun --exe C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe --variants 2 --limit 10
+```
+
+If that works, run all of them:
+
+```bash
+python -m runoffwatch rerun --exe C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe --variants 2
+```
+
+The results go to `data/raw/runs_varied/`, in folders named `<field>__v1`, `<field>__v2`. The
+spray plan of every copy (window, dose, spray dates) is written to `rerun_plan.csv` in the same
+folder. Only fields that already have a finished result in `data/raw/runs_fixed/` are used
+(5,609 fields), so two copies are 11,218 runs: about 2.6 hours at 3.4 seconds per run with four at
+a time, and about 6.5 GB of results (the weather file is not copied again). The plan depends only
+on the seed, the field name and the copy number, so the same command always makes the same runs,
+and it can be stopped and started again. Other choices: `--spray-windows 15.02-30.04,01.10-30.11`,
+`--doses 0.24,1.20,2.40`, `--seed 1`.
+
+Not yet done: the analysis side (feature table, models, advisor) still assumes spraying on
+1 March in a few places (for example, application years start on 1 March). It has to be adapted
+once the varied runs exist.
+
+Unconfirmed: the delivered dose of 2.4 kg/ha looks about ten times higher than usual field rates
+of flufenacet products (a few hundred grams per hectare). This comes from general knowledge and
+has not been checked against a product label or with the model owners. It is the reason
+0.24 kg/ha is among the default doses.
+
 The next steps also work on Mac or Linux: copy the folder `data/raw/runs_fixed/` there.
 
 **Step 3. Run the six commands below, one after the other, in this order.**
