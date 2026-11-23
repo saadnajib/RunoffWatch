@@ -38,11 +38,12 @@ from sklearn.metrics import average_precision_score, precision_recall_curve, r2_
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from .features import (CLASSIFIER_FEATURES, CONC_FEATURES, HIGH_LOSS_GHA, RUNOFF_FEATURES,
+from .features import (CLASSIFIER_FEATURES, CONC_FEATURES, DEFAULT_RATE_KGHA, HIGH_LOSS_GHA, RUNOFF_FEATURES,
                        curve_number_runoff)  # noqa: F401  (re-exported)
 
 log = logging.getLogger("runoffwatch")
 
+CONC_OUTPUT = "g_per_ha_per_mm_per_kg_applied"   # written to meta.json; older models have "g_per_ha_per_mm"
 CONC_FLOOR = 1e-7          # g/ha per mm; below this the pesticide loss is zero for all purposes
 MODEL_FILES = {"runoff": "runoff.txt", "conc": "conc.txt", "high_loss": "high_loss.txt"}
 
@@ -127,9 +128,52 @@ def _conc_rows(d: pd.DataFrame) -> pd.DataFrame:
     return d[d["pest_clean"] & (d["runoff_mm"] > 0)]
 
 
+def _rate(d: pd.DataFrame) -> np.ndarray:
+    """Dose of the last spraying in kg/ha (the delivered dose for tables made before doses varied)."""
+    if "app_rate_kgha" in d.columns:
+        return d["app_rate_kgha"].to_numpy(dtype=float)
+    return np.full(len(d), DEFAULT_RATE_KGHA)
+
+
+def _water(d: pd.DataFrame) -> pd.DataFrame:
+    """One run per field: rain and runoff are identical in all copies of a field."""
+    return d[d["water_row"]] if "water_row" in d.columns else d
+
+
 def _conc(d: pd.DataFrame) -> pd.Series:
-    """Pesticide lost per mm of runoff water (g/ha per mm)."""
-    return (d["loss_gha"] / d["runoff_mm"]).clip(lower=0)
+    """Pesticide lost per mm of runoff water and per kg/ha sprayed (g/ha per mm per kg/ha).
+
+    Dividing by the dose makes one model usable for every dose: in PRZM the loss is nearly
+    proportional to the dose. The small rest is left to the dose feature.
+    """
+    return (d["loss_gha"] / (d["runoff_mm"] * _rate(d))).clip(lower=0)
+
+
+def predict_loss(conc: lgb.Booster, rows: pd.DataFrame, runoff_mm) -> np.ndarray:
+    """Pesticide loss in g/ha: runoff (mm) x what one mm carries per kg/ha sprayed x the dose."""
+    return np.asarray(runoff_mm, dtype=float) * conc.predict(rows[CONC_FEATURES]) * _rate(rows)
+
+
+def conc_per_mm(meta: dict, raw_prediction, rate_kgha) -> np.ndarray:
+    """Turn the output of a saved concentration model into g/ha per mm of runoff, for a given dose.
+
+    Models saved since the dose varies predict per kg/ha sprayed. Older ones were trained at the
+    single delivered dose; for another dose their result is scaled in proportion.
+    """
+    raw = np.asarray(raw_prediction, dtype=float)
+    rate = np.asarray(rate_kgha, dtype=float)
+    kind = meta.get("conc_output")
+    if kind == CONC_OUTPUT:
+        return raw * rate
+    if kind != "g_per_ha_per_mm":                       # the very first models predicted log10
+        raw = 10 ** raw
+    return raw * rate / DEFAULT_RATE_KGHA
+
+
+def spray_window(app_doy) -> np.ndarray:
+    """Rough season of the last spraying, from its day of the year."""
+    d = np.asarray(app_doy, dtype=float)
+    return np.select([(d >= 32) & (d <= 121), (d >= 274) & (d <= 335)], ["spring (Feb-Apr)", "autumn (Oct-Nov)"], "other")
 
 
 def _leaf(n_rows: int, most: int) -> int:
@@ -137,6 +181,7 @@ def _leaf(n_rows: int, most: int) -> int:
 
 
 def fit_runoff(tr, va=None, rounds: int = 1500) -> lgb.Booster:
+    tr, va = _water(tr), (None if va is None else _water(va))
     p = {**RUNOFF_PARAMS, "min_data_in_leaf": _leaf(len(tr), 2000)}
     if va is None:
         return _fit(p, tr[RUNOFF_FEATURES], tr["runoff_mm"], rounds=rounds)
@@ -152,8 +197,15 @@ def fit_conc(tr, va=None, rounds: int = 1500) -> lgb.Booster:
     return _fit(p, c[CONC_FEATURES], _conc(c), v[CONC_FEATURES], _conc(v), rounds, wtr=c["runoff_mm"], wva=v["runoff_mm"])
 
 
+MAX_CLASSIFIER_ROWS = 6_000_000     # above this, days without high loss are thinned out at random
+
+
 def fit_classifier(tr, va=None, rounds: int = 1500) -> lgb.Booster:
     c = tr[tr["pest_clean"]]
+    if len(c) > MAX_CLASSIFIER_ROWS:
+        pos = c["high_loss"].to_numpy(dtype=bool)
+        keep = pos | (np.random.default_rng(0).random(len(c)) < (MAX_CLASSIFIER_ROWS - pos.sum()) / max(1, (~pos).sum()))
+        c = c[keep]
     if va is None:
         return _fit(CLF_PARAMS, c[CLASSIFIER_FEATURES], c["high_loss"].astype(int), rounds=rounds)
     v = va[va["pest_clean"]]
@@ -177,12 +229,13 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
                      "high_loss_threshold_gha": HIGH_LOSS_GHA}
 
     # ---------------- Models for the evaluation (trained without the held-out years) ----
-    log.info("training runoff model on %d rows", len(tr))
+    log.info("training runoff model on %d rows", len(_water(tr)))
     runoff = fit_runoff(tr, va, rounds)
     ctr = _conc_rows(tr)
     log.info("training concentration model on %d rows", len(ctr))
     conc = fit_conc(tr, va, rounds)
-    a, k = fit_decay_baseline(ctr["runoff_mm"].to_numpy(), ctr["days_since_app"].to_numpy(), ctr["loss_gha"].to_numpy())
+    a, k = fit_decay_baseline(ctr["runoff_mm"].to_numpy(), ctr["days_since_app"].to_numpy(),
+                              ctr["loss_gha"].to_numpy() / _rate(ctr))
     cl_tr, cl_va = tr[tr["pest_clean"]], va[va["pest_clean"]]
     log.info("training high-loss classifier on %d rows (%d positives)", len(cl_tr), int(cl_tr["high_loss"].sum()))
     clf = fit_classifier(tr, va, rounds)
@@ -192,7 +245,8 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
     logreg.fit(lr_train[CLASSIFIER_FEATURES], lr_train["high_loss"])
     threshold = _best_f1_threshold(cl_va["high_loss"].to_numpy(), clf.predict(cl_va[CLASSIFIER_FEATURES]))
     metrics["trees"] = {"runoff": runoff.num_trees(), "conc": conc.num_trees(), "high_loss": clf.num_trees()}
-    metrics["loss_baseline_fit"] = {"a_g_per_ha_per_mm": a, "k_per_day": k, "half_life_days": float(np.log(2) / k)}
+    metrics["loss_baseline_fit"] = {"a_g_per_ha_per_mm_per_kg_applied": a, "k_per_day": k,
+                                    "half_life_days": float(np.log(2) / k)}
 
     # ---------------- Evaluation ---------------------------------------------
     def evaluate(te: pd.DataFrame) -> tuple[dict, pd.DataFrame, pd.DataFrame, dict]:
@@ -200,10 +254,10 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
         te["runoff_pred"] = runoff.predict(te[RUNOFF_FEATURES])
         te["runoff_cn"] = te["cn_runoff_mm"]
         tc = te[te["pest_clean"]].copy()
-        conc_pred = conc.predict(tc[CONC_FEATURES])
+        conc_pred = conc.predict(tc[CONC_FEATURES]) * _rate(tc)         # g/ha per mm of runoff
         tc["loss_pred"] = tc["runoff_pred"] * conc_pred                 # full surrogate: no PRZM output used
         tc["loss_pred_true_runoff"] = tc["runoff_mm"] * conc_pred       # diagnostic: chemistry stage alone
-        tc["loss_base"] = a * tc["runoff_cn"] * np.exp(-k * tc["days_since_app"])
+        tc["loss_base"] = a * tc["runoff_cn"] * np.exp(-k * tc["days_since_app"]) * _rate(tc)
         y = tc["high_loss"].to_numpy()
         scores = {"rain_today_rule": tc["rain_mm"].to_numpy(),
                   "logistic_regression": logreg.predict_proba(tc[CLASSIFIER_FEATURES])[:, 1],
@@ -269,6 +323,8 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
     calendar = risk_calendar(t[t["pest_clean"]])
     calendar["by_month"].to_csv(results / "risk_calendar_month.csv")
     calendar["by_rain_and_weeks"].to_csv(results / "risk_by_rain_and_weeks_since_spraying.csv")
+    by_spray = loss_by_spray_date(t[t["pest_clean"]])
+    by_spray.to_csv(results / "loss_by_spray_date.csv")
 
     # ---------------- Final models: all weather files, all years -------------
     # The models above exist only to be tested. The models that are saved and used by the
@@ -282,14 +338,18 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
     for name, booster in final.items():
         booster.save_model(model_dir / MODEL_FILES[name])
     metrics["final_models"] = {"trained_on": "all weather files, all years", "rain_day_rows": int(len(t)),
+                               "rain_day_rows_one_run_per_field": int(len(_water(t))),
                                "runoff_days_with_trusted_pesticide": int(len(_conc_rows(t))),
                                "trees": {n: b.num_trees() for n, b in final.items()}}
     tr = t                                             # feature ranges below describe the final training data
 
     meta = {"runoff_features": RUNOFF_FEATURES, "conc_features": CONC_FEATURES,
             "classifier_features": CLASSIFIER_FEATURES, "high_loss_threshold_gha": HIGH_LOSS_GHA,
-            "conc_floor": CONC_FLOOR, "conc_output": "g_per_ha_per_mm",
-            "trained_on": {"application": "2400 g/ha Flufenacet on 1 March, winter cereals, FOCUS R1",
+            "conc_floor": CONC_FLOOR, "conc_output": CONC_OUTPUT,
+            "trained_on": {"application": "Flufenacet on winter cereals, FOCUS R1",
+                           "doses_kgha": sorted(float(x) for x in np.unique(np.round(_rate(tr[tr["pest_clean"]]), 3))),
+                           "spray_day_of_year": [int(tr["app_doy"].min()), int(tr["app_doy"].max())],
+                           "spray_days_seen": sorted(int(x) for x in tr["app_doy"].dropna().unique()),
                            "feature_ranges": {c: [float(tr[c].quantile(0.001)), float(tr[c].quantile(0.999))]
                                               for c in CLASSIFIER_FEATURES}}}
     (model_dir / "meta.json").write_text(json.dumps(meta, indent=2))
@@ -328,12 +388,13 @@ def yearly_cv(features_path: str | Path = "data/processed/features.parquet",
         te = t[(files == "test") & (year == y)].copy()
         runoff, conc, clf = fit_runoff(tr, va, rounds), fit_conc(tr, va, rounds), fit_classifier(tr, va, rounds)
         ctr = _conc_rows(tr)
-        a, k = fit_decay_baseline(ctr["runoff_mm"].to_numpy(), ctr["days_since_app"].to_numpy(), ctr["loss_gha"].to_numpy())
+        a, k = fit_decay_baseline(ctr["runoff_mm"].to_numpy(), ctr["days_since_app"].to_numpy(),
+                                  ctr["loss_gha"].to_numpy() / _rate(ctr))
 
         te["runoff_pred"] = runoff.predict(te[RUNOFF_FEATURES])
         tc = te[te["pest_clean"]].copy()
-        tc["loss_pred"] = tc["runoff_pred"] * conc.predict(tc[CONC_FEATURES])
-        tc["loss_base"] = a * tc["cn_runoff_mm"] * np.exp(-k * tc["days_since_app"])
+        tc["loss_pred"] = predict_loss(conc, tc, tc["runoff_pred"])
+        tc["loss_base"] = a * tc["cn_runoff_mm"] * np.exp(-k * tc["days_since_app"]) * _rate(tc)
         tc["clf_score"] = clf.predict(tc[CLASSIFIER_FEATURES])
         tc["year"] = y
         pos = tc["high_loss"].to_numpy()
@@ -354,7 +415,7 @@ def yearly_cv(features_path: str | Path = "data/processed/features.parquet",
             "alarm_recall": float(alarm[pos].mean()) if pos.any() else np.nan,
         })
         pooled.append(tc[["year", "date", "run", "rain_mm", "runoff_mm", "runoff_pred", "cn_runoff_mm", "loss_gha",
-                          "loss_pred", "loss_base", "clf_score", "high_loss"]])
+                          "loss_pred", "loss_base", "clf_score", "high_loss", "app_doy", "app_rate_kgha"]])
         log.info("cv year %d: runoff R2 %.3f, loss R2 %.3f, PR-AUC %.3f (%d high-loss days)", y,
                  rows[-1]["runoff_r2"], rows[-1]["loss_r2"], rows[-1]["pr_auc_surrogate"], rows[-1]["high_loss_days"])
 
@@ -382,6 +443,9 @@ def yearly_cv(features_path: str | Path = "data/processed/features.parquet",
                                                  "loss_total_pred_over_true", "pr_auc_surrogate",
                                                  "pr_auc_classifier", "alarm_recall")},
         "years_surrogate_runoff_beats_formula": int((by_year["runoff_r2"] > by_year["runoff_r2_curve_number"]).sum()),
+        # the same scores for each kind of spraying; with one spray date and one dose there is one group each
+        "by_spray_window": _group_scores(P, pd.Series(spray_window(P["app_doy"]), index=P.index)),
+        "by_dose_kgha": _group_scores(P, P["app_rate_kgha"].round(3).astype(str)),
     }
     results = Path(results); results.mkdir(parents=True, exist_ok=True)
     by_year.round(4).to_csv(results / "cv_by_year.csv")
@@ -389,6 +453,48 @@ def yearly_cv(features_path: str | Path = "data/processed/features.parquet",
     from .figures import cv_figure
     cv_figure(by_year, Path(figures))
     return summary
+
+
+def _group_scores(P: pd.DataFrame, group: pd.Series) -> dict:
+    """Loss and alarm scores of the pooled held-out rows, separately for each group."""
+    out = {}
+    for name, g in P.groupby(group.to_numpy()):
+        pos = g["high_loss"].to_numpy(dtype=bool)
+        alarm = (g["loss_pred"] >= HIGH_LOSS_GHA).to_numpy()
+        out[str(name)] = {
+            "rows": int(len(g)), "high_loss_days": int(pos.sum()),
+            "loss_r2": float(r2_score(g["loss_gha"], g["loss_pred"])) if len(g) > 1 else None,
+            "loss_total_pred_over_true": float(g["loss_pred"].sum() / g["loss_gha"].sum()) if g["loss_gha"].sum() > 0 else None,
+            "pr_auc_surrogate": float(average_precision_score(pos, g["loss_pred"])) if pos.any() else None,
+            "alarm_precision": float(pos[alarm].mean()) if alarm.any() else None,
+            "alarm_recall": float(alarm[pos].mean()) if pos.any() else None,
+        }
+    return out
+
+
+def loss_by_spray_date(clean: pd.DataFrame) -> pd.DataFrame:
+    """What PRZM itself says about the spray date: share of the dose lost, by half-month of spraying.
+
+    One "season" is one spraying and everything that follows it until the next one. Seasons that
+    are cut off by the end of the simulation (shorter than 300 days) are left out.
+    """
+    need = {"app_season", "app_doy", "app_rate_kgha"}
+    if not need <= set(clean.columns):
+        return pd.DataFrame()
+    g = clean.groupby(["run", "app_season"], observed=True)
+    s = g.agg(loss_gha=("loss_gha", "sum"), app_doy=("app_doy", "first"), rate=("app_rate_kgha", "first"),
+              last_day=("days_since_app", "max"), high_loss_days=("high_loss", "sum"))
+    s = s[s["last_day"] >= 300]
+    if s.empty:
+        return pd.DataFrame()
+    s["pct_of_dose_lost"] = 100 * s["loss_gha"] / (1000 * s["rate"])
+    when = pd.Timestamp("2001-01-01") + pd.to_timedelta(s["app_doy"].clip(upper=365) - 1, unit="D")
+    s["sprayed"] = when.dt.strftime("%m %b ") + np.where(when.dt.day <= 15, "1-15", "16-end")
+    out = s.groupby("sprayed").agg(seasons=("loss_gha", "size"), mean_pct_of_dose_lost=("pct_of_dose_lost", "mean"),
+                                   median_pct_of_dose_lost=("pct_of_dose_lost", "median"),
+                                   p90_pct_of_dose_lost=("pct_of_dose_lost", lambda x: x.quantile(0.9)),
+                                   mean_loss_gha=("loss_gha", "mean"))
+    return out.round(4)
 
 
 # --------------------------------------------------------------------------- #

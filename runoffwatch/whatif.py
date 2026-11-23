@@ -24,8 +24,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .features import MIN_RAIN_MM, weather_features
-from .models import load_models
+from .features import DEFAULT_RATE_KGHA, MIN_RAIN_MM, weather_features
+from .models import conc_per_mm, load_models
 from .przm_inp import SOIL_FEATURES
 
 # Median field of the training runs (close to the standard FOCUS R1 soil).
@@ -73,16 +73,30 @@ def prepare_weather(weather: pd.DataFrame) -> pd.DataFrame:
     return w
 
 
-def check_inputs(weather: pd.DataFrame, soil: dict, spray_date: pd.Timestamp, meta: dict) -> list[str]:
+def check_inputs(weather: pd.DataFrame, soil: dict, spray_date: pd.Timestamp, meta: dict,
+                 rate_kgha: float = DEFAULT_RATE_KGHA) -> list[str]:
     """Plain-language warnings about asking the model something it has not seen."""
     notes = []
-    if spray_date.month not in (2, 3, 4):
-        notes.append("All training simulations sprayed on 1 March. A spray date outside February-April "
-                     "is outside what the model has seen; treat the result as a guess.")
+    trained = meta["trained_on"]
+    seen = np.asarray(trained.get("spray_days_seen", [60, 61]), dtype=float)     # day of the year; 1 March = 60 or 61
+    doses = [float(d) for d in trained.get("doses_kgha", [DEFAULT_RATE_KGHA])]
+    if len(seen) <= 2:                                   # models that only know spraying on 1 March
+        if spray_date.month not in (2, 3, 4):
+            notes.append("All training simulations sprayed on 1 March. A spray date outside February-April "
+                         "is outside what the model has seen; treat the result as a guess.")
+    elif np.abs(seen - spray_date.dayofyear).min() > 10:
+        notes.append("No training simulation was sprayed within ten days of this day of the year; "
+                     "treat the result as a guess.")
+    if len(doses) == 1 and abs(rate_kgha - doses[0]) > 1e-9:
+        notes.append(f"All training simulations used {doses[0]:g} kg/ha. The result for {rate_kgha:g} kg/ha "
+                     "is scaled in proportion to the dose.")
+    elif not min(doses) <= rate_kgha <= max(doses):
+        notes.append(f"The dose {rate_kgha:g} kg/ha is outside the doses in the training runs "
+                     f"({min(doses):g} to {max(doses):g} kg/ha).")
     if (spray_date - weather.index[0]).days < 30:
         notes.append("Less than 30 days of weather before the spray date: 'rain in the previous 30 days' "
                      "is incomplete, so soil wetness is underestimated.")
-    ranges = meta["trained_on"]["feature_ranges"]
+    ranges = trained["feature_ranges"]
     for k, v in soil.items():
         lo, hi = ranges[k]
         if not lo <= v <= hi:
@@ -91,9 +105,10 @@ def check_inputs(weather: pd.DataFrame, soil: dict, spray_date: pd.Timestamp, me
 
 
 def predict_days(weather: pd.DataFrame, spray_date, soil: dict | None = None, models: dict | None = None,
-                 model_dir: str | Path = "models") -> pd.DataFrame:
+                 model_dir: str | Path = "models", rate_kgha: float = DEFAULT_RATE_KGHA) -> pd.DataFrame:
     """Predicted runoff and pesticide loss for every day from the spray date on.
 
+    rate_kgha: the dose that is sprayed, in kg/ha.
     weather: daily table (index or column `date`; rain_mm, temp_c, optional pan_evap_mm) that
              includes the spray date, ideally starting 30+ days before it.
     Returns one row per day: rain_mm, runoff_mm, loss_gha, high_loss_day (loss >= 1 g/ha).
@@ -106,11 +121,13 @@ def predict_days(weather: pd.DataFrame, spray_date, soil: dict | None = None, mo
     spray_date = pd.Timestamp(spray_date)
     if spray_date not in w.index:
         raise ValueError(f"spray date {spray_date.date()} is not inside the weather table")
-    notes = check_inputs(w, soil, spray_date, meta)
+    if not rate_kgha > 0:
+        raise ValueError("the dose must be above zero")
+    notes = check_inputs(w, soil, spray_date, meta, rate_kgha)
     for note in notes:
         warnings.warn(note, stacklevel=2)
 
-    f = weather_features(w, [spray_date], CN_SETS[int(soil["cn_2"])])
+    f = weather_features(w, [spray_date], CN_SETS[int(soil["cn_2"])], rate_kgha)
     for k, v in soil.items():
         f[k] = v
     f = f.loc[spray_date:]
@@ -122,9 +139,7 @@ def predict_days(weather: pd.DataFrame, spray_date, soil: dict | None = None, mo
     if rainy.any():
         fr = f[rainy]
         runoff = models["runoff"].predict(fr[meta["runoff_features"]])
-        conc = models["conc"].predict(fr[meta["conc_features"]])
-        if meta.get("conc_output") != "g_per_ha_per_mm":          # models saved by an older version
-            conc = 10 ** conc
+        conc = conc_per_mm(meta, models["conc"].predict(fr[meta["conc_features"]]), rate_kgha)
         out.loc[rainy, "runoff_mm"] = runoff
         out.loc[rainy, "loss_gha"] = runoff * np.where(conc > meta["conc_floor"] * 1.01, conc, 0.0)
     out["high_loss_day"] = out["loss_gha"] >= meta["high_loss_threshold_gha"]
@@ -133,7 +148,8 @@ def predict_days(weather: pd.DataFrame, spray_date, soil: dict | None = None, mo
 
 
 def compare_spray_days(weather: pd.DataFrame, candidates, horizon_days: int = 14, soil: dict | None = None,
-                       models: dict | None = None, model_dir: str | Path = "models") -> pd.DataFrame:
+                       models: dict | None = None, model_dir: str | Path = "models",
+                       rate_kgha: float = DEFAULT_RATE_KGHA) -> pd.DataFrame:
     """For each candidate spray date: predicted pesticide loss in the following `horizon_days`.
 
     Lower is better. Only candidates whose whole window lies inside the weather table are
@@ -146,7 +162,7 @@ def compare_spray_days(weather: pd.DataFrame, candidates, horizon_days: int = 14
     for c in pd.to_datetime(list(candidates)):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            days = predict_days(w, c, soil, models)
+            days = predict_days(w, c, soil, models, rate_kgha=rate_kgha)
         notes += [n for n in days.attrs["notes"] if n not in notes]
         days = days.iloc[:horizon_days]
         worst = days["loss_gha"].idxmax()
@@ -155,7 +171,7 @@ def compare_spray_days(weather: pd.DataFrame, candidates, horizon_days: int = 14
             "days_covered": len(days),
             "rain_in_window_mm": round(float(days["rain_mm"].sum()), 1),
             "predicted_loss_gha": round(float(days["loss_gha"].sum()), 3),
-            "loss_pct_of_dose": round(100 * float(days["loss_gha"].sum()) / 2400, 4),
+            "loss_pct_of_dose": round(100 * float(days["loss_gha"].sum()) / (1000 * rate_kgha), 4),
             "high_loss_days": int(days["high_loss_day"].sum()),
             "worst_day": worst.date() if days["loss_gha"].max() > 0 else None,
             "worst_day_loss_gha": round(float(days["loss_gha"].max()), 3),

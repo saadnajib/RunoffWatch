@@ -29,8 +29,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .features import HIGH_LOSS_GHA, MIN_RAIN_MM, weather_features
-from .models import load_models
+from .features import DEFAULT_RATE_KGHA, HIGH_LOSS_GHA, MIN_RAIN_MM, weather_features
+from .models import conc_per_mm, load_models
 from .przm_inp import SOIL_FEATURES
 from .quality import app_year
 
@@ -73,10 +73,13 @@ def check_shift(weather: pd.DataFrame, daily_dir: str | Path, runs: list[str]) -
     return {"runs_checked": len(runs), "max_abs_difference": worst, "matches": max(worst.values()) < 1e-3}
 
 
-def predict_fields(weather: pd.DataFrame, fields: pd.DataFrame, models: dict) -> pd.DataFrame:
+def predict_fields(weather: pd.DataFrame, fields: pd.DataFrame, models: dict, app_day: int = 1, app_month: int = 3,
+                   rate_kgha: float = DEFAULT_RATE_KGHA) -> pd.DataFrame:
     """One row per field and application year: rain, predicted runoff, predicted loss, high-loss days.
 
     fields: index = run name; columns = SOIL_FEATURES, cn_1..cn_4.
+    app_day, app_month, rate_kgha: every field is sprayed on this day of every year with this dose.
+    An "application year" runs from one spraying to the day before the next.
     """
     meta = models["meta"]
     fields = fields.assign(grid=[grid_of(r) for r in fields.index])
@@ -86,17 +89,18 @@ def predict_fields(weather: pd.DataFrame, fields: pd.DataFrame, models: dict) ->
     for i, ((grid, *cn), members) in enumerate(groups, start=1):
         daily = by_grid[grid]
         years = range(daily.index[0].year, daily.index[-1].year + 1)
-        apps = [pd.Timestamp(year=y, month=3, day=1) for y in years]
-        f = weather_features(daily[["rain_mm", "temp_c", "pan_evap_mm"]], apps, tuple(cn))
+        apps = [pd.Timestamp(year=y, month=app_month, day=app_day) for y in years]
+        f = weather_features(daily[["rain_mm", "temp_c", "pan_evap_mm"]], apps, tuple(cn), rate_kgha)
         f = f[(f["rain_mm"] >= MIN_RAIN_MM) & f["days_since_app"].notna()]
-        ay = app_year(f.index)
-        rain_by_year = daily.loc[apps[0]:, "rain_mm"].groupby(app_year(daily.loc[apps[0]:].index)).sum()
+        season = pd.Series(daily.index.year, index=daily.index).where(daily.index.isin(apps)).ffill()
+        ay = season.reindex(f.index).to_numpy(dtype=int)
+        rain_by_year = daily["rain_mm"].groupby(season).sum()
         n = len(f)
         X = pd.concat([f] * len(members), ignore_index=True)
         for c in SOIL_FEATURES:
             X[c] = np.repeat(members[c].to_numpy(dtype=float), n)
         runoff = models["runoff"].predict(X[meta["runoff_features"]])
-        loss = runoff * models["conc"].predict(X[meta["conc_features"]])
+        loss = runoff * conc_per_mm(meta, models["conc"].predict(X[meta["conc_features"]]), rate_kgha)
         res = pd.DataFrame({"run": np.repeat(members.index.to_numpy(), n), "app_year": np.tile(ay, len(members)),
                             "runoff_mm": runoff, "loss_gha": loss, "high_loss_days": loss >= HIGH_LOSS_GHA,
                             "max_day_loss_gha": loss, "max_rain_mm": np.tile(f["rain_mm"].to_numpy(), len(members))})
