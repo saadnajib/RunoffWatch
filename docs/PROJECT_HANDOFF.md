@@ -500,7 +500,7 @@ cd RunoffWatch
 python -m venv .venv
 .venv\Scripts\activate          # Windows; on Mac/Linux: source .venv/bin/activate
 pip install -e ".[dev,app]"
-python -m pytest -q             # 247 passed (23 Nov, with PyTorch installed)
+python -m pytest -q             # 254 passed (23 Nov, with PyTorch installed)
 python -m runoffwatch whatif
 streamlit run app.py
 ```
@@ -611,13 +611,13 @@ decks. New since 17 Nov:
 - PRZM runs locally on the owner's Windows PC (about 3 s per field).
 - The cause of the broken numbers is found: two wrong input settings (Henry
   constant and reference soil moisture), shown with 30 test runs (5.1).
-- The `rerun` command is written and tested on synthetic folders, but not yet
-  tried with the real program. The same steps were done by hand in the 30
-  test runs.
+- The `rerun` command works with the real program: in a first try on 20
+  folders, 14 finished and 6 stopped with a PRZM calculation error (all 6 are
+  folders without results in the delivered data). The command now stops such
+  a run by itself (log status `przm_error`) instead of waiting for a click.
 
 Next, in this order:
-1. On Windows, try `rerun --limit 20` and check `rerun_log.csv` and a few
-   result folders.
+1. (Done) First try of `rerun --limit 20` on Windows.
 2. Run all 6,958 folders with inputs (about 1.5 hours with four at a time).
 3. Redo qc, audit, features, train (and `train --cv`) and the reports on the
    corrected data, and compare with the old numbers.
