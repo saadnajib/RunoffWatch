@@ -87,9 +87,11 @@ def _fixed(line: bytes, start: int, end: int, text: str) -> bytes:
 
 def _number(text: str) -> None:
     try:
-        float(text)
+        value = float(text)
     except (TypeError, ValueError):
         raise RerunError(f"not a number: {text!r}") from None
+    if value != value or value in (float("inf"), float("-inf")):
+        raise RerunError(f"not a usable number: {text!r}")
 
 
 def _chem_lines(lines: list[bytes]) -> int:
@@ -224,10 +226,14 @@ def make_variants(run_name: str, n_years: int, variants: int, windows=DEFAULT_WI
     """
     import random
 
+    if not windows or not doses:
+        raise RerunError("at least one spray window and one dose are needed")
     spans = [parse_window(w) for w in windows]
     for d in doses:
         _number(d)
         _fixed(b" " * 6, 0, 6, d)
+        if float(d) <= 0:
+            raise RerunError(f"dose must be above zero, not {d!r}")
     out = []
     start = zlib.crc32(f"{seed}|{run_name}".encode())
     for k in range(1, variants + 1):
@@ -480,9 +486,11 @@ def rerun_all(runs_root: str | Path, out_root: str | Path, exe: str | Path, work
     if variants:
         settings += f"variants={variants}\nwindows={','.join(windows)}\ndoses={','.join(doses)}\nseed={seed}\n"
     note = out_root / "rerun_settings.txt"
-    if note.exists() and not note.read_text().startswith(settings):
-        raise RerunError(f"{out_root} already holds results made with other settings "
-                         f"({' '.join(note.read_text().split()[:2])}). Choose another output folder.")
+    if note.exists():
+        before = "".join(l for l in note.read_text().splitlines(keepends=True) if not l.startswith("source="))
+        if before != settings:
+            raise RerunError(f"{out_root} already holds results made with other settings "
+                             f"({' '.join(before.split())}). Choose another output folder.")
     note.write_text(settings + f"source={Path(runs_root).resolve()}\n")
     if variants:
         with open(out_root / "rerun_plan.csv", "w", newline="") as fh:
