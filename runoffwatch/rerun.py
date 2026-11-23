@@ -50,8 +50,16 @@ RUN_FILE = "Run 1.run"
 _PATH_LINE = re.compile(rb"^(  PATH {2,})(\S+)(\r?)$", re.M)
 
 
+ERROR_BOX_TITLE = "Fortran"   # title of the message box PRZM shows when a calculation fails
+SKIP_NEXT_TIME = {"przm_error"}   # outcomes that will not change when the same folder is run again
+
+
 class RerunError(ValueError):
     """An input file does not look the way this module expects."""
+
+
+class PrzmError(RuntimeError):
+    """PRZM itself reported a calculation error for this field."""
 
 
 # --------------------------------------------------------------------------- #
@@ -164,10 +172,61 @@ def _empty(work: Path, tries: int = 5) -> None:
             time.sleep(0.3)
 
 
-def run_winprzm(work: Path, exe: Path, timeout: float) -> None:
-    """Start WINPRZM.exe in `work` and wait for it."""
-    subprocess.run([str(exe)], cwd=work, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                   stderr=subprocess.DEVNULL, timeout=timeout, check=False)
+def _error_box_open(pid: int) -> bool:
+    """Windows only: does this process show a window titled 'Fortran'?
+
+    When a calculation inside PRZM fails (for example a NaN reaches EXP or LOG), the program does
+    not end. It shows a message box with the title 'Fortran' and waits for a click on OK. Without
+    this check a failing run would block until somebody clicks, once for every failing field.
+    """
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+        user32.IsWindowVisible.argtypes = [wintypes.HWND]
+        user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+        found = []
+
+        def each(hwnd, _lparam):
+            owner = wintypes.DWORD(0)
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+            if owner.value == pid and user32.IsWindowVisible(hwnd):
+                title = ctypes.create_unicode_buffer(128)
+                user32.GetWindowTextW(hwnd, title, 128)
+                if title.value.strip() == ERROR_BOX_TITLE:
+                    found.append(hwnd)
+            return True
+
+        callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)(each)
+        user32.EnumWindows(callback, 0)
+        return bool(found)
+    except Exception:                 # the check is a convenience; the time limit still applies
+        return False
+
+
+def run_winprzm(work: Path, exe: Path, timeout: float, poll: float = 0.25) -> None:
+    """Start WINPRZM.exe in `work` and wait for it.
+
+    Stops the program and raises PrzmError as soon as it shows a calculation-error box, and raises
+    subprocess.TimeoutExpired when it runs longer than `timeout` seconds.
+    """
+    proc = subprocess.Popen([str(exe)], cwd=work, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+    t0 = time.time()
+    try:
+        while proc.poll() is None:
+            if time.time() - t0 > timeout:
+                raise subprocess.TimeoutExpired(str(exe), timeout)
+            if _error_box_open(proc.pid):
+                raise PrzmError("PRZM stopped with a calculation error (error box 'Fortran')")
+            time.sleep(poll)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait()
 
 
 def is_done(dest: Path) -> bool:
@@ -176,7 +235,7 @@ def is_done(dest: Path) -> bool:
 
 
 def rerun_one(src: Path, dest: Path, work: Path, exe: Path, *, henry: str | None = HENRY_FIXED,
-              moisture_ref: str | None = MOISTURE_REF_FIXED, timeout: float = 600,
+              moisture_ref: str | None = MOISTURE_REF_FIXED, timeout: float = 120,
               runner: Callable[[Path, Path, float], None] = run_winprzm, work_name: str | None = None) -> dict:
     """Re-run one folder. Returns a small record for the log."""
     t0 = time.time()
@@ -201,6 +260,8 @@ def rerun_one(src: Path, dest: Path, work: Path, exe: Path, *, henry: str | None
             rec["status"] = "empty"
     except subprocess.TimeoutExpired:
         rec.update(status="timeout", note=f"stopped after {timeout:.0f} s")
+    except PrzmError as e:
+        rec.update(status="przm_error", note=str(e)[:200])
     except Exception as e:                      # one bad folder must not stop the other runs
         rec.update(status="failed", note=f"{type(e).__name__}: {e}"[:200])
     rec["seconds"] = round(time.time() - t0, 1)
@@ -210,12 +271,24 @@ def rerun_one(src: Path, dest: Path, work: Path, exe: Path, *, henry: str | None
 # --------------------------------------------------------------------------- #
 # 3. Running everything
 # --------------------------------------------------------------------------- #
+def _last_status(log_path: Path, wanted: set[str]) -> set[str]:
+    """Names of the runs whose most recent line in the log has one of the wanted outcomes."""
+    if not log_path.exists():
+        return set()
+    last = {}
+    with open(log_path, newline="") as fh:
+        for row in csv.DictReader(fh):
+            last[row.get("run")] = row.get("status")
+    return {run for run, status in last.items() if status in wanted}
+
+
 def rerun_all(runs_root: str | Path, out_root: str | Path, exe: str | Path, work_root: str | Path = r"C:\Temp\rr", *,
               henry: str | None = HENRY_FIXED, moisture_ref: str | None = MOISTURE_REF_FIXED, workers: int = 4,
-              limit: int | None = None, timeout: float = 600,
+              limit: int | None = None, timeout: float = 120, retry_failed: bool = False,
               runner: Callable[[Path, Path, float], None] = run_winprzm) -> list[dict]:
     """Re-run every folder with input files. Folders that are already done are skipped,
-    so the command can be stopped and started again.
+    so the command can be stopped and started again. Folders for which PRZM itself reported a
+    calculation error are also skipped the next time, unless `retry_failed` is set.
 
     The log is written to <out_root>/rerun_log.csv.
     """
@@ -232,9 +305,13 @@ def rerun_all(runs_root: str | Path, out_root: str | Path, exe: str | Path, work
         work_root = work_root.resolve()
         patch_run(b"  PATH   a\r\n  PATH   b\r\n", str(work_root / f"w{max(1, workers) - 1}"))   # path short enough?
     todo = [(s, out_root / s.parent.name / s.name) for s in find_inputs(runs_root)][:limit]
-    pending = [(s, d) for s, d in todo if not is_done(d)]
-    log.info("%d folders with inputs, %d already done, %d to run", len(todo), len(todo) - len(pending), len(pending))
     out_root.mkdir(parents=True, exist_ok=True)
+    log_path = out_root / "rerun_log.csv"
+    known_bad = set() if retry_failed else _last_status(log_path, SKIP_NEXT_TIME)
+    not_done = [(s, d) for s, d in todo if not is_done(d)]
+    pending = [(s, d) for s, d in not_done if s.name not in known_bad]
+    log.info("%d folders with inputs, %d already done, %d failed in PRZM before (skipped), %d to run",
+             len(todo), len(todo) - len(not_done), len(not_done) - len(pending), len(pending))
     settings = f"henry={henry}\nmoisture_ref={moisture_ref}\n"
     note = out_root / "rerun_settings.txt"
     if note.exists() and not note.read_text().startswith(settings):
@@ -261,7 +338,6 @@ def rerun_all(runs_root: str | Path, out_root: str | Path, exe: str | Path, work
                 free.append(w)
 
     records, t0 = [], time.time()
-    log_path = out_root / "rerun_log.csv"
     new_file = not log_path.exists()
     with open(log_path, "a", newline="") as fh, ThreadPoolExecutor(max_workers=len(free)) as pool:
         wr = csv.DictWriter(fh, fieldnames=["run", "batch", "status", "seconds", "zts_bytes", "note"])

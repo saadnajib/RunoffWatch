@@ -98,7 +98,7 @@ pip install -e ".[dev,app]"
 python -m pytest -q
 ```
 
-You should see `246 passed, 1 skipped` (the skipped one needs PyTorch; with PyTorch installed it is `247 passed`).
+You should see `253 passed, 1 skipped` (the skipped one needs PyTorch; with PyTorch installed it is `254 passed`).
 
 **Step 5. Ask the model a question.** This compares 7 possible spray days for a made-up weather example.
 
@@ -213,7 +213,11 @@ python -m runoffwatch rerun --exe C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe
 ```
 
 The new results go to `data/raw/runs_fixed/` in the same layout as the originals, with a log in
-`rerun_log.csv`. By default the Henry constant becomes `0.37E-06` and the reference soil moisture
+`rerun_log.csv`. In the log, `ok` means the field finished. `przm_error` means PRZM itself could
+not calculate the field: it shows an error box titled "Fortran", and the command then stops that
+run and goes on, so nobody has to click. These fields are skipped on the next start; add
+`--retry-failed` to try them again. Most of them are fields that gave no results in the delivered
+data either. By default the Henry constant becomes `0.37E-06` and the reference soil moisture
 `1`; `--henry keep` or `--moisture-ref keep` leaves one of them as delivered.
 
 ### If something goes wrong
@@ -248,7 +252,7 @@ report for one single run.
 | `runoffwatch/lstm.py` | Second surrogate: an LSTM, compared with the trees |
 | `runoffwatch/longrun.py` | Surrogate on 45 years of Agri4Cast weather for France |
 | `runoffwatch/design.py` | Generator for new simulation runs (run files and task archives) |
-| `tests/` | 247 tests on synthetic run folders (no project data in git) |
+| `tests/` | 254 tests on synthetic run folders (no project data in git) |
 | `runoffwatch/pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code, kept for reference |
 
 Code and documents were written with the help of an AI assistant (Claude).

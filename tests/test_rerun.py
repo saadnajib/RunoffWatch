@@ -522,3 +522,81 @@ def test_rerun_all_refuses_to_mix_settings_in_one_output_folder(tree, tmp_path):
         rerun_all(tree, out, "WINPRZM.exe", "rr", henry="0.00E+00", runner=other)
     assert other.calls == []
     assert len(rerun_all(tree, out, "WINPRZM.exe", "rr", limit=2, runner=FakeRunner())) == 1   # same settings: continues
+
+
+# --------------------------------------------------------------------------- #
+# PRZM's own errors, the real runner loop, and skipping known failures
+# --------------------------------------------------------------------------- #
+from runoffwatch.rerun import PrzmError, run_winprzm, _last_status   # noqa: E402
+import runoffwatch.rerun as rerun_module                               # noqa: E402
+
+posix_only = pytest.mark.skipif(os.name == "nt", reason="uses a shell script as stand-in program")
+
+
+def _script(path: Path, body: str) -> Path:
+    path.write_text("#!/bin/sh\n" + body + "\n")
+    path.chmod(0o755)
+    return path
+
+
+def test_rerun_one_przm_error_gets_its_own_status(tmp_path):
+    def boxed(work, exe, timeout):
+        raise PrzmError("calculation error")
+    _, dest, _, rec = _one(tmp_path, boxed)
+    assert rec["status"] == "przm_error" and "calculation" in rec["note"]
+    assert not dest.exists()
+
+
+@posix_only
+def test_run_winprzm_waits_for_the_program(tmp_path):
+    exe = _script(tmp_path / "prog", "mkdir -p output && echo done > output/x.ZTS")
+    run_winprzm(tmp_path, exe, timeout=10, poll=0.01)
+    assert (tmp_path / "output" / "x.ZTS").read_text().strip() == "done"       # started inside the work folder
+
+
+@posix_only
+def test_run_winprzm_stops_a_program_that_runs_too_long(tmp_path):
+    exe = _script(tmp_path / "prog", "sleep 30")
+    t0 = time.time()
+    with pytest.raises(subprocess.TimeoutExpired):
+        run_winprzm(tmp_path, exe, timeout=0.3, poll=0.05)
+    assert time.time() - t0 < 5
+
+
+@posix_only
+def test_run_winprzm_stops_the_program_when_an_error_box_shows(tmp_path, monkeypatch):
+    exe = _script(tmp_path / "prog", "sleep 30")
+    seen = []
+    monkeypatch.setattr(rerun_module, "_error_box_open", lambda pid: seen.append(pid) or True)
+    t0 = time.time()
+    with pytest.raises(PrzmError):
+        run_winprzm(tmp_path, exe, timeout=20, poll=0.05)
+    assert time.time() - t0 < 5 and len(seen) == 1
+
+
+def test_error_box_check_is_harmless_off_windows():
+    if os.name != "nt":
+        assert rerun_module._error_box_open(os.getpid()) is False
+
+
+def test_last_status_uses_the_most_recent_line(tmp_path):
+    log = tmp_path / "rerun_log.csv"
+    assert _last_status(log, {"przm_error"}) == set()
+    log.write_text("run,batch,status,seconds,zts_bytes,note\n"
+                   "a,b,przm_error,1,0,x\n" "c,b,przm_error,1,0,x\n" "c,b,ok,3,999,\n" "d,b,empty,1,0,\n")
+    assert _last_status(log, {"przm_error"}) == {"a"}
+
+
+def test_rerun_all_skips_fields_przm_could_not_calculate(tree, tmp_path):
+    out = tmp_path / "out"
+
+    def boxed(work, exe, timeout):
+        raise PrzmError("calculation error")
+
+    first = rerun_all(tree, out, "WINPRZM.exe", "rr", workers=1, runner=boxed)
+    assert {r["status"] for r in first} == {"przm_error"} and len(first) == 4
+    again = FakeRunner()
+    assert rerun_all(tree, out, "WINPRZM.exe", "rr", workers=1, runner=again) == []          # all skipped
+    assert again.calls == []
+    retried = rerun_all(tree, out, "WINPRZM.exe", "rr", workers=1, retry_failed=True, runner=again)
+    assert len(retried) == 4 and {r["status"] for r in retried} == {"ok"}

@@ -95,6 +95,7 @@ def main(argv=None) -> int:
     rr.add_argument("--moisture-ref", default=None, help="reference soil moisture (default: 1); 'keep' = unchanged")
     rr.add_argument("--workers", type=int, default=4, help="PRZM runs at the same time")
     rr.add_argument("--limit", type=int, help="only the first N folders (for a quick test)")
+    rr.add_argument("--retry-failed", action="store_true", help="also retry folders where PRZM reported an error last time")
 
     r = sub.add_parser("run", help="analyse one run folder")
     r.add_argument("folder")
@@ -132,13 +133,14 @@ def main(argv=None) -> int:
         from . import rerun
         pick = lambda v, default: default if v is None else (None if v == "keep" else v)
         recs = rerun.rerun_all(a.runs, a.out, a.exe, a.work, henry=pick(a.henry, rerun.HENRY_FIXED),
-                               moisture_ref=pick(a.moisture_ref, rerun.MOISTURE_REF_FIXED), workers=a.workers, limit=a.limit)
+                               moisture_ref=pick(a.moisture_ref, rerun.MOISTURE_REF_FIXED), workers=a.workers, limit=a.limit,
+                               retry_failed=a.retry_failed)
         counts = {}
         for rec in recs:
             counts[rec["status"]] = counts.get(rec["status"], 0) + 1
         print(f"\nruns started now: {len(recs)} {counts}")
         print(f"results in {a.out} | log: {Path(a.out) / 'rerun_log.csv'}")
-        print(f"next: python -m runoffwatch qc --runs {a.out} --out data/interim_fixed")
+        print("ok = finished | przm_error = PRZM cannot calculate this field | empty, failed, timeout = see the log")
     elif a.cmd == "audit":
         from .quality import audit
         s = audit(a.runs, a.interim)

@@ -284,3 +284,14 @@ whether the input or the program is at fault. The practical fix is the same: ref
   results plus 2,992 that stopped early and 8 with empty results), and the editor works on 6,945 of them (13 input files are
   damaged). `python -m runoffwatch rerun` does this; see the README.
 - Both corrections are our reading of the evidence. The model owners should confirm them.
+
+### First use of `rerun` (23 Nov 2026, 20 folders)
+
+The first 20 folders with input files were re-run with both corrections. 14 finished. 6 stopped
+at once with PRZM error boxes: a NaN reaches `EXP` in the pesticide transport routine or `LOG` in
+the erosion routine. All 6 are folders that hold no results in the delivered data. A seventh
+folder without delivered results did finish with the corrected settings. So most of the 2,992
+folders that "stopped early" seem to fail inside PRZM for a reason that is not the Henry constant.
+We have not found what they have in common: neither the weather cell nor a single input setting
+separates them (a model on all input settings reaches only AUC 0.72; very sandy soils with a low
+erodibility factor fail most often, about 88 %).
