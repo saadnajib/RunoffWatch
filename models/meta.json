@@ -1,0 +1,234 @@
+{
+  "runoff_features": [
+    "rain_mm",
+    "rain_prev1_mm",
+    "rain_prev2_3_mm",
+    "rain_7d_mm",
+    "rain_14d_mm",
+    "rain_30d_mm",
+    "temp_c",
+    "temp_prev1_c",
+    "temp_7d_c",
+    "evap_mm",
+    "evap_7d_mm",
+    "frozen_precip_30d_mm",
+    "cn_today",
+    "cn_runoff_mm",
+    "usle_k",
+    "usle_ls",
+    "slope_pct",
+    "cn_2",
+    "h1_bd",
+    "h1_fc",
+    "h1_wp",
+    "h1_oc",
+    "h1_kd",
+    "h1_sand",
+    "h1_clay",
+    "h3_bd",
+    "h3_oc"
+  ],
+  "conc_features": [
+    "days_since_app",
+    "rain_since_app_mm",
+    "heavy_rain_days_since_app",
+    "temp_since_app_c",
+    "rain_first3d_after_app_mm",
+    "rain_mm",
+    "rain_prev1_mm",
+    "rain_prev2_3_mm",
+    "rain_7d_mm",
+    "rain_14d_mm",
+    "rain_30d_mm",
+    "temp_c",
+    "temp_prev1_c",
+    "temp_7d_c",
+    "evap_mm",
+    "evap_7d_mm",
+    "frozen_precip_30d_mm",
+    "cn_runoff_mm",
+    "usle_k",
+    "usle_ls",
+    "slope_pct",
+    "cn_2",
+    "h1_bd",
+    "h1_fc",
+    "h1_wp",
+    "h1_oc",
+    "h1_kd",
+    "h1_sand",
+    "h1_clay",
+    "h3_bd",
+    "h3_oc"
+  ],
+  "classifier_features": [
+    "days_since_app",
+    "rain_since_app_mm",
+    "heavy_rain_days_since_app",
+    "temp_since_app_c",
+    "rain_first3d_after_app_mm",
+    "rain_mm",
+    "rain_prev1_mm",
+    "rain_prev2_3_mm",
+    "rain_7d_mm",
+    "rain_14d_mm",
+    "rain_30d_mm",
+    "temp_c",
+    "temp_prev1_c",
+    "temp_7d_c",
+    "evap_mm",
+    "evap_7d_mm",
+    "frozen_precip_30d_mm",
+    "cn_today",
+    "cn_runoff_mm",
+    "usle_k",
+    "usle_ls",
+    "slope_pct",
+    "cn_2",
+    "h1_bd",
+    "h1_fc",
+    "h1_wp",
+    "h1_oc",
+    "h1_kd",
+    "h1_sand",
+    "h1_clay",
+    "h3_bd",
+    "h3_oc"
+  ],
+  "high_loss_threshold_gha": 1.0,
+  "conc_floor": 1e-07,
+  "conc_output": "g_per_ha_per_mm",
+  "trained_on": {
+    "application": "2400 g/ha Flufenacet on 1 March, winter cereals, FOCUS R1",
+    "feature_ranges": {
+      "days_since_app": [
+        0.0,
+        364.0
+      ],
+      "rain_since_app_mm": [
+        0.0,
+        1207.0
+      ],
+      "heavy_rain_days_since_app": [
+        0.0,
+        44.0
+      ],
+      "temp_since_app_c": [
+        0.800000011920929,
+        19.758468627929688
+      ],
+      "rain_first3d_after_app_mm": [
+        0.0,
+        50.0
+      ],
+      "rain_mm": [
+        1.0,
+        48.0
+      ],
+      "rain_prev1_mm": [
+        0.0,
+        45.0
+      ],
+      "rain_prev2_3_mm": [
+        0.0,
+        58.0
+      ],
+      "rain_7d_mm": [
+        0.0,
+        112.0
+      ],
+      "rain_14d_mm": [
+        0.0,
+        163.0
+      ],
+      "rain_30d_mm": [
+        1.0,
+        252.0
+      ],
+      "temp_c": [
+        -5.099999904632568,
+        27.799999237060547
+      ],
+      "temp_prev1_c": [
+        -6.0,
+        28.100000381469727
+      ],
+      "temp_7d_c": [
+        -4.5428571701049805,
+        26.899999618530273
+      ],
+      "evap_mm": [
+        0.0,
+        7.300000190734863
+      ],
+      "evap_7d_mm": [
+        1.350000023841858,
+        49.939998626708984
+      ],
+      "frozen_precip_30d_mm": [
+        0.0,
+        37.0
+      ],
+      "cn_today": [
+        73.0,
+        94.0
+      ],
+      "cn_runoff_mm": [
+        0.0,
+        17.948733020796077
+      ],
+      "usle_k": [
+        0.1599999964237213,
+        0.41999998688697815
+      ],
+      "usle_ls": [
+        0.15000000596046448,
+        7.199999809265137
+      ],
+      "slope_pct": [
+        0.009999999776482582,
+        21.530000686645508
+      ],
+      "cn_2": [
+        73.0,
+        84.0
+      ],
+      "h1_bd": [
+        0.25999999046325684,
+        1.690000057220459
+      ],
+      "h1_fc": [
+        0.125,
+        0.3869999945163727
+      ],
+      "h1_wp": [
+        0.054999999701976776,
+        0.25
+      ],
+      "h1_oc": [
+        0.4000000059604645,
+        38.5
+      ],
+      "h1_kd": [
+        1.5099999904632568,
+        145.33799743652344
+      ],
+      "h1_sand": [
+        15.0,
+        86.0
+      ],
+      "h1_clay": [
+        6.0,
+        49.0
+      ],
+      "h3_bd": [
+        0.03999999910593033,
+        1.7000000476837158
+      ],
+      "h3_oc": [
+        0.0,
+        37.599998474121094
+      ]
+    }
+  }
+}

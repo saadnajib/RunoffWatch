@@ -1,0 +1,269 @@
+{
+  "split": {
+    "test_app_years": [
+      1992,
+      1996
+    ],
+    "val_app_years": [
+      1994
+    ],
+    "rows": {
+      "train": 3859082,
+      "unused": 2067727,
+      "test_seen_years": 1284489,
+      "val": 587556,
+      "test": 402049
+    },
+    "weather_files": {
+      "train": 501,
+      "val": 577,
+      "test": 163,
+      "test_seen_years": 163,
+      "unused": 740
+    },
+    "runs": {
+      "train": 3823,
+      "val": 4330,
+      "test": 1279,
+      "test_seen_years": 1279,
+      "unused": 5609
+    }
+  },
+  "high_loss_threshold_gha": 1.0,
+  "trees": {
+    "runoff": 215,
+    "conc": 528,
+    "high_loss": 1132
+  },
+  "loss_baseline_fit": {
+    "a_g_per_ha_per_mm": 4.847199491744365,
+    "k_per_day": 0.04850452466865857,
+    "half_life_days": 14.290361266189782
+  },
+  "runoff": {
+    "surrogate": {
+      "r2_daily": 0.9821151249984589,
+      "rmse_mm": 0.15525539147679485,
+      "r2_run_totals": 0.9914822821937382,
+      "median_abs_error_of_run_total_pct": 5.937821749808318
+    },
+    "curve_number_baseline": {
+      "r2_daily": 0.9284356127455701,
+      "rmse_mm": 0.31056478869150456,
+      "r2_run_totals": 0.8983621235326962,
+      "median_abs_error_of_run_total_pct": 25.31137910331132
+    }
+  },
+  "loss": {
+    "surrogate": {
+      "r2_daily": 0.9586498981016965,
+      "r2_log10_on_runoff_days": 0.9601600436199457,
+      "r2_run_totals": 0.9657872224936374,
+      "median_abs_error_of_run_total_pct": 9.134261550595053,
+      "total_loss_ratio_pred_over_true": 1.0281655190183028,
+      "ratio_on_top_0p1pct_days": 1.0354169126652328
+    },
+    "chemistry_stage_alone": {
+      "r2_daily": 0.9896466394459718,
+      "r2_log10_on_runoff_days": 0.9794699334400397,
+      "r2_run_totals": 0.9860856858959458,
+      "median_abs_error_of_run_total_pct": 5.325853341610249,
+      "total_loss_ratio_pred_over_true": 1.048736517632504,
+      "ratio_on_top_0p1pct_days": 1.0387738502426573
+    },
+    "decay_x_curve_number_baseline": {
+      "r2_daily": 0.7919791870476406,
+      "r2_log10_on_runoff_days": 0.1608142689492139,
+      "r2_run_totals": 0.6260707378387451,
+      "median_abs_error_of_run_total_pct": 47.21004867553711,
+      "total_loss_ratio_pred_over_true": 0.7600707068551594,
+      "ratio_on_top_0p1pct_days": 0.8288014433721299
+    }
+  },
+  "high_loss": {
+    "rain_today_rule": {
+      "pr_auc": 0.05756561567300716,
+      "best_f1": 0.1176825588412794,
+      "precision_at_best_f1": 0.08121615993336109,
+      "recall_at_best_f1": 0.21358159912376778,
+      "precision_at_80pct_recall": 0.049105691056910566
+    },
+    "logistic_regression": {
+      "pr_auc": 0.7811928698872582,
+      "best_f1": 0.7809254013220018,
+      "precision_at_best_f1": 0.6863070539419087,
+      "recall_at_best_f1": 0.9058050383351588,
+      "precision_at_80pct_recall": 0.7192982456140351
+    },
+    "gradient_boosting": {
+      "pr_auc": 0.9388704600474135,
+      "best_f1": 0.8701442841287458,
+      "precision_at_best_f1": 0.8818897637795275,
+      "recall_at_best_f1": 0.8587075575027382,
+      "precision_at_80pct_recall": 0.908433734939759
+    },
+    "surrogate_predicted_loss": {
+      "pr_auc": 0.9464405121669675,
+      "best_f1": 0.900831024930748,
+      "precision_at_best_f1": 0.9114349775784754,
+      "recall_at_best_f1": 0.8904709748083242,
+      "precision_at_80pct_recall": 0.9569190600522193
+    },
+    "positives": 913,
+    "positive_rate": 0.002270867481326903,
+    "alarms_gradient_boosting": {
+      "threshold": 0.04496295601142781,
+      "alarms": 1162,
+      "precision": 0.7418244406196214,
+      "recall": 0.9441401971522454,
+      "share_of_loss_on_alarm_days": 0.6110944151878357
+    },
+    "alarms_surrogate_at_1_gha": {
+      "alarms": 893,
+      "precision": 0.910414333706607,
+      "recall": 0.8904709748083242,
+      "share_of_loss_on_alarm_days": 0.5408868193626404
+    }
+  },
+  "strict_test_rows": {
+    "rows": 402049,
+    "rows_with_trusted_pesticide": 402049
+  },
+  "by_test_year": {
+    "1992": {
+      "runoff_r2_daily": 0.9823581575555002,
+      "runoff_r2_daily_curve_number": 0.9384436805128012,
+      "loss_r2_daily": 0.9734611664376853,
+      "loss_total_ratio": 1.0359454707896552,
+      "high_loss_days": 374,
+      "high_loss_pr_auc_surrogate": 0.9798551442204835,
+      "high_loss_pr_auc_gradient_boosting": 0.9639698482362998
+    },
+    "1996": {
+      "runoff_r2_daily": 0.9817661663128442,
+      "runoff_r2_daily_curve_number": 0.914068482127726,
+      "loss_r2_daily": 0.9520426533478421,
+      "loss_total_ratio": 1.022132582277949,
+      "high_loss_days": 539,
+      "high_loss_pr_auc_surrogate": 0.9290760006016445,
+      "high_loss_pr_auc_gradient_boosting": 0.9193745481753033
+    }
+  },
+  "seen_years": {
+    "rows": 1284489,
+    "rows_with_trusted_pesticide": 1260228,
+    "runoff": {
+      "surrogate": {
+        "r2_daily": 0.9814330224839241,
+        "rmse_mm": 0.19571991673538405,
+        "r2_run_totals": 0.9977934611135305,
+        "median_abs_error_of_run_total_pct": 1.8652045515184994
+      },
+      "curve_number_baseline": {
+        "r2_daily": 0.9319482850788305,
+        "rmse_mm": 0.3747002247458333,
+        "r2_run_totals": 0.961242900667761,
+        "median_abs_error_of_run_total_pct": 11.629837978526407
+      }
+    },
+    "loss": {
+      "surrogate": {
+        "r2_daily": 0.9833123130348566,
+        "r2_log10_on_runoff_days": 0.9588626470390723,
+        "r2_run_totals": 0.991702364881755,
+        "median_abs_error_of_run_total_pct": 5.713313264705667,
+        "total_loss_ratio_pred_over_true": 0.9783901047352979,
+        "ratio_on_top_0p1pct_days": 0.9456637053235981
+      },
+      "chemistry_stage_alone": {
+        "r2_daily": 0.9959967029220573,
+        "r2_log10_on_runoff_days": 0.9807324607656901,
+        "r2_run_totals": 0.9985238235079508,
+        "median_abs_error_of_run_total_pct": 2.142093671774134,
+        "total_loss_ratio_pred_over_true": 0.9944912713501667,
+        "ratio_on_top_0p1pct_days": 0.9893909838047179
+      },
+      "decay_x_curve_number_baseline": {
+        "r2_daily": -0.09681666091863428,
+        "r2_log10_on_runoff_days": 0.22873937528336807,
+        "r2_run_totals": 0.26283884048461914,
+        "median_abs_error_of_run_total_pct": 59.338409423828125,
+        "total_loss_ratio_pred_over_true": 1.3829022315965198,
+        "ratio_on_top_0p1pct_days": 1.6247465409400608
+      }
+    },
+    "high_loss": {
+      "rain_today_rule": {
+        "pr_auc": 0.11336125031972602,
+        "best_f1": 0.20801276571493701,
+        "precision_at_best_f1": 0.1407635942923255,
+        "recall_at_best_f1": 0.39829768659973813,
+        "precision_at_80pct_recall": 0.08045952375849283
+      },
+      "logistic_regression": {
+        "pr_auc": 0.8451763154963965,
+        "best_f1": 0.7860270700636942,
+        "precision_at_best_f1": 0.7224661544090742,
+        "recall_at_best_f1": 0.8618507202095155,
+        "precision_at_80pct_recall": 0.753126922288292
+      },
+      "gradient_boosting": {
+        "pr_auc": 0.9827799890314161,
+        "best_f1": 0.9253379103196738,
+        "precision_at_best_f1": 0.909915611814346,
+        "recall_at_best_f1": 0.9412920122217372,
+        "precision_at_80pct_recall": 0.9876077586206896
+      },
+      "surrogate_predicted_loss": {
+        "pr_auc": 0.9765947078653292,
+        "best_f1": 0.9254419677171407,
+        "precision_at_best_f1": 0.9312707182320442,
+        "recall_at_best_f1": 0.9196857267568748,
+        "precision_at_80pct_recall": 0.9711563905795184
+      },
+      "positives": 4582,
+      "positive_rate": 0.003635850020789889,
+      "alarms_gradient_boosting": {
+        "threshold": 0.04496295601142781,
+        "alarms": 5863,
+        "precision": 0.7746887259082381,
+        "recall": 0.9912701876909646,
+        "share_of_loss_on_alarm_days": 0.8211561441421509
+      },
+      "alarms_surrogate_at_1_gha": {
+        "alarms": 4607,
+        "precision": 0.9209897981332754,
+        "recall": 0.9260148406809253,
+        "share_of_loss_on_alarm_days": 0.774198591709137
+      }
+    }
+  },
+  "shap_mean_abs": {
+    "rain_since_app_mm": 1.3743,
+    "days_since_app": 0.9015,
+    "cn_runoff_mm": 0.6815,
+    "evap_7d_mm": 0.4141,
+    "rain_mm": 0.4018,
+    "heavy_rain_days_since_app": 0.3971,
+    "h1_oc": 0.3348,
+    "rain_prev1_mm": 0.2923,
+    "rain_7d_mm": 0.2674,
+    "rain_14d_mm": 0.2432,
+    "temp_c": 0.2396,
+    "rain_first3d_after_app_mm": 0.1993
+  },
+  "speed": {
+    "surrogate_seconds_per_10_year_run": 0.027314699399994424,
+    "przm_seconds_per_run_from_logs": "about 2-4"
+  },
+  "final_models": {
+    "trained_on": "all weather files, all years",
+    "rain_day_rows": 8200903,
+    "runoff_days_with_trusted_pesticide": 1042104,
+    "trees": {
+      "runoff": 237,
+      "conc": 581,
+      "high_loss": 1245
+    }
+  }
+}
