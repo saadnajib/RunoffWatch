@@ -1,88 +1,92 @@
 {
-  "folders": 9977,
+  "trust_rule": "balance",
+  "balance_tolerance_kgha": 0.001,
+  "runs_with_balance_error_above_tolerance": 0,
+  "balance_error_quantiles_kgha": {
+    "0.5": 2.212e-09,
+    "0.9": 6.0103999999999916e-09,
+    "0.99": 1.5968400000000003e-08,
+    "1.0": 4.407e-08
+  },
+  "trusted_runs": 5609,
+  "folders": 5616,
   "status_counts": {
-    "has_output": 3958,
-    "no_field": 3019,
-    "no_output": 2992,
-    "empty_output": 8
+    "has_output": 5610,
+    "empty_output": 6
   },
-  "readable_runs": 3958,
-  "distinct_weather_files": 695,
-  "crashed_before_end": 263,
-  "decay_rule_unstable": 1145,
-  "envelope_rule_bad_runs": 1966,
-  "runs_never_above_envelope": 1992,
+  "readable_runs": 5610,
+  "distinct_weather_files": 740,
+  "crashed_before_end": 1,
+  "decay_rule_unstable": 0,
+  "envelope_rule_bad_runs": 387,
+  "runs_never_above_envelope": 5223,
   "flagged_runs_by_factor": {
-    "5": 1966,
-    "10": 1648,
-    "50": 1177,
-    "1000": 825
+    "5": 387,
+    "10": 283,
+    "50": 49,
+    "1000": 0
   },
-  "clearly_broken_runs": 1177,
+  "clearly_broken_runs": 49,
   "clearly_broken_factor": 50.0,
   "first_bad_app_year_counts": {
-    "1990": 3,
-    "1991": 67,
-    "1992": 195,
-    "1993": 125,
-    "1994": 129,
-    "1995": 251,
-    "1996": 396,
-    "1997": 120,
-    "1998": 174,
-    "1999": 506
+    "1990": 332,
+    "1991": 38,
+    "1992": 5,
+    "1993": 2,
+    "1994": 7,
+    "1995": 3
   },
-  "median_decay_growth_per_year": 2.50619630102483,
-  "share_runs_decay_growing_gt_1p5": 0.8276907529055079,
-  "max_loss_fraction_of_applied": 1.5014636004841874e+30,
-  "clean_run_years": 27730.0,
-  "total_run_years": 38099.71,
-  "runs_with_at_least_3_clean_years": 3568,
+  "median_decay_growth_per_year": 0.9799644002124799,
+  "share_runs_decay_growing_gt_1p5": 0.0,
+  "max_loss_fraction_of_applied": 0.007212208333333333,
+  "clean_run_years": 55192.56000000001,
+  "total_run_years": 55136.47,
+  "runs_with_at_least_3_clean_years": 5609,
   "full_length_years": 9.998631074606434,
-  "iforest_flagged": 652,
-  "iforest_agrees_with_decay_rule": 0.8572511369378474,
-  "iforest_recall_of_decay_rule": 0.5379912663755458,
-  "iforest_recall_of_envelope_flagged": 0.3133265513733469,
-  "iforest_recall_of_clearly_broken": 0.5216652506372133,
+  "iforest_flagged": 985,
+  "iforest_agrees_with_decay_rule": 0.8244206773618539,
+  "iforest_recall_of_decay_rule": NaN,
+  "iforest_recall_of_envelope_flagged": 0.39276485788113696,
+  "iforest_recall_of_clearly_broken": 0.2653061224489796,
   "bad_share_by_subsoil_oc": {
     "(-0.01, 0.3]": {
-      "runs": 957,
-      "share_flagged": 0.832,
-      "share_clearly_broken": 0.675
+      "runs": 1370,
+      "share_flagged": 0.065,
+      "share_clearly_broken": 0.002
     },
     "(0.3, 0.4]": {
-      "runs": 1621,
-      "share_flagged": 0.632,
-      "share_clearly_broken": 0.311
+      "runs": 2247,
+      "share_flagged": 0.028,
+      "share_clearly_broken": 0.002
     },
     "(0.4, 0.5]": {
-      "runs": 413,
-      "share_flagged": 0.235,
-      "share_clearly_broken": 0.058
+      "runs": 595,
+      "share_flagged": 0.018,
+      "share_clearly_broken": 0.0
     },
     "(0.5, 1.0]": {
-      "runs": 524,
-      "share_flagged": 0.082,
-      "share_clearly_broken": 0.006
+      "runs": 746,
+      "share_flagged": 0.025,
+      "share_clearly_broken": 0.003
     },
     "(1.0, 100.0]": {
-      "runs": 443,
-      "share_flagged": 0.011,
-      "share_clearly_broken": 0.0
+      "runs": 652,
+      "share_flagged": 0.314,
+      "share_clearly_broken": 0.061
     }
   },
   "drivers": {
-    "cv_auc_mean": 0.970521484044365,
-    "share_bad": 0.4967155128852956,
+    "cv_auc_mean": 0.9944435041514732,
+    "share_bad": 0.06899625601711536,
     "importance": {
-      "h3_oc": 0.386,
-      "rain_mm_per_year": 0.184,
-      "h1_oc": 0.135,
-      "h3_bd": 0.101,
-      "h3_fc": 0.057,
-      "slope_pct": 0.03,
-      "h1_sand": 0.022,
-      "usle_k": 0.018
+      "rain_mm_per_year": 0.486,
+      "h1_oc": 0.269,
+      "h3_oc": 0.098,
+      "h3_bd": 0.05,
+      "slope_pct": 0.021,
+      "h1_sand": 0.021,
+      "h1_bd": 0.016,
+      "h3_sand": 0.01
     }
   },
   "envelope": {

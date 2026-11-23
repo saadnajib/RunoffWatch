@@ -42,7 +42,7 @@ import numpy as np
 import pandas as pd
 
 from .przm_inp import InpFormatError, parse_inp
-from .przm_io import read_soil_decay
+from .przm_io import read_balance_errors, read_soil_decay
 
 log = logging.getLogger("runoffwatch")
 
@@ -165,11 +165,31 @@ def soil_decay_table(runs: list[Path]) -> pd.DataFrame:
     return pd.DataFrame.from_dict(rows, orient="index")
 
 
-def build_run_quality(runs_root: str | Path, interim: str | Path):
+def balance_error_table(runs: list[Path]) -> pd.Series:
+    """Per run: the largest yearly pesticide balance error PRZM reports (kg/ha, absolute value).
+    NaN in the file counts as infinitely large."""
+    rows = {}
+    for r in runs:
+        out = [p for p in r.iterdir() if p.suffix.lower() == ".out"]
+        if out:
+            v = np.abs(np.array(read_balance_errors(out[0]), dtype=float))
+            rows[r.name] = float(np.nan_to_num(v, nan=np.inf).max()) if len(v) else np.nan
+    return pd.Series(rows, name="max_balance_error", dtype=float)
+
+
+def build_run_quality(runs_root: str | Path, interim: str | Path, trust: str = "envelope"):
     """Combine everything into one row per run. Needs `qc` and `inventory` output in `interim`.
+
+    trust = "envelope": pesticide results are trusted until the first application year in which a
+        run rises above the envelope (made for the delivered data, where numbers blow up).
+    trust = "balance": a run is trusted completely when PRZM's own yearly balance error stays
+        below BALANCE_TOLERANCE (made for the corrected data). The envelope is still computed
+        and stored as `above_envelope_app_year`, for information only.
 
     Returns (run_quality, envelope, events, yearly soil decay).
     """
+    if trust not in TRUST_RULES:
+        raise ValueError(f"trust must be one of {TRUST_RULES}, not {trust!r}")
     from .batch import find_runs
 
     interim = Path(interim)
@@ -194,6 +214,14 @@ def build_run_quality(runs_root: str | Path, interim: str | Path):
                          "applied_total_gha", "runoff_days", "rain_total_mm"]])
     rq = rq.join(cu).join(inv[["met_hash"]])
     rq["crashed"] = rq["n_days"] < rq["n_days"].max()
+    rq["max_balance_error"] = balance_error_table(runs).reindex(rq.index)
+    rq["above_envelope_app_year"] = rq["first_bad_app_year"]
+    if trust == "balance":
+        ok_balance = (rq["max_balance_error"] <= BALANCE_TOLERANCE) & ~rq["crashed"].fillna(True)
+        first_year = int(events["date"].dt.year.min())
+        rq["first_bad_app_year"] = np.where(ok_balance, np.nan, np.where(rq["n_days"].notna(), first_year, np.nan))
+        end = pd.to_datetime(rq["end"])
+        rq["clean_until"] = (end + pd.Timedelta(days=1)).where(ok_balance)
     rq["decay_growth_per_year"] = (last / first).reindex(rq.index) ** (1 / (n_years.reindex(rq.index) - 1).clip(lower=1))
     rq["loss_fraction"] = rq["loss_total_gha"] / rq["applied_total_gha"]
     late = events[events["days_since_app"] > 150].groupby("run")["loss_per_mm"].max()
@@ -206,6 +234,7 @@ def build_run_quality(runs_root: str | Path, interim: str | Path):
     first_app = pd.Timestamp(year=int(events["date"].dt.year.min()), month=APP_MONTH, day=1)
     rq["clean_years"] = ((rq["clean_until"] - first_app).dt.days / 365.25).clip(lower=0).round(2)
     rq["pesticide_years"] = ((pd.to_datetime(rq["end"]) - first_app).dt.days / 365.25).clip(lower=0).round(2)
+    rq["clean_years"] = rq["clean_years"].where(~(rq["clean_years"] > rq["pesticide_years"]), rq["pesticide_years"])
     rq = rq.join(run_parameters(runs))
     return rq, envelope, events, decay
 
@@ -213,6 +242,10 @@ def build_run_quality(runs_root: str | Path, interim: str | Path):
 # --------------------------------------------------------------------------- #
 # ML second opinion and drivers
 # --------------------------------------------------------------------------- #
+TRUST_RULES = ("envelope", "balance")
+BALANCE_TOLERANCE = 1e-3      # kg/ha per year; healthy runs are below 1e-6, broken ones far above
+
+
 ANOMALY_FEATURES = ["decay_growth_per_year", "loss_fraction", "max_late_loss_per_mm", "max_decay_growth"]
 
 
@@ -246,11 +279,15 @@ def instability_drivers(rq: pd.DataFrame, seed: int = 0) -> dict:
 # Driver
 # --------------------------------------------------------------------------- #
 def audit(runs_root: str | Path = "data/raw/runs", interim: str | Path = "data/interim",
-          results: str | Path = "docs/results", figures: str | Path = "docs/figures") -> dict:
-    """Run the whole audit; write run_quality.csv, envelope.csv, a JSON summary and figures."""
+          results: str | Path = "docs/results", figures: str | Path = "docs/figures",
+          trust: str = "envelope") -> dict:
+    """Run the whole audit; write run_quality.csv, envelope.csv, a JSON summary and figures.
+
+    `trust` chooses the rule that decides which pesticide results are used later, see build_run_quality.
+    """
     interim, results = Path(interim), Path(results)
     results.mkdir(parents=True, exist_ok=True)
-    rq, envelope, events, decay = build_run_quality(runs_root, interim)
+    rq, envelope, events, decay = build_run_quality(runs_root, interim, trust)
 
     has = rq[rq["status"] == "has_output"]
     readable = has[has["n_days"].notna()].copy()
@@ -258,7 +295,8 @@ def audit(runs_root: str | Path = "data/raw/runs", interim: str | Path = "data/i
     rq["iforest_anomaly"] = iso.reindex(rq.index)
     readable["iforest_anomaly"] = iso.reindex(readable.index)
 
-    rule_bad = readable["first_bad_app_year"].notna()
+    rule_bad = readable["above_envelope_app_year"].notna()
+    bal = readable["max_balance_error"]
     both = readable["iforest_anomaly"].fillna(False).astype(bool)
     n_years_total = (readable["n_days"].max() / 365.25)
     worst = readable["worst_ratio_to_reference"].fillna(0)
@@ -267,11 +305,18 @@ def audit(runs_root: str | Path = "data/raw/runs", interim: str | Path = "data/i
     oc_bins = pd.cut(sub["h3_oc"], [-0.01, 0.3, 0.4, 0.5, 1.0, 100])
     by_oc = pd.DataFrame({
         "runs": sub.groupby(oc_bins, observed=False).size(),
-        "share_flagged": sub["first_bad_app_year"].notna().groupby(oc_bins, observed=False).mean(),
+        "share_flagged": sub["above_envelope_app_year"].notna().groupby(oc_bins, observed=False).mean(),
         "share_clearly_broken": (sub["worst_ratio_to_reference"].fillna(0) >= CLEARLY_BROKEN_FACTOR)
         .groupby(oc_bins, observed=False).mean()})
 
     summary = {
+        "trust_rule": trust,
+        "balance_tolerance_kgha": BALANCE_TOLERANCE,
+        "runs_with_balance_error_above_tolerance": int((bal > BALANCE_TOLERANCE).sum()),
+        # "higher" picks a real value instead of interpolating, so one infinite error stays visible
+        "balance_error_quantiles_kgha": ({q: float(np.quantile(bal.dropna().to_numpy(), float(q), method="higher"))
+                                          for q in ("0.5", "0.9", "0.99", "1.0")} if bal.notna().any() else {}),
+        "trusted_runs": int(readable["clean_until"].notna().sum()),
         "folders": int(len(rq)),
         "status_counts": rq["status"].value_counts().to_dict(),
         "readable_runs": int(len(readable)),
@@ -285,7 +330,7 @@ def audit(runs_root: str | Path = "data/raw/runs", interim: str | Path = "data/i
         "clearly_broken_runs": int(clearly.sum()),
         "clearly_broken_factor": CLEARLY_BROKEN_FACTOR,
         "first_bad_app_year_counts": {int(k): int(v) for k, v in
-                                      readable["first_bad_app_year"].value_counts().sort_index().items()},
+                                      readable["above_envelope_app_year"].value_counts().sort_index().items()},
         "median_decay_growth_per_year": float(readable["decay_growth_per_year"].median()),
         "share_runs_decay_growing_gt_1p5": float((readable["decay_growth_per_year"] > 1.5).mean()),
         "max_loss_fraction_of_applied": float(readable["loss_fraction"].max()),
@@ -301,7 +346,7 @@ def audit(runs_root: str | Path = "data/raw/runs", interim: str | Path = "data/i
         "bad_share_by_subsoil_oc": {str(k): {"runs": int(v["runs"]), "share_flagged": round(float(v["share_flagged"]), 3),
                                              "share_clearly_broken": round(float(v["share_clearly_broken"]), 3)}
                                     for k, v in by_oc.iterrows()},
-        "drivers": instability_drivers(readable),
+        "drivers": instability_drivers(readable.assign(first_bad_app_year=readable["above_envelope_app_year"])),
         "envelope": {"quantile": ENVELOPE_QUANTILE, "factor": ENVELOPE_FACTOR,
                      "bin_days": BIN_DAYS, "guard_years": GUARD_YEARS},
     }
@@ -311,7 +356,8 @@ def audit(runs_root: str | Path = "data/raw/runs", interim: str | Path = "data/i
     (results / "quality_summary.json").write_text(json.dumps(summary, indent=2, default=str))
 
     from .figures import quality_figures
-    quality_figures(rq, envelope, events, decay, Path(figures))
+    # the figures show the envelope result, whichever rule decides what is trusted
+    quality_figures(rq.assign(first_bad_app_year=rq["above_envelope_app_year"]), envelope, events, decay, Path(figures))
     log.info("audit: %d folders, %d readable runs, %d with bad pesticide years, %.0f of %.0f run-years clean",
              summary["folders"], summary["readable_runs"], summary["envelope_rule_bad_runs"],
              summary["clean_run_years"], summary["total_run_years"])

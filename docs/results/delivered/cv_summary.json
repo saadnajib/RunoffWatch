@@ -1,0 +1,62 @@
+{
+  "held_out_years": [
+    1990,
+    1991,
+    1992,
+    1993,
+    1994,
+    1995,
+    1996,
+    1997,
+    1998
+  ],
+  "rows_scored": 958337,
+  "high_loss_days": 1619,
+  "storm_dates_with_high_loss": 86,
+  "pooled": {
+    "runoff_r2": 0.9716819789365749,
+    "runoff_r2_curve_number": 0.9212530851364136,
+    "loss_r2": 0.9058282527405283,
+    "loss_r2_baseline": 0.4889281988143921,
+    "loss_total_pred_over_true": 0.9162025124680662,
+    "pr_auc_surrogate": 0.9217266983461825,
+    "pr_auc_classifier": 0.8113699505908325,
+    "pr_auc_rain_rule": 0.055889168042375245,
+    "alarm_at_1_gha": {
+      "alarms": 1341,
+      "precision": 0.9120059656972409,
+      "recall": 0.7554045707226683
+    }
+  },
+  "range_over_years": {
+    "runoff_r2": [
+      0.9222103080026588,
+      0.9900991277611638
+    ],
+    "runoff_r2_curve_number": [
+      0.8311907052993774,
+      0.9655792713165283
+    ],
+    "loss_r2": [
+      0.7500088001061994,
+      0.9719566733026264
+    ],
+    "loss_total_pred_over_true": [
+      0.7047308209918778,
+      1.1595551946890323
+    ],
+    "pr_auc_surrogate": [
+      0.7929187407418379,
+      0.9831228896005726
+    ],
+    "pr_auc_classifier": [
+      0.4967435836127556,
+      0.9878255275293344
+    ],
+    "alarm_recall": [
+      0.3583815028901734,
+      0.92
+    ]
+  },
+  "years_surrogate_runoff_beats_formula": 9
+}

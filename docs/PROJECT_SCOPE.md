@@ -18,7 +18,7 @@ after spraying, and we use it for a spray-day advisor prototype.
 | The idea looks like the other two groups'. What is different? | The **surrogate model** is now the core of the project, not a bonus. The Landau side asked for one, and no published ML surrogate of PRZM was found (RELATED_WORK.md). |
 | Make it useful for a farmer: "spray today or tomorrow?" | A what-if tool on top of the surrogate (prototype exists). |
 | Could it also compare pesticide A with B, or doses? | **Not with the current data**: every run uses the same pesticide, dose and spray date. It needs new PRZM runs (requested from Landau). |
-| The extreme days and decay numbers: bug or real? | Checked on all runs: it is a numerical problem in the simulator (DATA_REPORT.md). Data quality control became Task 1. |
+| The extreme days and decay numbers: bug or real? | Checked on all runs, then with local test runs: two input settings were wrong (Henry constant, reference soil moisture); all fields were re-run with corrected settings (DATA_REPORT.md, section 6). Data quality control became Task 1. |
 | Check related work and baselines | RELATED_WORK.md; two baselines are implemented and compared. |
 
 ## Research questions
@@ -33,11 +33,12 @@ after spraying, and we use it for a spray-day advisor prototype.
 ## Data
 
 About 10,000 run folders of the FOCUS PRZM model from the project cloud, of
-which 3,958 contain results. Each run is a real field in France (a random sample
+which 3,958 contain results as delivered; after a local re-run with corrected
+settings 5,609 have a full ten-year result. Each run is a real field in France (a random sample
 of real pesticide applications) with its own soil, slope and Agri4Cast weather:
 10 years of daily weather (labelled 1990-1999, really 2006-2015), field and
 soil settings, and daily runoff and pesticide loss. 695 different weather
-files; slope and soil vary; pesticide (Flufenacet), dose (2.4 kg/ha), crop
+files as delivered (740 after the re-run); slope and soil vary; pesticide (Flufenacet), dose (2.4 kg/ha), crop
 (winter cereals) and spray date (1 March) are the same in every run.
 Details and quality problems: [DATA_REPORT.md](DATA_REPORT.md).
 
@@ -75,8 +76,9 @@ predicted loss for several candidate spray days.
   compared with the tree surrogate on the same test data (MODEL_REPORT.md).
 - **New PRZM runs, prepared:** a designed experiment with varied spray date, dose and substance
   properties, plus a control group for the Henry constant ([NEW_RUNS_PLAN.md](NEW_RUNS_PLAN.md)).
-  Needs the agreement of the model owners.
-- **More weather, open:** test the surrogate on the 1979-2024 Agri4Cast weather for France.
+  Now possible locally, since PRZM runs on our own Windows PC.
+- **More weather, done:** the surrogate was run on the 1979-2023 Agri4Cast weather for France
+  (MODEL_REPORT.md).
 
 ## Team roles
 
@@ -95,9 +97,11 @@ A third team member on the Kaiserslautern side may join (approved by the supervi
   cereals sprayed on 1 March. The advisor is only meaningful for spraying in late winter / early spring.
 - **Field edge only.** What happens in streams is out of scope (agreed with the supervisor).
 - **Daily resolution.** As in PRZM.
-- **Part of the pesticide results is unusable** because of a numerical problem in the simulator; about
-  73 % of the simulated run-years are kept.
-- **Large losses are underestimated** (by about 8 % overall, more in years with extreme storms).
+- **Two settings in the delivered simulations were wrong**, so all pesticide results are from a local
+  re-run with corrected settings (5,609 fields; 1,335 fields cannot be calculated by PRZM and are
+  missing). The corrections are not yet confirmed by the model owners.
+- **Single years can be off:** over all years the total loss matches PRZM (0.99), but in single unseen
+  years it is between 0.86 and 1.12 times PRZM's.
 - **Ten years of regional weather.** The 695 weather files share the same storms, so there are far fewer
   independent weather events than rows. Scores differ noticeably from one held-out year to another.
 

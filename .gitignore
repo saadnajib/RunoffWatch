@@ -9,3 +9,4 @@ reports/
 data/*
 !data/README.md
 models/lstm.pt
+models/delivered/lstm.pt

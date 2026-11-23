@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from conftest import (APPLIED_G_PER_CM2, ZTS_VARS, met_line, write_inp, write_out,
+from conftest import (APPLIED_G_PER_CM2, STABLE_DECAY, ZTS_VARS, met_line, write_inp, write_out,
                       zts_header, zts_line)
 from runoffwatch import przm_io
 from runoffwatch.przm_io import (LANGLEY_TO_MJ, check_soil_decay, read_met, read_run, read_zts,
@@ -244,6 +244,32 @@ def test_check_soil_decay_two_isolated_jumps_are_not_a_blow_up(tmp_path):
     p = tmp_path / "a.OUT"
     write_out(p, [1.0, 10.0, 10.5, 10.8, 100.0, 101.0, 102.0])
     assert check_soil_decay(p) is False
+
+
+def test_read_balance_errors_one_value_per_year(tmp_path):
+    p = tmp_path / "a.OUT"
+    write_out(p, [0.1, 0.2, 0.3], balance=[1.5e-8, -2.0e-7, 3.25e19])
+    assert przm_io.read_balance_errors(p) == pytest.approx([1.5e-8, -2.0e-7, 3.25e19])
+
+
+def test_read_balance_errors_nan_and_unreadable_values(tmp_path):
+    p = tmp_path / "a.OUT"
+    write_out(p, [0.1, 0.2, 0.3], balance=["NaN", "*************", 1e-9])
+    v = przm_io.read_balance_errors(p)
+    assert len(v) == 3 and np.isnan(v[0]) and np.isnan(v[1]) and v[2] == pytest.approx(1e-9)
+
+
+def test_read_balance_errors_without_balance_lines(tmp_path):
+    p = tmp_path / "a.OUT"
+    write_out(p, [0.1, 0.2])                        # the default synthetic file has no balance lines
+    assert przm_io.read_balance_errors(p) == []
+    assert "BALANCE" not in p.read_text()
+
+
+def test_read_balance_errors_does_not_disturb_soil_decay(make_run):
+    run = make_run(balance=[1e-8] * len(STABLE_DECAY))
+    assert przm_io.read_balance_errors(run.files["out"]) == pytest.approx([1e-8] * len(STABLE_DECAY))
+    assert przm_io.read_soil_decay(run.files["out"]) == pytest.approx(STABLE_DECAY)
 
 
 # --------------------------------------------------------------------------- read_run
