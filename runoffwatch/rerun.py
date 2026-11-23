@@ -360,6 +360,24 @@ def is_done(dest: Path) -> bool:
     return ".zts" in f and ".out" in f and f[".zts"].stat().st_size > 400
 
 
+def full_results(root: str | Path) -> set[str]:
+    """Names of the result folders under root that hold a full-length result.
+
+    A run that stops after a few days still leaves a small result file. All full runs of one data
+    set have result files of practically the same size, so "full" means at least 90 % of the
+    typical (median) size.
+    """
+    sizes = {}
+    for p in Path(root).glob("*/*"):
+        if p.is_dir() and is_done(p):
+            sizes[p.name] = _by_suffix(p)[".zts"].stat().st_size
+    if not sizes:
+        return set()
+    ordered = sorted(sizes.values())
+    typical = ordered[len(ordered) // 2]
+    return {name for name, size in sizes.items() if size >= 0.9 * typical}
+
+
 def rerun_one(src: Path, dest: Path, work: Path, exe: Path, *, henry: str | None = HENRY_FIXED,
               moisture_ref: str | None = MOISTURE_REF_FIXED, timeout: float = 120,
               runner: Callable[[Path, Path, float], None] = run_winprzm, work_name: str | None = None,
@@ -458,7 +476,7 @@ def rerun_all(runs_root: str | Path, out_root: str | Path, exe: str | Path, work
         patch_run(b"  PATH   a\r\n  PATH   b\r\n", str(work_root / f"w{max(1, workers) - 1}"))   # path short enough?
     sources = find_inputs(runs_root)
     if fields_from is not None:
-        good = {p.name for p in Path(fields_from).glob("*/*") if is_done(p)}
+        good = full_results(fields_from)
         if not good:
             raise FileNotFoundError(f"no finished results under {fields_from}")
         sources = [s for s in sources if s.name in good]

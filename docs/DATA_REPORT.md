@@ -302,8 +302,21 @@ All 6,958 folders with input files were re-run with both corrections on one Wind
 - 1,652 fields that gave nothing in the delivered data now finish. One of the 5,610 result files
   is almost empty, so 5,609 fields have a full ten-year result: 42 % more fields than before.
 - 1,335 fields still stop at once with a PRZM error box (a NaN reaches `EXP` in the pesticide
-  transport routine or `LOG` in the erosion routine). We have not found what they have in common:
-  neither the weather cell nor a single input setting separates them from the others.
+  transport routine or `LOG` in the erosion routine). **Every one of them has a zero in its input
+  file**, and no field without such a zero fails:
+
+  | Zero in the input file | Fields | Stop with a PRZM error |
+  |---|---|---|
+  | a soil water or density value (field capacity, wilting point, bulk density) in some layer | 1,247 | 1,247 |
+  | soil erodibility (USLE K) | 803 | 803 |
+  | slope | 114 | 113 |
+  | any of these | 1,336 | 1,335 |
+  | none of these | 5,609 | 0 |
+
+  (The groups overlap. The one field with zero slope that does not stop is the almost empty
+  result mentioned above: it ends after four days.) These zeros look like missing soil or
+  terrain data for those fields, not like real values. So the missing fields are not a random
+  loss: they are the fields for which the input data was incomplete.
 ### Health check of the corrected results
 
 Checked with `inventory`, `qc` and `audit` on the 5,610 new result folders.

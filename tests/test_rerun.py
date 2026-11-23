@@ -1023,3 +1023,13 @@ def test_rerun_all_variants_field_without_application_block(tree, tmp_path):
     by_run = {r["run"]: r for r in recs}
     assert by_run["run_3__v1"]["status"] == "failed" and "Chemical Input Data" in by_run["run_3__v1"]["note"]
     assert sum(r["status"] == "ok" for r in recs) == 3
+
+
+def test_full_results_leaves_out_runs_that_stopped_early(tmp_path):
+    from runoffwatch.rerun import full_results
+    root = tmp_path / "fixed" / "batchA"
+    for name, size in (("run_a", 46000), ("run_b", 46000), ("run_c", 45990), ("run_short", 741), ("run_empty", 100)):
+        d = root / name; d.mkdir(parents=True)
+        (d / "RUN X.ZTS").write_bytes(b"x" * size); (d / "RUN X.OUT").write_bytes(b"y")
+    assert full_results(tmp_path / "fixed") == {"run_a", "run_b", "run_c"}
+    assert full_results(tmp_path / "nothing_here") == set()

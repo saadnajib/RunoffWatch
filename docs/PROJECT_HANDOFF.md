@@ -652,8 +652,11 @@ Reports in `docs/`: `DATA_REPORT.md`, `MODEL_REPORT.md`, `RELATED_WORK.md`,
 3. Field edge only; daily resolution.
 4. The delivered pesticide results were wrong in all runs (two wrong input
    settings, section 5.1); all results are now from the corrected re-run.
-   1,335 fields cannot be calculated by PRZM and are missing, so the sample
-   is no longer a clean random sample of the real fields.
+   1,335 fields cannot be calculated by PRZM and are missing. All of them
+   have a zero in their input file (a soil water or density value, the
+   erodibility or the slope), which looks like missing soil or terrain data;
+   no field without such a zero fails. So the sample is no longer a clean
+   random sample of the real fields.
 5. The total loss is right over all years (0.99 times PRZM's), but single
    unseen years are 14 % too low to 12 % too high; about one high-loss day in
    ten is missed (19 % in the worst year).
@@ -713,7 +716,8 @@ Next, in this order:
 Still open from before:
 - Year-by-year test for the LSTM; if its lead holds, make it the main
   surrogate.
-- Find out why 1,335 fields stop with a PRZM calculation error.
+- Ask the modelling group where the zeros in the input of the 1,335 failing
+  fields come from, and whether they can be filled.
 - Check a sample of the 45-year predictions against PRZM runs on the same
   weather.
 - Team member in Landau: confirm the high-loss definition; check whether the

@@ -304,8 +304,10 @@ are from the models trained on the delivered data.)
    (DATA_REPORT.md, section 6). The model owners have not confirmed them yet. If they decide
    otherwise, the pesticide results change again.
 4. **The sample is no longer a clean random sample.** 1,335 fields cannot be calculated by PRZM
-   (it stops with a calculation error) and are missing. We have not found what they have in
-   common, so we cannot rule out that they are a particular kind of field.
+   (it stops with a calculation error) and are missing. All of them have a zero in their input
+   file (a soil water or density value, the erodibility, or the slope; DATA_REPORT.md, section 6),
+   which looks like missing soil or terrain data. If such gaps are more common in some regions or
+   soil types, those are under-represented here.
 5. **Single years can be off.** Over all years the total loss is right, but in single unseen years
    it is between 14 % too low and 12 % too high, and up to a fifth of the high-loss days are missed
    (19 % in the worst year). Extreme storms unlike those in training are its weak point.
@@ -323,5 +325,5 @@ are from the models trained on the delivered data.)
 - Ask the model owners to confirm both corrections.
 - Check the long-run predictions against PRZM itself for a sample of field-years outside 2006-2015.
 - Year-by-year test for the LSTM; if its lead holds, make it the main surrogate.
-- Find out why 1,335 fields cannot be calculated.
+- Ask where the zeros in the input of the 1,335 failing fields come from, and whether they can be filled.
 - SHAP for the surrogate itself, not only for the classifier.
