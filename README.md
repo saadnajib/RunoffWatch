@@ -18,29 +18,32 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
 
 ## Main results so far
 
-> **Important, 23 Nov 2026:** test runs of PRZM on our own computer showed that two settings in the
-> delivered simulations are wrong (the Henry constant and the reference soil moisture; see
-> [docs/DATA_REPORT.md, section 6](docs/DATA_REPORT.md#6-local-re-runs-two-settings-are-wrong-23-nov-2026)).
-> The pesticide numbers below were learned from the delivered data and will change once the
-> simulations are redone with [`rerun`](#step-2-redo-the-simulations-with-corrected-settings-windows-only).
-> The water results and the methods are not affected.
+> **Important, 23 Nov 2026:** the results below **are from the corrected simulations**. Two
+> settings in the delivered simulations were wrong (the Henry constant and the reference soil
+> moisture), which made the pesticide numbers wrong in every run; all fields were re-run with
+> [`rerun`](#step-2-redo-the-simulations-with-corrected-settings-windows-only) and all models
+> retrained ([docs/DATA_REPORT.md, section 6](docs/DATA_REPORT.md#6-local-re-runs-two-settings-are-wrong-23-nov-2026)).
+> The old results are kept in `docs/results/delivered/` and `docs/figures/delivered/`; an
+> old-vs-new table is at the top of [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md).
 
 - The data: 9,977 real fields in France (a random sample of real pesticide applications), each
-  with its own soil, slope and Agri4Cast weather. **3,958 runs contain results.** Pesticide, dose
+  with its own soil, slope and Agri4Cast weather. After the corrected re-run **5,609 fields have a
+  full ten-year result** (3,958 as delivered); 1,335 cannot be calculated by PRZM. Pesticide, dose
   and spray date are the same in every run. The weather is labelled 1990-1999 but is really 2006-2015.
-- The pesticide part of the simulator is **numerically broken in part of the runs**
-  (fake pesticide mass, losses up to 1e34 g/ha): 30 % of the runs beyond doubt. A cautious
-  plausibility rule keeps 73 % of the simulated run-years. The water part is sound.
-- Tested by leaving out one year at a time (and weather files never used in training), the
-  surrogate reproduces PRZM's daily runoff with R² 0.97 (curve-number formula alone: 0.92) and
-  daily pesticide loss with R² 0.91 (0.75 to 0.97 depending on the year; simple baseline: 0.49).
-  It finds high-loss days with PR-AUC 0.92: 91 % of its alarms are real, and it finds 76 % of
-  the high-loss days. It underestimates total loss by about 8 %.
-- It is a few hundred times faster than PRZM.
-- Run on 45 years of real weather (1979-2023) for all fields, the surrogate shows that single
-  years differ by a factor of ten, and that five years carry a quarter of all loss.
-- A second surrogate, a small LSTM, matches the trees on daily pesticide loss and finds more
-  high-loss days in a first test on two years; it still needs the year-by-year test.
+- In the delivered simulations the pesticide numbers were broken (losses up to 1e34 g/ha) and,
+  as the re-runs showed, wrong in all runs. In the corrected runs PRZM's own pesticide balance is
+  exact, so all 5,609 runs are used. The water part did not change.
+- Tested by leaving out one year at a time (ten years, and weather files never used in training),
+  the surrogate reproduces PRZM's daily runoff with R² 0.98 (curve-number formula alone: 0.94) and
+  daily pesticide loss with R² 0.95 (0.89 to 0.99 depending on the year; simple baseline: 0.12).
+  It finds high-loss days with PR-AUC 0.97: 92 % of its alarms are real, and it finds 90 % of
+  the high-loss days. Its total loss is 0.99 times PRZM's (0.86 to 1.12 in single years).
+- It is about a hundred times faster than PRZM (0.03 s against 3.4 s for ten years of one field).
+- Run on 45 years of real weather (1979-2023) for all fields, the surrogate shows that the worst
+  year has 2.8 times the loss of the median year, and that five years carry 23 % of all loss.
+- A second surrogate, a small LSTM, beats the trees on daily pesticide loss and on finding
+  high-loss days in a first test on two years, but is much less exact on small losses and puts
+  the total 8 % too low; it still needs the year-by-year test.
 
 Everything describes the PRZM model for Flufenacet at 2.4 kg/ha on winter cereals
 sprayed on 1 March. It is not validated against measurements.
@@ -232,8 +235,8 @@ set needs about 5 GB of free disk space (measured on the delivered data); both n
 | **Task 3.** Fast copy of the simulator (emulator) | [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md), sections 1 to 3; try it with Part A, steps 5 and 6 |
 
 Running Part B overwrites the models, figures and result files that came with the repository
-(`models/`, `docs/results/`, `docs/figures/`). The reports were written with the delivered data,
-so until they are updated your numbers will differ from them.
+(`models/`, `docs/results/`, `docs/figures/`). The reports were written with exactly those files,
+so small differences after your own run are normal.
 
 ### Part C: the delivered data (how the fault was found)
 

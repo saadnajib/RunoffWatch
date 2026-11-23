@@ -1,7 +1,8 @@
 # RunoffWatch – Roadmap
 
 Updated after the project presentation (4 Nov 2026), the first full run on
-the real data (12 Nov 2026) and the second round of work (16 Nov 2026). Results so far: [DATA_REPORT.md](DATA_REPORT.md),
+the real data (12 Nov 2026), the second round of work (16 Nov 2026) and the corrected re-run with
+retrained models (23 Nov 2026). Results so far: [DATA_REPORT.md](DATA_REPORT.md),
 [MODEL_REPORT.md](MODEL_REPORT.md).
 
 **What the supervisor asked for, and where it stands**
@@ -10,7 +11,7 @@ the real data (12 Nov 2026) and the second round of work (16 Nov 2026). Results 
 |---|---|
 | The surrogate model is what makes this project different; make it the core | First version trained and evaluated (Phase 4) |
 | Frame it as a decision tool for farmers ("spray today or wait?") | Prototype works for spray-day comparison; product / dose comparison is **not possible with this data**; new runs are prepared (Phases 5 and 6) |
-| Look into the extreme days and the odd decay numbers; ask Landau | Done: it is a numerical problem in the simulator, see DATA_REPORT.md. Questions for Landau are listed there |
+| Look into the extreme days and the odd decay numbers; ask Landau | Done: two input settings were wrong (Henry constant, reference soil moisture); all fields re-run with corrected settings and all models retrained, see DATA_REPORT.md section 6. Confirmation from the model owners is pending |
 | Check related work, find baselines to beat | First review in [RELATED_WORK.md](RELATED_WORK.md); two baselines implemented |
 | Visualise the data | 11 figures in `docs/figures/` |
 
@@ -28,7 +29,7 @@ as a second opinion, analysis of which settings cause the breakdown.
 Still to do:
 - [ ] Send the questions in DATA_REPORT.md §4 to the Landau group (Sarah)
 - [ ] Sarah reviews about 20 flagged and 20 unflagged runs by eye
-- [ ] If Landau reruns the simulations without the volatilisation problem: rerun everything
+- [x] Simulations re-run locally with corrected settings (23 Nov 2026) and everything redone on them
 
 ## Phase 3 – Feature table ✅
 `python -m runoffwatch features`. One row per rain day, 33 inputs, all from
@@ -40,7 +41,7 @@ high-loss classifier, baselines, SHAP ranking, risk calendar. Tested by leaving
 out one year at a time, on weather files never used in training.
 
 Still to do:
-- [x] Leave-one-year-out evaluation (`train --cv`): scores now come with a range over nine years
+- [x] Leave-one-year-out evaluation (`train --cv`): scores now come with a range over ten years (corrected data)
 - [x] Final models trained on all years
 - [x] Underestimation of large losses reduced (concentration model now trained on amounts, not logarithms); not removed
 - [x] Sequence model (LSTM) as a second surrogate, compared on the same test rows (`python -m runoffwatch lstm`)
@@ -57,7 +58,7 @@ Still to do:
 - [ ] Feed real forecast weather (and Agri4Cast history for the 30 days before)
 - [ ] Show uncertainty (for example a range from several forecast members)
 
-## Phase 6 – New simulation runs (prepared, waiting for Landau)
+## Phase 6 – New simulation runs (prepared; now possible locally)
 `python -m runoffwatch design` writes the run files; see [NEW_RUNS_PLAN.md](NEW_RUNS_PLAN.md).
 - [x] Generator for a designed experiment: spray date, dose, half-life and sorption varied; control
       group that changes only the Henry constant
@@ -68,12 +69,12 @@ Still to do:
 ## Phase 6b – More weather (Agri4Cast) ✅
 `python -m runoffwatch france`.
 - [x] The 695 weather files are Agri4Cast grid cells; the runs' "1990-1999" is really 2006-2015
-- [x] Surrogate run on the 1979-2024 Agri4Cast weather for France: 3,958 fields x 45 years
+- [x] Surrogate run on the 1979-2024 Agri4Cast weather for France: 5,609 fields x 45 years (corrected data)
 - [ ] Check a sample of those predictions against PRZM itself (`WINPRZM.exe` is available)
 
 ## Phase 6c – Things the project cloud folder made possible
-- [ ] Try `WINPRZM.exe` on a Windows computer with the example run
-- [ ] If it works: run the Henry-constant control group locally instead of waiting for the workstation
+- [x] Try `WINPRZM.exe` on a Windows computer with the example run
+- [x] Test the Henry constant locally (30 test runs, DATA_REPORT.md section 6)
 - [ ] Use the real substances and doses of the sampled fields (available per field, with properties
       for 17 substances) for a realistic scenario
 

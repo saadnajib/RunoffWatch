@@ -14,11 +14,14 @@ on the full data; do not let an assistant change them from memory.
 > numbers exactly, and it showed that **two input settings in the delivered
 > simulations are wrong**: the Henry constant (0.03, about 100,000 times too
 > high for Flufenacet) and the reference soil moisture (100 where this program
-> expects 1). Because of this, the delivered pesticide results are wrong in
-> *all* runs, also in the ones that pass our plausibility check. **Every
-> pesticide number in this document was learned from these wrong data and
-> will be redone** on corrected simulations (section 13). The water results
-> (rain, runoff) and the methods are not affected. Details: section 5.
+> expects 1). Because of this, the delivered pesticide results were wrong in
+> *all* runs, also in the ones that pass our plausibility check. **The results
+> are now redone:** all fields were re-run locally with both settings
+> corrected (5,609 fields with a full ten-year result), and all models were
+> retrained and retested on the corrected data the same day. Section 6 shows
+> the corrected numbers; the old ones are kept in `docs/results/delivered/`.
+> The water results (rain, runoff) and the methods did not change. Details:
+> section 5.
 
 ---
 
@@ -94,6 +97,9 @@ how much pesticide is washed off a field after spraying, and a small
    the owner's Windows PC. 30 test runs found the two wrong settings (Henry
    constant and reference soil moisture). A `rerun` command was written to
    redo all simulations with corrected settings.
+9. **Corrected data (23 Nov):** all folders with inputs re-run, quality
+   check, retraining and both evaluations redone, reports rewritten with the
+   corrected numbers.
 
 ---
 
@@ -148,14 +154,19 @@ cannot learn anything about which pesticide, which dose or which spray date.
 Also, "days since spraying" and "day of the year" are the same thing in this
 data, so their effects cannot be separated.
 
-**Key facts about the losses (measured, trusted data only; from the delivered
-simulations, so they will change after the re-run, see section 5):**
+**After the corrected re-run (23 Nov):** 5,609 fields have a full ten-year
+result (on 740 weather files); 1,335 fields stop with a PRZM calculation error
+and are missing; 13 input files are damaged.
+
+**Key facts about the losses (measured on the corrected simulations):**
 - A "rain day" is a day with at least 1 mm of rain. About 13 % of rain days
   produce runoff.
 - A "high-loss day" is defined as a day with at least 1 g/ha pesticide lost
-  (0.04 % of the dose). Such days are 0.17 % of rain days and carry 55 % of all
-  pesticide loss. This definition is ours and should be confirmed by Sarah.
-- 61 % of the loss happens in March, i.e. in the first weeks after spraying.
+  (0.04 % of the dose). Such days are 0.32 % of rain days (25,940 days; on the
+  delivered data 0.17 %). This definition is ours and should be confirmed by
+  the team's environmental scientist.
+- 58 % of the loss happens in March, i.e. in the first weeks after spraying,
+  and 23 % in April (delivered data: 61 % in March).
 
 ---
 
@@ -204,6 +215,11 @@ the numbers explode. Since 23 Nov we know that the runs it keeps are wrong too
 | Trusted pesticide data | 27,730 of 38,100 run-years (73 %) |
 | Trusted water data | all 3,958 runs |
 | Isolation Forest (unsupervised ML) on per-run summaries | flags 652 runs, finds only 52 % of the clearly broken ones. The physical rule is the better detector. |
+
+**On the corrected data** the trust rule is PRZM's own balance check (a run is
+used when its yearly balance error stays below 0.001 kg/ha; `audit --trust
+balance`). All 5,609 full runs pass. The old plausibility rule would still flag
+387 runs, but these are not faults (DATA_REPORT.md, section 6).
 
 ### 5.1 Local re-runs: two settings are wrong (23 Nov 2026)
 
@@ -289,17 +305,15 @@ sent; the contact goes through Sarah; updated 23 Nov):
 
 ## 6. The models (Tasks 2 and 3)
 
-> **Note (23 Nov 2026):** all pesticide numbers in this section (loss scores,
-> high-loss days, risk table, drivers, LSTM comparison, 45-year results) were
-> learned from the delivered, uncorrected simulations (section 5.1). They are
-> kept as the record of what was measured, but they will be redone on the
-> corrected simulations and are expected to change. The methods and the water
-> (runoff) results stay valid.
+All numbers in this section are from the corrected simulations (23 Nov 2026).
+The delivered-data numbers are in `docs/results/delivered/`; the main ones are
+compared in 6.4.
 
 ### 6.1 Feature table
-One row per rain day per run: 5.67 million rows, 4.19 million of them with
-trusted pesticide results. All inputs come from weather, spray history and
-soil; nothing from PRZM's output.
+One row per rain day per run: 8.20 million rows (8,200,903), all with usable
+pesticide results (delivered data: 5.67 million rows, of which only part was
+trusted). All inputs come from weather, spray history and soil; nothing from
+PRZM's output.
 
 - **Weather inputs:** rain today, yesterday, 2–3 days ago, in the previous 7 /
   14 / 30 days; temperature today, yesterday, mean of previous 7 days;
@@ -339,79 +353,100 @@ pesticide loss = runoff x concentration
   rain more than 90 % correlated. The files are neighbouring grid cells of the
   same decade with the same storms on the same days. The test was too easy.
 - On truly unseen years, the first runoff model (with calendar inputs and
-  large trees) scored R² 0.90, *below* the plain formula (0.93). It had
-  memorised storms by their date.
+  large trees) scored R² 0.90, *below* the plain formula (0.93; delivered
+  data, runoff is unchanged in the corrected data). It had memorised storms
+  by their date.
 - Fix: remove calendar inputs, give the model the formula as an input, use
   small trees, and test by **leaving out one application year at a time**
-  (1990–1998), always on weather files never used in training.
-- Lesson: millions of rows, but only ten years of regional weather. All 1,619
-  high-loss days in the test data fall on 86 dates.
+  (1990–1999 on the corrected data; 1990–1998 on the delivered data, where the
+  last year was never trusted), always on weather files never used in training.
+- Lesson: millions of rows, but only ten years of regional weather. All 6,066
+  high-loss days in the test data fall on 158 dates (delivered data: 1,619 on
+  86).
 - Three sets of models are trained: per held-out year (the honest score), one
   without 1992/1994/1996 (figures), and the final set on all years and files
   (saved in `models/`, used by the advisor; cannot be tested itself).
 
-### 6.4 Results (measured; nine held-out years pooled, range over the years in brackets)
+### 6.4 Results (measured on the corrected data; ten held-out years pooled, range over the years in brackets)
 
 | | Surrogate | Baseline |
 |---|---|---|
-| Water runoff, daily R² | 0.97 (0.92–0.99) | 0.92 (0.83–0.97), curve-number formula; beaten in all 9 years |
-| Pesticide loss, daily R² | 0.91 (0.75–0.97) | 0.49 (0.24–0.63) |
-| Sum of all loss, surrogate / PRZM | 0.92 (0.70–1.16) | – |
-| High-loss days, PR-AUC | 0.92 (0.79–0.98) | rain today 0.06; classifier 0.81 (0.50–0.99) |
-| Alarm "predicted loss ≥ 1 g/ha" | 1,341 alarms, 91 % real, 76 % of high-loss days found (36–92 % by year) | – |
-| Speed | about 0.01 s per 10-year run | PRZM: 2–4 s |
+| Water runoff, daily R² | 0.98 (0.92–0.99) | 0.94 (0.83–0.97), curve-number formula; beaten in all 10 years |
+| Pesticide loss, daily R² | 0.95 (0.89–0.99) | 0.12 (−8.3 to 0.83) |
+| Sum of all loss, surrogate / PRZM | 0.99 (0.86–1.12) | – |
+| High-loss days, PR-AUC | 0.97 (0.93–0.99) | rain today 0.10; classifier 0.94 (0.87–0.98) |
+| Alarm "predicted loss ≥ 1 g/ha" | 5,937 alarms, 92 % real, 90 % of high-loss days found (81–97 % by year) | – |
+| Speed (measured on the delivered data, not re-measured) | about 0.01 s per 10-year run | PRZM: 2–4 s |
+
+Delivered data vs corrected data (same test, headline numbers):
+
+| | Delivered (9 years) | Corrected (10 years) |
+|---|---|---|
+| Fields used | 3,958 | 5,609 |
+| Pesticide loss, daily R² | 0.91 (0.75–0.97) | 0.95 (0.89–0.99) |
+| Sum of all loss, surrogate / PRZM | 0.92 (0.70–1.16) | 0.99 (0.86–1.12) |
+| PR-AUC surrogate / classifier / rain rule | 0.92 / 0.81 / 0.06 | 0.97 / 0.94 / 0.10 |
+| Alarm: real / high-loss days found | 91 % / 76 % (36–92 %) | 92 % / 90 % (81–97 %) |
 
 Reading:
-- Runoff is reproduced almost perfectly.
-- Pesticide loss is harder and depends on the year, because a year's score is
-  decided by a handful of storms.
-- Total loss is underestimated by about 8 % (30 % in the worst year, 1991).
-  Before the change to amount-based training it was 15 % and R² was 0.87.
-- An alarm can be trusted; no alarm does not mean no risk.
+- Runoff is reproduced almost perfectly (and did not change with the correction).
+- Pesticide loss depends less on the year than before, but a year's score is
+  still decided by a handful of storms (worst year 1991, R² 0.89).
+- Over all years the total loss is almost exact (0.99); single years range
+  from 14 % too low (1997) to 12 % too high (1990). On the delivered data it
+  was 8 % too low overall and 30 % too low in the worst year.
+- An alarm can be trusted, and about nine in ten high-loss days are found.
+- The surrogate still beats the classifier on PR-AUC, but only in eight of the
+  ten years (not in 1996 and 1997).
 
-**Risk table (trusted simulation results):** chance that a rain day is a
-high-loss day. First week after spraying: 22 % at 10–20 mm rain, 93 % at
-20–30 mm, 100 % at 30–50 mm. Weeks 5–8: 13 % at 20–30 mm. Later: almost 0.
+**Risk table:** chance that a rain day is a high-loss day. First week after
+spraying: 22 % at 10–20 mm rain, 92 % at 20–30 mm, 100 % at 30–50 mm. Weeks
+5–8: 52 % at 20–30 mm (delivered data: 13 %). Weeks 9–16: 12 %. Later: almost 0.
 
-**Drivers (SHAP on the classifier, test years 1992 and 1996):** curve-number
-runoff of today's rain, temperature yesterday, days since spraying, rain
-today, evaporation in the previous week. SHAP shows what the model uses, and
-the model copies PRZM; "temperature yesterday" still needs an environmental
-explanation.
+**Drivers (SHAP on the classifier, test years 1992 and 1996):** rain since
+spraying, days since spraying, curve-number runoff of today's rain,
+evaporation in the previous week, rain today, heavy-rain days since spraying,
+topsoil organic carbon. SHAP shows what the model uses, and the model copies
+PRZM. "Temperature yesterday", second on the delivered data, is no longer in
+the top twelve.
 
 ### 6.5 Second surrogate: LSTM
-- A small LSTM (24,000 parameters, PyTorch, about 12 minutes on a laptop CPU).
+- A small LSTM (23,906 parameters, PyTorch, about 11 minutes on a laptop CPU).
   One sample = one run × one application year: 59 warm-up days plus 366 days.
   Inputs per day: rain, temperature, evaporation, curve number, curve-number
   runoff, days since spraying, plus the soil settings. Outputs per day: runoff
   and pesticide loss.
 - Compared with the trees on identical rows (test weather files, years 1992
-  and 1996; 278,370 rain days, 288 high-loss days):
+  and 1996; 402,049 rain days, 913 high-loss days; corrected data):
 
 | | Trees | LSTM |
 |---|---|---|
-| Runoff, daily R² | 0.98 | 0.98 |
-| Pesticide loss, daily R² | 0.93 | 0.94 |
-| Pesticide loss, R² of the logarithm (small losses) | 0.85 | 0.68 |
-| Sum of loss, surrogate / PRZM | 0.89 | 1.05 |
-| High-loss days, PR-AUC | 0.91 | 0.97 |
-| High-loss days found by the alarm | 78 % | 90 % |
+| Runoff, daily R² | 0.98 | 0.97 |
+| Pesticide loss, daily R² | 0.96 | 0.98 |
+| Pesticide loss, R² of the logarithm (small losses) | 0.96 | 0.44 |
+| Sum of loss, surrogate / PRZM | 1.03 | 0.92 |
+| High-loss days, PR-AUC | 0.95 | 0.99 |
+| Alarm: real / high-loss days found | 91 % / 89 % | 97.5 % / 90 % |
 
-- **Caution:** one test on two years, one random seed. Stopped after 25 epochs
-  instead of 44 the same LSTM scored only 0.79. It has not had the nine-year
-  test (about two hours). The advisor still uses the trees.
+- The LSTM is better on daily loss, high-loss days and alarm precision; the
+  trees are better on daily runoff, small losses and the total (the LSTM is
+  8 % too low).
+- **Caution:** one test on two years, one random seed, not the year-by-year
+  test. The advisor still uses the trees.
 
 ---
 
 ### 6.6 The surrogate on 45 years of real weather
-- `python -m runoffwatch france`: all 3,958 fields × application years 1979–2023 (178,110
-  field-years) with the Agri4Cast weather of each field's grid cell, spraying on 1 March.
-- Mean predicted loss per field and year: 1.23 g/ha (1979–2005), 1.49 (2006–2015), 2.00
-  (2016–2023). Worst year 2013 (3.5× a typical year), best 1990. The five worst years carry 26 %
-  of all loss. Do not read a climate trend into this.
-- For 2006–2015 it matches PRZM's yearly totals (R² 0.95 runoff, 0.99 loss), which is not a test
-  because the models were trained on those years. For the other 35 years no PRZM result exists.
-  11 % of field-years contain a rain day above 47 mm, where the surrogate is weakest.
+- `python -m runoffwatch france`: all 5,609 fields (740 grid cells) × application years
+  1979–2023 (252,405 field-years) with the Agri4Cast weather of each field's grid cell, spraying
+  on 1 March.
+- Mean predicted loss per field and year: 1.84 g/ha (1979–2005), 2.07 (2006–2015), 2.80
+  (2016–2023). Worst year 2022 (4.56 g/ha, 2.8× the median year), best 1997 (0.51 g/ha). The
+  five worst years carry 23 % of all loss. Do not read a climate trend into this.
+- For 2006–2015 it matches PRZM's yearly totals (R² 0.98 runoff, 0.99 loss, sum 1.00), which is
+  not a test because the models were trained on those years. For the other 35 years no PRZM
+  result exists. 10 % of field-years contain a rain day above 48 mm, beyond 99.9 % of the
+  training rain days.
 
 ---
 
@@ -583,14 +618,15 @@ Reports in `docs/`: `DATA_REPORT.md`, `MODEL_REPORT.md`, `RELATED_WORK.md`,
 1. The surrogate copies a model. Nothing was compared with measurements.
 2. One pesticide, one dose, one crop, one spray date.
 3. Field edge only; daily resolution.
-4. About 27 % of the pesticide run-years are unusable because of the simulator
-   problem. Since 23 Nov we know the kept run-years are wrong too (two wrong
-   input settings, section 5.1), so all pesticide results must be redone on
-   corrected simulations. The water results are not affected.
-5. Large losses are underestimated (8 % overall, more in years with extreme
-   storms); a quarter of the high-loss days are missed.
+4. The delivered pesticide results were wrong in all runs (two wrong input
+   settings, section 5.1); all results are now from the corrected re-run.
+   1,335 fields cannot be calculated by PRZM and are missing, so the sample
+   is no longer a clean random sample of the real fields.
+5. The total loss is right over all years (0.99 times PRZM's), but single
+   unseen years are 14 % too low to 12 % too high; about one high-loss day in
+   ten is missed (19 % in the worst year).
 6. Small effective sample: ten years of weather from one region.
-7. The LSTM result rests on one test.
+7. The LSTM result rests on one test on two years.
 8. Both corrections (Henry constant 0.37E-06, reference soil moisture 1) are
    the team's reading of the evidence from 30 test runs. The model owners in
    Landau have not confirmed them yet.
@@ -615,30 +651,33 @@ decks. New since 17 Nov:
   folders with inputs, 5,610 finished (all 3,958 that had results before,
   plus 1,652 that had none), 1,335 stop with a PRZM calculation error, 13
   have damaged input files. The command stops a failing run by itself (log
-  status `przm_error`). The corrected results are on the owner's PC in
-  `data/raw/runs_fixed/` and still have to be checked and analysed.
+  status `przm_error`).
+- The corrected results are checked (PRZM's balance is exact in all 5,609
+  full runs), the models are retrained and retested on the corrected data
+  (both the leave-one-year-out test and the single split, the LSTM
+  comparison and the 45-year run), and the reports are rewritten with the
+  corrected numbers. The delivered-data results are kept in
+  `docs/results/delivered/` and `docs/figures/delivered/`.
 
 Next, in this order:
-1. (Done) First try of `rerun --limit 20` on Windows.
-2. (Done) All 6,958 folders with inputs re-run.
-3. Redo qc, audit, features, train (and `train --cv`) and the reports on the
-   corrected data, and compare with the old numbers.
-4. Tell Sarah and the modelling group in Landau, and ask them to confirm both
-   corrections (the updated questions in section 5).
-5. Correct the statement from the first progress presentation that 73 % of
-   the data can be trusted: the plausibility check keeps 73 % of the
-   run-years, but those are wrong too.
+1. Confirmation from the modelling group in Landau of both corrections (the
+   updated questions in section 5; the contact goes through the team member
+   in Landau).
+2. New simulations with varied spray date and dose (and DT50, Koc), now
+   possible locally (section 8.1); then retrain with these as inputs.
+3. Presentation 2, with the corrected numbers. It should also correct the
+   statement from the first progress presentation that 73 % of the data can
+   be trusted: the plausibility check kept 73 % of the run-years, but those
+   were wrong too.
 
 Still open from before:
-- Year-by-year test for the LSTM (on the corrected data); if its lead holds,
-  make it the main surrogate.
-- New runs with varied spray date, dose, DT50 and Koc, now possible locally
-  (section 8.1) or, if permitted, in Landau; then retrain with these as
-  inputs.
+- Year-by-year test for the LSTM; if its lead holds, make it the main
+  surrogate.
+- Find out why 1,335 fields stop with a PRZM calculation error.
 - Check a sample of the 45-year predictions against PRZM runs on the same
   weather.
-- Sarah: confirm the high-loss definition; check whether the driver ranking
-  makes physical sense (after the re-run).
+- Team member in Landau: confirm the high-loss definition; check whether the
+  new driver ranking makes physical sense.
 - Verify the related-work entries; write the report; final slides.
 - Unknown: the course deadline.
 
