@@ -131,6 +131,8 @@ starting about 30 days before the first spray day. Then:
 python -m runoffwatch whatif --weather my_weather.csv --first-day 2027-03-01 --candidates 7
 ```
 
+Add `--dose 1.2` to give the dose in kg/ha (default 2.4); the app has a dose field too.
+
 ### Part B: from the raw data to the corrected results
 
 Do Part A, steps 1-3, first.
@@ -188,7 +190,7 @@ dose. By default each copy gets one of two spray windows (15 Feb to 30 Apr, or 1
 one of three doses (0.24, 1.20 or 2.40 kg/ha) and, inside its window, a different random spray day
 in each of the ten simulated years. With two copies, a field gets one spring and one autumn copy.
 
-This has not been tried with the real PRZM program yet. Try 10 fields first (that is 20 runs):
+A trial with 10 fields (20 runs) has worked with the real PRZM program. Try 10 fields first:
 
 ```bash
 python -m runoffwatch rerun --exe C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe --variants 2 --limit 10
@@ -209,9 +211,46 @@ on the seed, the field name and the copy number, so the same command always make
 and it can be stopped and started again. Other choices: `--spray-windows 15.02-30.04,01.10-30.11`,
 `--doses 0.24,1.20,2.40`, `--seed 1`.
 
-Not yet done: the analysis side (feature table, models, advisor) still assumes spraying on
-1 March in a few places (for example, application years start on 1 March). It has to be adapted
-once the varied runs exist.
+**Analysing the runs with varied spray dates and doses.** The analysis side can now handle these
+runs. The models get two more inputs: the day of the year of the last spraying and its dose. Do
+step 3 below for the corrected data first, because this data set also uses its results. Then run
+these commands in this order.
+
+The result folders made by `rerun --variants` come without the weather file. This command puts
+each field's weather file into them. It must run before `inventory`:
+
+```bash
+python -m runoffwatch add-weather
+```
+
+Then the usual steps, with `--dataset varied`:
+
+```bash
+python -m runoffwatch --dataset varied inventory
+```
+```bash
+python -m runoffwatch --dataset varied qc
+```
+```bash
+python -m runoffwatch --dataset varied audit
+```
+```bash
+python -m runoffwatch --dataset varied features
+```
+```bash
+python -m runoffwatch --dataset varied train
+```
+```bash
+python -m runoffwatch --dataset varied train --cv
+```
+
+The feature table holds the corrected runs (sprayed on 1 March) plus the copies with varied spray
+dates and doses. Models go to `models/varied/`, results to `docs/results/varied/` and figures to
+`docs/figures/varied/`, so nothing of the corrected data set is overwritten. `train` also writes
+`loss_by_spray_date.csv` and the figure `m9_loss_by_spray_date.png`: the share of the dose lost in
+the year after spraying, by half-month of spraying, straight from PRZM. `train --cv` adds scores
+per spray window and per dose. The LSTM comparison is not adapted: it refuses runs that are not
+sprayed on 1 March.
 
 Unconfirmed: the delivered dose of 2.4 kg/ha looks about ten times higher than usual field rates
 of flufenacet products (a few hundred grams per hectare). This comes from general knowledge and
@@ -260,7 +299,7 @@ set needs about 5 GB of free disk space (measured on the delivered data); both n
 | Command | What it does | Time |
 |---|---|---|
 | `pip install -e ".[lstm]"` then `python -m runoffwatch lstm` | Trains a second surrogate, an LSTM neural network, and compares it with the tree surrogate on the same test data | about 10-20 min |
-| `python -m runoffwatch france` | Runs the surrogate on the 1979-2024 Agri4Cast weather for France (needs `france_weather_1979_2024.csv` in `data/raw/france_weather/`; pass it with `--weather`) | about 8 min |
+| `python -m runoffwatch france` | Runs the surrogate on the 1979-2024 Agri4Cast weather for France (needs `france_weather_1979_2024.csv` in `data/raw/france_weather/`; pass it with `--weather`). `--spray DD.MM` and `--dose` set the spray day and dose of every year (default 01.03 and 2.4 kg/ha) | about 8 min |
 | `python -m runoffwatch design` | Writes run files for NEW simulations (varied spray date, dose, substance) into `data/design/`. Nothing is uploaded; see [docs/NEW_RUNS_PLAN.md](docs/NEW_RUNS_PLAN.md) | about 1 min |
 
 **Step 4. Look at the results.**

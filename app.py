@@ -103,11 +103,13 @@ d2.caption("Predicted pesticide loss (g/ha per day)"); d2.bar_chart(days["loss_g
 with st.expander("Limits: read before trusting a number", expanded=True):
     st.markdown("""
 - The model learned from **PRZM simulations**, not from field measurements. It tells you what PRZM would say.
-- All simulations used **one herbicide (Flufenacet), one dose (2400 g/ha), winter cereals, sprayed on 1 March**.
-  Other products, doses, crops or seasons are **not covered**.
+- All simulations are for **one herbicide (Flufenacet) on winter cereals**. Other products and crops are **not covered**.
+- Unless the models were trained on runs with varied spray dates and doses, they only know **spraying on
+  1 March with 2400 g/ha**: another dose is then scaled in proportion, and another season is a guess.
+  The app says so above the table when that is the case.
 - "Loss" is pesticide leaving the field edge with runoff water. What reaches a stream is not modelled.
-- Moving the spray day is itself new to the model: in every simulation "days since spraying" and
-  the calendar date moved together.
+- In the runs sprayed on 1 March, "days since spraying" and the calendar date move together, so
+  moving the spray day is new to models trained only on those runs.
 - The sliders change one soil property at a time. Real soils change several together; unusual
   combinations are not covered by the training runs.
 - On years it has not seen, the model underestimates total loss and can miss extreme storms.

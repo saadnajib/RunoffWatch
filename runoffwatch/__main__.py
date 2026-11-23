@@ -1,18 +1,22 @@
-"""Command line: python -m runoffwatch [--dataset corrected|delivered] <command> ...
+"""Command line: python -m runoffwatch [--dataset corrected|delivered|varied] <command> ...
 
-Two data sets (see runoffwatch/paths.py):
+Three data sets (see runoffwatch/paths.py):
   corrected  (default) the re-runs with the two corrected settings, in data/raw/runs_fixed/;
              results in data/interim_fixed/, data/processed/*_fixed.parquet, models/, docs/results/,
              docs/figures/; audit trusts a run when PRZM's own balance error is small
   delivered  the simulations as delivered, in data/raw/runs/ (two wrong settings);
              results in data/interim/, data/processed/, models/delivered/, docs/results/delivered/,
              docs/figures/delivered/; audit uses the envelope rule
+  varied     copies of the corrected runs with varied spray dates and doses, in data/raw/runs_varied/;
+             its feature table also holds the corrected runs; results in data/interim_varied/,
+             models/varied/, docs/results/varied/, docs/figures/varied/
 A path given on the command line always wins over the data set's default.
 
 Commands (run in this order):
   extract    unpack the .7z archives          -> data/raw/runs/ (always the delivered data)
   rerun      run PRZM again on your Windows PC with the two corrected settings -> data/raw/runs_fixed/
              with --variants N: N extra copies per field with varied spray dates and dose -> data/raw/runs_varied/
+  add-weather  put each field's weather file into the folders made by rerun --variants
   inventory  what differs between the runs?   -> <interim>/inventory_*.csv
   qc         quality-check every run          -> <interim>/runs_qc.csv (+ daily parquet)
   audit      Task 1: which results are trusted -> <interim>/run_quality.csv, <results>, <figures>
