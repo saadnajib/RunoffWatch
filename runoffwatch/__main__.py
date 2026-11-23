@@ -1,18 +1,22 @@
-"""Command line: python -m runoffwatch [--dataset corrected|delivered] <command> ...
+"""Command line: python -m runoffwatch [--dataset corrected|delivered|varied] <command> ...
 
-Two data sets (see runoffwatch/paths.py):
+Three data sets (see runoffwatch/paths.py):
   corrected  (default) the re-runs with the two corrected settings, in data/raw/runs_fixed/;
              results in data/interim_fixed/, data/processed/*_fixed.parquet, models/, docs/results/,
              docs/figures/; audit trusts a run when PRZM's own balance error is small
   delivered  the simulations as delivered, in data/raw/runs/ (two wrong settings);
              results in data/interim/, data/processed/, models/delivered/, docs/results/delivered/,
              docs/figures/delivered/; audit uses the envelope rule
+  varied     copies of the corrected runs with varied spray dates and doses, in data/raw/runs_varied/;
+             its feature table also holds the corrected runs; results in data/interim_varied/,
+             models/varied/, docs/results/varied/, docs/figures/varied/
 A path given on the command line always wins over the data set's default.
 
 Commands (run in this order):
   extract    unpack the .7z archives          -> data/raw/runs/ (always the delivered data)
   rerun      run PRZM again on your Windows PC with the two corrected settings -> data/raw/runs_fixed/
              with --variants N: N extra copies per field with varied spray dates and dose -> data/raw/runs_varied/
+  add-weather  put each field's weather file into the folders made by rerun --variants
   inventory  what differs between the runs?   -> <interim>/inventory_*.csv
   qc         quality-check every run          -> <interim>/runs_qc.csv (+ daily parquet)
   audit      Task 1: which results are trusted -> <interim>/run_quality.csv, <results>, <figures>
@@ -37,12 +41,12 @@ DATASET_ARGS = {
     "inventory": {"runs": "runs", "out": "interim"},
     "qc": {"runs": "runs", "out": "interim"},
     "audit": {"runs": "runs", "interim": "interim", "trust": "trust", "results": "results", "figures": "figures"},
-    "features": {"interim": "interim", "out": "features"},
+    "features": {"interim": "features_from", "out": "features"},
     "train": {"features": "features", "models": "models", "results": "results", "figures": "figures"},
     "lstm": {"interim": "interim", "features": "features", "models": "models", "results": "results",
              "figures": "figures"},
     "design": {"interim": "interim", "runs": "runs"},
-    "france": {"interim": "interim", "features": "features", "models": "models", "out": "france_out",
+    "france": {"interim": "fields_interim", "features": "features", "models": "models", "out": "france_out",
                "results": "results", "figures": "figures"},
     "whatif": {"models": "models"},
 }
@@ -79,7 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="rule that decides which pesticide results are trusted" + DS)
 
     fe = sub.add_parser("features", help="build the feature table (needs audit)")
-    fe.add_argument("--interim", default=None, help="interim folder" + DS)
+    fe.add_argument("--interim", default=None, nargs="+", help="one or more interim folders" + DS)
     fe.add_argument("--out", default=None, help="feature table" + DS)
 
     tr = sub.add_parser("train", help="Tasks 2+3: train and evaluate surrogate and classifier")
@@ -111,6 +115,8 @@ def build_parser() -> argparse.ArgumentParser:
     fr.add_argument("--weather", default="data/raw/france_weather/france_weather.parquet",
                     help="the Agri4Cast table (france_weather_1979_2024.csv, or a parquet copy)")
     fr.add_argument("--limit", type=int, help="only the first N fields (quick test)")
+    fr.add_argument("--spray", default="01.03", help="spray day of every year, day.month (default: 01.03)")
+    fr.add_argument("--dose", type=float, default=None, help="dose in kg/ha (default: 2.4)")
 
     wi = sub.add_parser("whatif", help="compare spray days for a weather table")
     wi.add_argument("--weather", help="CSV with date, rain_mm, temp_c[, pan_evap_mm]; omit for a made-up example")
@@ -118,6 +124,11 @@ def build_parser() -> argparse.ArgumentParser:
     wi.add_argument("--candidates", type=int, default=7, help="number of consecutive candidate days")
     wi.add_argument("--horizon", type=int, default=14, help="days after spraying to add up")
     wi.add_argument("--models", default=None, help="model folder" + DS)
+    wi.add_argument("--dose", type=float, default=2.4, help="dose in kg/ha (default: 2.4)")
+
+    aw = sub.add_parser("add-weather", help="put each field's weather file into result folders that came without it")
+    aw.add_argument("--runs", default="data/raw/runs_varied", help="result folders made by `rerun --variants`")
+    aw.add_argument("--source", default="data/raw/runs", help="the original run folders, which hold the weather files")
 
     rr = sub.add_parser("rerun", help="run PRZM again on Windows with corrected Henry constant and moisture setting")
     rr.add_argument("--exe", required=True, help=r"path to WINPRZM.exe, e.g. C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe")
@@ -224,6 +235,9 @@ def main(argv=None) -> int:
               f"trusted pesticide data: {s['clean_run_years']:.0f} of {s['total_run_years']:.0f} run-years")
         print(f"details: {Path(a.interim) / 'run_quality.csv'}, {Path(a.results) / 'quality_summary.json'}, "
               f"{Path(a.figures) / 'q*.png'}")
+    elif a.cmd == "add-weather":
+        n = batch.add_weather(a.runs, a.source)
+        print(f"weather file added to {n} result folders under {a.runs}")
     elif a.cmd == "features":
         from .features import build_feature_table
         t = build_feature_table(a.interim, a.out)
@@ -259,8 +273,10 @@ def main(argv=None) -> int:
     elif a.cmd == "france":
         import json
         from .longrun import run_france
+        day, month = (int(x) for x in a.spray.split("."))
+        extra = {} if a.dose is None else {"rate_kgha": a.dose}
         m = run_france(a.weather, interim=a.interim, features_path=a.features, model_dir=a.models, out_path=a.out,
-                       results=a.results, figures=a.figures, limit=a.limit)
+                       results=a.results, figures=a.figures, limit=a.limit, app_day=day, app_month=month, **extra)
         print(json.dumps(m, indent=2))
         res, fig = Path(a.results), Path(a.figures)
         print(f"per year: {res / 'france_by_year.csv'} | per grid cell: {res / 'france_by_grid.csv'} | "
@@ -271,7 +287,7 @@ def main(argv=None) -> int:
         w = prepare_weather(pd.read_csv(a.weather) if a.weather else example_weather())
         first = pd.Timestamp(a.first_day) if a.first_day else w.index[min(30, len(w) - 2)]
         cands = [d for d in pd.date_range(first, periods=a.candidates) if d in w.index]
-        table = compare_spray_days(w, cands, a.horizon, model_dir=a.models)
+        table = compare_spray_days(w, cands, a.horizon, model_dir=a.models, rate_kgha=a.dose)
         print(table.to_string(index=False))
         ranked = table[table["rank"].notna()].sort_values("predicted_loss_gha")
         if len(ranked):
@@ -279,7 +295,8 @@ def main(argv=None) -> int:
             print(f"\nLowest predicted loss: spray on {best.spray_date} ({best.predicted_loss_gha} g/ha in {a.horizon} days).")
         for note in table.attrs["notes"]:
             print("NOTE:", note)
-        print("Valid only for Flufenacet, 2400 g/ha, winter cereals, sprayed around 1 March (see docs/MODEL_REPORT.md).")
+        print(f"Dose: {a.dose:g} kg/ha. Valid only for Flufenacet on winter cereals, and for spray dates and doses "
+              "like those in the training runs (see docs/MODEL_REPORT.md).")
     elif a.cmd == "run":
         from .report import analyze_run
         analyze_run(a.folder, a.out)

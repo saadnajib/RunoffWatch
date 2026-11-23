@@ -293,3 +293,22 @@ def france_figures(by_year: pd.DataFrame, by_grid: pd.DataFrame, out: Path) -> N
     ax.set_title("Mean predicted loss per weather grid cell, 1979-2023", loc="left", color=INK, fontsize=12)
     _style(ax, "both")
     _save(fig, out / "f2_france_map.png")
+
+
+def spray_date_figure(by_spray: pd.DataFrame, out: Path) -> None:
+    """Share of the dose lost with runoff in the year after spraying, by half-month of spraying (PRZM itself)."""
+    if by_spray is None or len(by_spray) == 0:
+        return
+    t = by_spray.sort_index()
+    labels = [str(i).split(" ", 1)[1].replace(" ", "\n") for i in t.index]
+    autumn = np.array([int(str(i)[:2]) >= 9 for i in t.index])
+    fig, ax = plt.subplots(figsize=(8.5, 4.2))
+    bars = ax.bar(labels, t["mean_pct_of_dose_lost"], color=np.where(autumn, ORANGE, BLUE), width=0.7)
+    for b, v, n in zip(bars, t["mean_pct_of_dose_lost"], t["seasons"]):
+        ax.text(b.get_x() + b.get_width() / 2, v, f"{v:.2f} %", ha="center", va="bottom", color=INK, fontsize=10)
+        ax.text(b.get_x() + b.get_width() / 2, 0, f"n={int(n):,}", ha="center", va="bottom", color="white", fontsize=8)
+    ax.set_ylabel("Mean share of the dose lost (%)"); ax.set_xlabel("Sprayed in")
+    ax.set_title("Loss with runoff in the year after spraying, by spray date (PRZM)", loc="left", color=INK, fontsize=12)
+    _style(ax)
+    _save(fig, out / "m9_loss_by_spray_date.png")
+

@@ -86,6 +86,12 @@ def build_dataset(interim: str | Path = "data/interim", limit: int | None = None
     interim = Path(interim)
     rq = pd.read_csv(interim / "run_quality.csv", index_col="run", parse_dates=["clean_until"])
     rq = rq[rq["clean_until"].notna() & rq["usle_k"].notna()]
+    varies = rq["app_varies_between_years"].fillna(False).astype(bool) if "app_varies_between_years" in rq else False
+    on_first_march = ((rq["app_day"] == 1) & (rq["app_month"] == 3)).all() if {"app_day", "app_month"} <= set(rq.columns) else True
+    if np.any(varies) or not on_first_march:
+        raise NotImplementedError("The LSTM comparison is written for runs sprayed on 1 March every year "
+                                  "(its sequences start 59 days before 1 March). It has not been adapted to "
+                                  "runs with varied spray dates; use the tree models for those.")
     runs = list(rq.index)[:limit]
     files = split_by_weather(rq.loc[runs, "met_hash"])
     soil = rq.loc[runs, SOIL_FEATURES].astype(float)
@@ -228,7 +234,7 @@ def train_and_compare(interim: str | Path = "data/interim", features_path: str |
     from sklearn.metrics import average_precision_score
 
     from .features import CONC_FEATURES, RUNOFF_FEATURES
-    from .models import fit_conc, fit_runoff, split_rows
+    from .models import fit_conc, fit_runoff, predict_loss, split_rows
 
     t0 = time.perf_counter()
     data = build_dataset(interim, limit)
@@ -248,7 +254,7 @@ def train_and_compare(interim: str | Path = "data/interim", features_path: str |
     te = te.copy()
     te["run"] = te["run"].astype(str)
     te["runoff_trees"] = runoff.predict(te[RUNOFF_FEATURES])
-    te["loss_trees"] = te["runoff_trees"] * conc.predict(te[CONC_FEATURES])
+    te["loss_trees"] = predict_loss(conc, te, te["runoff_trees"])
     te = te.merge(pred, on=["run", "date"], how="inner")
     tc = te[te["pest_clean"]]
     pos = tc["high_loss"].to_numpy()

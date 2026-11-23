@@ -68,3 +68,53 @@ def test_fit_predict_and_compare(interim, tmp_path):
     for key in ("lstm", "trees"):
         assert np.isfinite(out[key]["runoff"]["r2_daily"]) and np.isfinite(out[key]["loss"]["r2_daily"])
     assert out["trees"]["runoff"]["r2_daily"] > 0.5            # the known synthetic relation is learnable
+
+
+# --------------------------------------------------------------------------- #
+# Runs not sprayed on 1 March are refused
+# --------------------------------------------------------------------------- #
+import shutil  # noqa: E402
+
+
+def _with_columns(interim, tmp_path, **cols):
+    """A copy of the run table (and its daily files) with extra columns; a list gives one value per run."""
+    root = tmp_path / "interim"
+    shutil.copytree(interim, root)
+    rq = pd.read_csv(root / "run_quality.csv")
+    for k, v in cols.items():
+        rq[k] = v
+    rq.to_csv(root / "run_quality.csv", index=False)
+    return root
+
+
+@pytest.mark.parametrize("cols", [
+    {"app_day": 15, "app_month": 10},
+    {"app_day": 1, "app_month": 4},
+    {"app_day": [1] * 19 + [2], "app_month": 3},                    # one run on another day is enough
+    {"app_day": 1, "app_month": 3, "app_varies_between_years": [False] * 19 + [True]},
+    {"app_varies_between_years": True},                              # without day and month columns
+])
+def test_build_dataset_refuses_runs_not_sprayed_on_1_march(interim, tmp_path, cols):
+    root = _with_columns(interim, tmp_path, **cols)
+    with pytest.raises(NotImplementedError, match="1 March"):
+        lstm.build_dataset(root)
+
+
+def test_build_dataset_accepts_runs_on_1_march_with_the_columns(interim, tmp_path):
+    root = _with_columns(interim, tmp_path, app_day=1, app_month=3, app_varies_between_years=False)
+    got, ref = lstm.build_dataset(root), lstm.build_dataset(interim)
+    np.testing.assert_array_equal(got["X"], ref["X"])
+    pd.testing.assert_frame_equal(got["meta"], ref["meta"])
+
+
+def test_build_dataset_missing_varies_value_counts_as_not_varying(interim, tmp_path):
+    root = _with_columns(interim, tmp_path, app_day=1, app_month=3,
+                         app_varies_between_years=[np.nan] * 10 + [False] * 10)
+    assert len(lstm.build_dataset(root)["meta"]) > 0
+
+
+def test_train_and_compare_refuses_varied_runs(interim, tmp_path):
+    root = _with_columns(interim, tmp_path, app_day=15, app_month=10)
+    with pytest.raises(NotImplementedError):
+        lstm.train_and_compare(root, tmp_path / "features.parquet", model_dir=tmp_path, results=tmp_path,
+                               figures=tmp_path, epochs=1, threads=1)

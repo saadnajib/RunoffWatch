@@ -148,3 +148,84 @@ def test_cli_inventory_and_qc(two_batches, tmp_path, capsys):
     assert main(["qc", "--runs", str(root), "--out", str(out), "--workers", "1", "--no-daily"]) == 0
     assert "unstable: 1" in capsys.readouterr().out
     assert not (out / "daily").exists()
+
+
+# --------------------------------------------------------------------------- #
+# add_weather: weather files for result folders made by `rerun --variants`
+# --------------------------------------------------------------------------- #
+import logging  # noqa: E402
+
+MET = "focusprzm_weather.met"
+
+
+def _folder(path, met_text=None, extra=("RUN 1-1_A.ZTS",)):
+    path.mkdir(parents=True)
+    for name in extra:
+        (path / name).write_text("results\n")
+    if met_text is not None:
+        (path / MET).write_text(met_text)
+    return path
+
+
+@pytest.fixture
+def varied_tree(tmp_path):
+    src, res = tmp_path / "runs", tmp_path / "runs_varied"
+    _folder(src / "batch_a" / "run_0000001_grid_000001", "weather 1\n")
+    _folder(src / "batch_b" / "deeper" / "run_0000002_grid_000002", "weather 2\n")
+    v = {
+        "copy1": _folder(res / "batch_x" / "run_0000001_grid_000001__v1"),
+        "copy2": _folder(res / "batch_x" / "run_0000001_grid_000001__v2"),
+        "other": _folder(res / "batch_y" / "run_0000002_grid_000002__v1"),
+        "has": _folder(res / "batch_y" / "run_0000002_grid_000002__v2", "my own weather\n"),
+        "plain": _folder(res / "batch_y" / "run_0000002_grid_000002"),
+        "orphan": _folder(res / "batch_y" / "run_0000099_grid_000099__v1"),
+    }
+    return src, res, v
+
+
+def test_add_weather(varied_tree, caplog):
+    src, res, v = varied_tree
+    with caplog.at_level(logging.WARNING, logger="runoffwatch"):
+        n = batch.add_weather(res, src)
+    assert n == 4
+    assert (v["copy1"] / MET).read_text() == "weather 1\n"
+    assert (v["copy2"] / MET).read_text() == "weather 1\n"
+    assert (v["other"] / MET).read_text() == "weather 2\n"            # found deeper under the source root
+    assert (v["plain"] / MET).read_text() == "weather 2\n"            # a folder without __vN uses its own name
+    assert (v["has"] / MET).read_text() == "my own weather\n"         # left alone
+    assert sorted(p.name for p in v["has"].iterdir()) == ["RUN 1-1_A.ZTS", MET]
+    assert not any(p.suffix == ".met" for p in v["orphan"].iterdir())  # no source: only a warning
+    assert any("run_0000099_grid_000099__v1" in r.getMessage() for r in caplog.records)
+    # the source files are untouched, and a second call has nothing left to do except the orphan
+    assert (src / "batch_a" / "run_0000001_grid_000001" / MET).read_text() == "weather 1\n"
+    assert batch.add_weather(res, src) == 0
+
+
+def test_add_weather_uppercase_met_counts_as_present(tmp_path):
+    src, res = tmp_path / "src", tmp_path / "res"
+    _folder(src / "b" / "run_1_grid_1", "w\n")
+    d = _folder(res / "b" / "run_1_grid_1__v1", extra=("OLD.MET",))
+    assert batch.add_weather(res, src) == 0
+    assert sorted(p.name for p in d.iterdir()) == ["OLD.MET"]
+
+
+def test_add_weather_only_looks_two_levels_deep(tmp_path):
+    """Result folders are <results_root>/<batch>/<field>__vN; a folder directly under the root is a batch."""
+    src, res = tmp_path / "src", tmp_path / "res"
+    _folder(src / "b" / "run_1_grid_1", "w\n")
+    top = _folder(res / "run_1_grid_1__v1")
+    assert batch.add_weather(res, src) == 0
+    assert not (top / MET).exists()
+
+
+def test_add_weather_empty_roots(tmp_path):
+    (tmp_path / "a").mkdir(); (tmp_path / "b").mkdir()
+    assert batch.add_weather(tmp_path / "a", tmp_path / "b") == 0
+
+
+def test_cli_add_weather(varied_tree, capsys):
+    src, res, v = varied_tree
+    assert main(["add-weather", "--runs", str(res), "--source", str(src)]) == 0
+    assert "weather file added to 4 result folders" in capsys.readouterr().out
+    assert (v["copy1"] / MET).exists()
+

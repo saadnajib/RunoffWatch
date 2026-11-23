@@ -321,3 +321,424 @@ def test_yearly_cv_smoke(trained, tmp_path):
     assert 0 <= out["pooled"]["pr_auc_surrogate"] <= 1
     lo, hi = out["range_over_years"]["runoff_r2"]
     assert lo <= out["pooled"]["runoff_r2"] + 0.2 and lo <= hi
+
+
+# --------------------------------------------------------------------------- #
+# Dose and spray date in the models
+# --------------------------------------------------------------------------- #
+from runoffwatch.features import CONC_FEATURES, DEFAULT_RATE_KGHA, RUNOFF_FEATURES  # noqa: E402
+
+
+def _table(n=2000, seed=0, dose=2.4, water_row=None):
+    """Small synthetic feature table with every model input and a known loss per kg/ha sprayed."""
+    rng = np.random.default_rng(seed)
+    t = pd.DataFrame({c: rng.uniform(0, 1, n) for c in CLASSIFIER_FEATURES})
+    t["rain_mm"] = rng.gamma(1.0, 10.0, n) + 1
+    t["cn_runoff_mm"] = np.clip(t["rain_mm"] - 10, 0, None) * 0.3
+    t["days_since_app"] = rng.integers(0, 300, n).astype(float)
+    t["app_doy"] = 60.0
+    t["app_rate_kgha"] = dose
+    t["runoff_mm"] = np.clip(t["rain_mm"] - 10, 0, None) * 0.2
+    t["loss_gha"] = t["runoff_mm"] * 2.0 * np.exp(-0.02 * t["days_since_app"]) * t["app_rate_kgha"]
+    t["pest_clean"] = True
+    t["high_loss"] = t["loss_gha"] >= HIGH_LOSS_GHA
+    if water_row is not None:
+        t["water_row"] = water_row
+    return t
+
+
+def test_rate_water_and_conc_helpers():
+    t = _table(10, dose=1.2)
+    np.testing.assert_array_equal(models._rate(t), np.full(10, 1.2))
+    np.testing.assert_array_equal(models._rate(t.drop(columns="app_rate_kgha")), np.full(10, DEFAULT_RATE_KGHA))
+    assert models._water(t) is t                                         # no column: every row
+    w = t.assign(water_row=[True, False] * 5)
+    assert len(models._water(w)) == 5 and models._water(w)["water_row"].all()
+    t = pd.DataFrame({"loss_gha": [2.4, 1.2, -1.0, 0.0], "runoff_mm": [1.0, 2.0, 1.0, 3.0],
+                      "app_rate_kgha": [2.4, 0.6, 1.0, 1.0]})
+    np.testing.assert_allclose(models._conc(t), [1.0, 1.0, 0.0, 0.0])      # per mm and per kg/ha, never negative
+    np.testing.assert_allclose(models._conc(t.drop(columns="app_rate_kgha")), [1.0, 0.25, 0.0, 0.0])
+
+
+def test_conc_target_unchanged_when_loss_and_dose_double():
+    t = _table(200)
+    t2 = t.assign(loss_gha=2 * t["loss_gha"], app_rate_kgha=2 * t["app_rate_kgha"])
+    c = models._conc_rows(t)
+    pd.testing.assert_series_equal(models._conc(c), models._conc(models._conc_rows(t2)))
+
+
+def test_doubled_dose_gives_doubled_loss():
+    """Doubling every loss together with the dose leaves the concentration target as it is, so a
+    model trained on the original table predicts doubled losses for the doubled dose."""
+    t = _table(2000)
+    t2 = t.assign(loss_gha=2 * t["loss_gha"], app_rate_kgha=2 * t["app_rate_kgha"])
+    conc = models.fit_conc(t, rounds=15)
+    conc2 = models.fit_conc(t2, rounds=15)
+    rows = _table(300, seed=5)
+    rows2 = rows.assign(app_rate_kgha=2 * rows["app_rate_kgha"])
+    loss = models.predict_loss(conc, rows, rows["runoff_mm"])
+    assert loss.sum() > 0
+    np.testing.assert_allclose(models.predict_loss(conc, rows2, rows2["runoff_mm"]), 2 * loss, rtol=1e-9)
+    # the model trained on the doubled table is the same model
+    np.testing.assert_allclose(conc2.predict(rows[CONC_FEATURES]), conc.predict(rows[CONC_FEATURES]), rtol=1e-9)
+    np.testing.assert_allclose(models.predict_loss(conc2, rows2, rows2["runoff_mm"]), 2 * loss, rtol=1e-9)
+
+
+def test_predict_loss_is_runoff_times_conc_times_dose():
+    t = _table(1000)
+    conc = models.fit_conc(t, rounds=10)
+    rows = _table(50, seed=3).assign(app_rate_kgha=np.linspace(0.1, 3.0, 50))
+    runoff = np.linspace(0, 5, 50)
+    expect = runoff * conc.predict(rows[CONC_FEATURES]) * rows["app_rate_kgha"].to_numpy()
+    np.testing.assert_allclose(models.predict_loss(conc, rows, runoff), expect)
+    assert models.predict_loss(conc, rows, pd.Series(runoff)).shape == (50,)
+
+
+@pytest.mark.parametrize("kind, raw, rate, expected", [
+    (models.CONC_OUTPUT, [0.5, 1.0], 2.0, [1.0, 2.0]),                      # per kg/ha: raw x dose
+    ("g_per_ha_per_mm", [0.6, 1.2], 1.2, [0.3, 0.6]),                       # older: raw x dose / 2.4
+    ("g_per_ha_per_mm", [0.6, 1.2], 2.4, [0.6, 1.2]),
+    (None, [0.0, -1.0], 2.4, [1.0, 0.1]),                                   # first models: log10
+    ("log10", [1.0], 4.8, [20.0]),
+])
+def test_conc_per_mm_three_kinds_of_model(kind, raw, rate, expected):
+    meta = {} if kind is None else {"conc_output": kind}
+    np.testing.assert_allclose(models.conc_per_mm(meta, raw, rate), expected)
+
+
+def test_conc_per_mm_with_one_dose_per_row():
+    got = models.conc_per_mm({"conc_output": models.CONC_OUTPUT}, [1.0, 1.0, 2.0], [0.5, 1.0, 2.0])
+    np.testing.assert_allclose(got, [0.5, 1.0, 4.0])
+    assert models.CONC_OUTPUT == "g_per_ha_per_mm_per_kg_applied"
+
+
+def test_spray_window():
+    doy = [1, 31, 32, 60, 121, 122, 200, 273, 274, 300, 335, 336, 366, np.nan]
+    assert list(models.spray_window(doy)) == (
+        ["other", "other"] + ["spring (Feb-Apr)"] * 3 + ["other"] * 3 + ["autumn (Oct-Nov)"] * 3
+        + ["other"] * 3)
+    assert models.spray_window(60.0).item() == "spring (Feb-Apr)"
+
+
+def _capture_fit(monkeypatch):
+    seen = []
+    real = models._fit
+
+    def spy(params, Xtr, ytr, Xva=None, yva=None, rounds=1500, patience=40, wtr=None, wva=None):
+        seen.append({"Xtr": Xtr, "ytr": ytr, "Xva": Xva, "yva": yva})
+        return real(params, Xtr, ytr, Xva, yva, rounds=rounds, patience=patience, wtr=wtr, wva=wva)
+
+    monkeypatch.setattr(models, "_fit", spy)
+    return seen
+
+
+def test_fit_runoff_uses_only_water_rows(monkeypatch):
+    seen = _capture_fit(monkeypatch)
+    water = np.arange(1000) % 3 == 0
+    tr = _table(1000, water_row=water)
+    tr.loc[~water, "runoff_mm"] = 500.0                  # copies would teach nonsense if they were used
+    va = _table(300, seed=1, water_row=np.arange(300) % 2 == 0)
+    booster = models.fit_runoff(tr, va, rounds=20)
+    assert len(seen[0]["Xtr"]) == water.sum() and len(seen[0]["Xva"]) == 150
+    assert list(seen[0]["Xtr"].columns) == RUNOFF_FEATURES
+    assert (seen[0]["ytr"] < 500).all()
+    assert booster.predict(tr.loc[water, RUNOFF_FEATURES]).max() < 100
+    # without the column every row is used
+    models.fit_runoff(tr.drop(columns="water_row"), rounds=5)
+    assert len(seen[-1]["Xtr"]) == 1000 and seen[-1]["Xva"] is None
+
+
+def test_fit_classifier_thins_negatives_keeps_positives(monkeypatch):
+    seen = _capture_fit(monkeypatch)
+    monkeypatch.setattr(models, "MAX_CLASSIFIER_ROWS", 300)
+    t = _table(2000)
+    t["high_loss"] = np.arange(2000) % 20 == 0           # 100 positives
+    t.loc[t.index[-200:], "pest_clean"] = False          # never used, thinned or not
+    t.loc[t.index[-200:], "high_loss"] = True
+    models.fit_classifier(t, rounds=5)
+    X, y = seen[0]["Xtr"], seen[0]["ytr"]
+    clean_pos = t.index[t["pest_clean"] & t["high_loss"]]
+    assert set(clean_pos) <= set(X.index) and int(y.sum()) == len(clean_pos) == 90
+    assert set(X.index) <= set(t.index[t["pest_clean"]])
+    assert 200 <= len(X) <= 420                          # about MAX_CLASSIFIER_ROWS rows
+    # the same rows every time (fixed seed)
+    models.fit_classifier(t, rounds=5)
+    assert list(seen[1]["Xtr"].index) == list(X.index)
+
+
+def test_fit_classifier_below_limit_uses_every_clean_row(monkeypatch):
+    seen = _capture_fit(monkeypatch)
+    t = _table(500)
+    t["high_loss"] = np.arange(500) % 10 == 0
+    t.loc[t.index[:50], "pest_clean"] = False
+    models.fit_classifier(t, rounds=5)
+    assert len(seen[0]["Xtr"]) == 450
+
+
+def test_group_scores():
+    P = pd.DataFrame({"loss_gha": [0.5, 2.0, 3.0, 0.0, 0.0, 4.0],
+                      "loss_pred": [0.4, 1.5, 0.5, 0.0, 0.1, 3.0],
+                      "high_loss": [False, True, True, False, False, True]})
+    out = models._group_scores(P, pd.Series(["a", "a", "a", "b", "b", "c"]))
+    assert set(out) == {"a", "b", "c"}
+    a = out["a"]
+    assert a["rows"] == 3 and a["high_loss_days"] == 2
+    assert a["loss_total_pred_over_true"] == pytest.approx(2.4 / 5.5)
+    assert a["alarm_precision"] == 1.0 and a["alarm_recall"] == 0.5
+    assert 0 <= a["pr_auc_surrogate"] <= 1 and a["loss_r2"] is not None
+    b = out["b"]                                         # no loss, no positives, no alarms
+    assert b["loss_total_pred_over_true"] is None and b["pr_auc_surrogate"] is None
+    assert b["alarm_precision"] is None and b["alarm_recall"] is None
+    assert out["c"]["loss_r2"] is None                   # one row: no R2
+    json.dumps(out)                                      # goes into cv_summary.json
+    # numeric group keys become strings
+    assert set(models._group_scores(P, pd.Series([2.4, 2.4, 2.4, 0.6, 0.6, 0.6]))) == {"0.6", "2.4"}
+
+
+def _seasons(rows):
+    """rows: (run, season, app_doy, rate, last_day, loss_gha per row list)."""
+    out = []
+    for run, season, doy, rate, last_day, losses in rows:
+        for i, loss in enumerate(losses):
+            out.append({"run": run, "app_season": float(season), "app_doy": float(doy), "app_rate_kgha": rate,
+                        "days_since_app": float(last_day if i == len(losses) - 1 else i), "loss_gha": loss,
+                        "high_loss": loss >= HIGH_LOSS_GHA})
+    return pd.DataFrame(out)
+
+
+def test_loss_by_spray_date():
+    clean = _seasons([
+        ("r1", 1990, 60, 2.4, 350, [12.0, 12.0]),        # 1 March: 24 g of 2400 g = 1 %
+        ("r2", 1990, 70, 1.2, 320, [6.0]),                # 11 March: 6 g of 1200 g = 0.5 %
+        ("r1", 1991, 288, 2.4, 330, [2.4]),               # 15 October: 0.1 %
+        ("r2", 1991, 289, 0.6, 330, [3.0]),               # 16 October: 0.5 %
+        ("r3", 1990, 60, 2.4, 299, [500.0]),              # cut off by the end of the run: left out
+    ])
+    out = models.loss_by_spray_date(clean)
+    assert list(out.index) == ["03 Mar 1-15", "10 Oct 1-15", "10 Oct 16-end"]
+    assert out.loc["03 Mar 1-15", "seasons"] == 2
+    assert out.loc["03 Mar 1-15", "mean_pct_of_dose_lost"] == pytest.approx(0.75)
+    assert out.loc["03 Mar 1-15", "median_pct_of_dose_lost"] == pytest.approx(0.75)
+    assert out.loc["03 Mar 1-15", "mean_loss_gha"] == pytest.approx(15.0)
+    assert out.loc["10 Oct 1-15", "mean_pct_of_dose_lost"] == pytest.approx(0.1)
+    assert out.loc["10 Oct 16-end", "mean_pct_of_dose_lost"] == pytest.approx(0.5)
+    assert {"p90_pct_of_dose_lost"} <= set(out.columns)
+
+
+def test_loss_by_spray_date_same_label_in_leap_years():
+    """15 March is in the first half of March, also in a leap year (day of the year 75 instead of 74)."""
+    sprayed = [pd.Timestamp("1991-03-15"), pd.Timestamp("1992-03-15"), pd.Timestamp("1992-03-16")]
+    clean = _seasons([(f"r{i}", d.year, d.dayofyear, 2.4, 330, [2.4]) for i, d in enumerate(sprayed)])
+    out = models.loss_by_spray_date(clean)
+    assert out.loc["03 Mar 1-15", "seasons"] == 2
+    assert out.loc["03 Mar 16-end", "seasons"] == 1
+
+
+def test_loss_by_spray_date_empty_cases():
+    clean = _seasons([("r1", 1990, 60, 2.4, 350, [1.0])])
+    for col in ("app_season", "app_doy", "app_rate_kgha"):
+        assert models.loss_by_spray_date(clean.drop(columns=col)).empty
+    short = _seasons([("r1", 1990, 60, 2.4, 200, [1.0])])
+    assert models.loss_by_spray_date(short).empty
+
+
+def test_train_all_writes_spray_outputs_and_meta(trained):
+    root = trained["root"]
+    meta = json.loads((root / "models" / "meta.json").read_text())
+    assert meta["conc_output"] == models.CONC_OUTPUT
+    assert meta["conc_features"] == CONC_FEATURES and meta["runoff_features"] == RUNOFF_FEATURES
+    on = meta["trained_on"]
+    assert on["doses_kgha"] == [2.4]
+    assert set(on["spray_days_seen"]) == {60, 61}                  # 1 March in common and leap years
+    assert on["spray_day_of_year"] == [60, 61]
+    by_spray = pd.read_csv(root / "results" / "loss_by_spray_date.csv", index_col=0)
+    assert list(by_spray.index) == ["03 Mar 1-15"] and by_spray["seasons"].iloc[0] > 0
+    assert (root / "figures" / "m9_loss_by_spray_date.png").stat().st_size > 0
+    m = trained["metrics"]["final_models"]
+    assert m["rain_day_rows_one_run_per_field"] == m["rain_day_rows"]   # no copies in this table
+
+
+def test_yearly_cv_scores_by_spray_window_and_dose(trained, tmp_path):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        out = models.yearly_cv(trained["root"] / "features.parquet", results=tmp_path, figures=tmp_path, rounds=5)
+    assert set(out["by_spray_window"]) == {"spring (Feb-Apr)"}
+    assert set(out["by_dose_kgha"]) == {"2.4"}
+    assert out["by_dose_kgha"]["2.4"]["rows"] == out["rows_scored"]
+    saved = json.loads((tmp_path / "cv_summary.json").read_text())
+    assert saved["by_spray_window"] == out["by_spray_window"]
+
+
+# --------------------------------------------------------------------------- #
+# what-if with a dose and with models that know several spray days
+# --------------------------------------------------------------------------- #
+def _with_meta(trained, **trained_on):
+    m = dict(trained["models"])
+    meta = json.loads(json.dumps(m["meta"]))
+    meta["trained_on"].update(trained_on)
+    m["meta"] = meta
+    return m
+
+
+def _predict(w, day, m, **kw):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return whatif.predict_days(w, day, models=m, **kw)
+
+
+def test_predict_days_loss_scales_with_dose(trained):
+    w = whatif.example_weather()
+    base = _predict(w, WEATHER_SPRAY, trained["models"])
+    half = _predict(w, WEATHER_SPRAY, trained["models"], rate_kgha=1.2)
+    assert base["loss_gha"].sum() > 0
+    np.testing.assert_allclose(half["runoff_mm"], base["runoff_mm"])
+    np.testing.assert_allclose(half["loss_gha"], base["loss_gha"] / 2, rtol=1e-9)
+    assert any("scaled in proportion" in n for n in half.attrs["notes"])
+    assert not any("kg/ha" in n for n in base.attrs["notes"])
+    with pytest.warns(UserWarning, match="scaled in proportion"):
+        whatif.predict_days(w, WEATHER_SPRAY, models=trained["models"], rate_kgha=0.24)
+
+
+@pytest.mark.parametrize("dose", [0, -1.0, np.nan])
+def test_predict_days_refuses_dose_not_above_zero(trained, dose):
+    with pytest.raises(ValueError, match="dose"):
+        whatif.predict_days(whatif.example_weather(), WEATHER_SPRAY, models=trained["models"], rate_kgha=dose)
+    with pytest.raises(ValueError, match="dose"):
+        whatif.compare_spray_days(whatif.example_weather(), [WEATHER_SPRAY], models=trained["models"], rate_kgha=dose)
+
+
+def test_compare_spray_days_with_dose(trained):
+    w = whatif.example_weather()
+    cands = ["2026-02-25", "2026-03-08"]
+    base = whatif.compare_spray_days(w, cands, horizon_days=14, models=trained["models"])
+    low = whatif.compare_spray_days(w, cands, horizon_days=14, models=trained["models"], rate_kgha=0.6)
+    np.testing.assert_allclose(low["predicted_loss_gha"], base["predicted_loss_gha"] / 4, atol=1e-3)
+    # the share of the dose is computed with the given dose, so it does not change here
+    np.testing.assert_allclose(low["loss_pct_of_dose"], base["loss_pct_of_dose"], atol=2e-4)
+    np.testing.assert_allclose(base["loss_pct_of_dose"], 100 * base["predicted_loss_gha"] / 2400, atol=2e-4)
+    assert low["rank"].tolist() == base["rank"].tolist()
+    assert sum("scaled in proportion" in n for n in low.attrs["notes"]) == 1
+
+
+def test_predict_days_old_model_kind_is_scaled_from_the_delivered_dose(trained):
+    w = whatif.example_weather()
+    new = _predict(w, WEATHER_SPRAY, trained["models"], rate_kgha=1.2)
+    old = dict(trained["models"]); old["meta"] = {**old["meta"], "conc_output": "g_per_ha_per_mm"}
+    got = _predict(w, WEATHER_SPRAY, old, rate_kgha=1.2)
+    # the same raw output read as "g/ha per mm at 2.4 kg/ha" instead of "per kg/ha": 2.4 times less
+    big = new["loss_gha"] > 1e-3
+    assert big.any()
+    np.testing.assert_allclose(got.loc[big, "loss_gha"], new.loc[big, "loss_gha"] / 2.4, rtol=1e-9)
+
+
+SEEN = [60, 75, 290]           # 1 March, 16 March, 17 October (common year)
+
+
+@pytest.mark.parametrize("day, guess", [
+    ("2026-03-01", False), ("2026-03-11", False), ("2026-03-26", False),   # within ten days of 60 or 75
+    ("2026-03-27", True),                                                  # 11 days after 16 March
+    ("2026-02-18", True), ("2026-02-19", False),
+    ("2026-10-27", False), ("2026-11-15", True), ("2026-06-15", True),
+])
+def test_several_spray_days_guess_note(trained, day, guess):
+    m = _with_meta(trained, spray_days_seen=SEEN, doses_kgha=[0.6, 1.2, 2.4])
+    w = whatif.example_weather(start="2026-01-01", days=365)
+    notes = _predict(w, day, m).attrs["notes"]
+    assert any("guess" in n for n in notes) == guess
+    assert not any("February-April" in n for n in notes)       # that note is for 1-March-only models
+
+
+@pytest.mark.parametrize("dose, note", [(0.6, False), (1.0, False), (2.4, False), (0.3, True), (3.0, True)])
+def test_several_doses_note_outside_trained_doses(trained, dose, note):
+    m = _with_meta(trained, spray_days_seen=SEEN, doses_kgha=[0.6, 1.2, 2.4])
+    notes = _predict(whatif.example_weather(), WEATHER_SPRAY, m, rate_kgha=dose).attrs["notes"]
+    assert any("outside the doses" in n for n in notes) == note
+    assert not any("scaled in proportion" in n for n in notes)
+
+
+def test_meta_without_spray_keys_behaves_as_before(trained):
+    m = dict(trained["models"])
+    meta = json.loads(json.dumps(m["meta"]))
+    for k in ("spray_days_seen", "doses_kgha", "spray_day_of_year"):
+        meta["trained_on"].pop(k)
+    m["meta"] = meta
+    w = whatif.example_weather(start="2026-05-01")
+    notes = _predict(w, "2026-06-05", m, rate_kgha=1.2).attrs["notes"]
+    assert any("February-April" in n for n in notes)
+    assert any("All training simulations used 2.4 kg/ha" in n for n in notes)
+
+
+# --------------------------------------------------------------------------- #
+# End to end with varied spray dates and doses: 1 March runs + copies of the same fields
+# --------------------------------------------------------------------------- #
+VARIED = [((15, 10), 0.6), ((1, 3), 1.2), ((15, 10), 2.4)]      # (day, month), kg/ha per copy
+
+
+def _varied_copies(fixed, varied):
+    """Copies `<run>__v1` of every run in `fixed`: same weather and runoff, other spray date and dose."""
+    (varied / "daily").mkdir(parents=True)
+    rq = pd.read_csv(fixed / "run_quality.csv")
+    for i, run in enumerate(rq["run"]):
+        (day, month), dose = VARIED[i % len(VARIED)]
+        d = pd.read_parquet(fixed / "daily" / f"{run}.parquet")
+        is_app = (d.index.month == month) & (d.index.day == day)
+        last = pd.Series(d.index.where(is_app), index=d.index).ffill()
+        dsa = (d.index - last).dt.days.to_numpy(dtype=float)
+        d["applied_gha"] = np.where(is_app, 1000 * dose, 0.0)
+        d["pest_runoff_gha"] = np.nan_to_num(d["runoff_mm"] * 5.0 * np.exp(-0.02 * dsa) * dose / 2.4)
+        d.to_parquet(varied / "daily" / f"{run}__v1.parquet")
+    rq.assign(run=rq["run"] + "__v1").to_csv(varied / "run_quality.csv", index=False)
+
+
+@pytest.fixture(scope="module")
+def trained_varied(tmp_path_factory):
+    root = tmp_path_factory.mktemp("varied")
+    _synthetic_interim(root / "fixed", n_files=12, seed=4)
+    _varied_copies(root / "fixed", root / "varied")
+    features = root / "features.parquet"
+    table = build_feature_table([root / "fixed", root / "varied"], features)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        metrics = models.train_all(features, model_dir=root / "models", results=root / "results",
+                                   figures=root / "figures", rounds=10)
+    return {"root": root, "table": table, "metrics": metrics}
+
+
+def test_varied_feature_table(trained_varied):
+    t = trained_varied["table"]
+    assert t["field"].nunique() == 12 and t["run"].nunique() == 24
+    assert set(t.loc[t["water_row"], "run"].astype(str)) == {r for r in t["run"].astype(str) if "__v" not in r}
+    assert {round(float(x), 3) for x in t["app_rate_kgha"].dropna().unique()} == {0.6, 1.2, 2.4}
+    assert {60, 61, 288, 289} <= set(t["app_doy"].dropna().astype(int))
+    # the copies hold the same water as the field they come from
+    a = t[t["run"] == "run_0000000_grid_000000"].set_index("date")
+    b = t[t["run"] == "run_0000000_grid_000000__v1"].set_index("date")
+    pd.testing.assert_series_equal(a["runoff_mm"], b["runoff_mm"])
+
+
+def test_varied_train_all_meta_and_spray_table(trained_varied):
+    root, m = trained_varied["root"], trained_varied["metrics"]
+    meta = json.loads((root / "models" / "meta.json").read_text())
+    on = meta["trained_on"]
+    assert on["doses_kgha"] == [0.6, 1.2, 2.4]
+    assert {60, 61, 288, 289} <= set(on["spray_days_seen"])
+    assert on["spray_day_of_year"][0] == min(on["spray_days_seen"])
+    assert on["spray_day_of_year"][1] == max(on["spray_days_seen"])
+    assert m["final_models"]["rain_day_rows_one_run_per_field"] * 2 == m["final_models"]["rain_day_rows"]
+    by_spray = pd.read_csv(root / "results" / "loss_by_spray_date.csv", index_col=0)
+    assert {"03 Mar 1-15", "10 Oct 1-15"} <= set(by_spray.index)
+    assert (root / "figures" / "m9_loss_by_spray_date.png").exists()
+    # the loss is proportional to the dose here, so the share of the dose lost is about the same for each dose
+    assert (by_spray["mean_pct_of_dose_lost"] > 0).all()
+
+
+def test_varied_models_in_whatif(trained_varied):
+    m = models.load_models(trained_varied["root"] / "models")
+    w = whatif.example_weather()
+    a = _predict(w, WEATHER_SPRAY, m, rate_kgha=1.2)
+    assert not any("guess" in n or "kg/ha" in n for n in a.attrs["notes"])
+    assert (a["loss_gha"] >= 0).all()
+    far = _predict(whatif.example_weather(start="2026-05-01"), "2026-06-05", m).attrs["notes"]
+    assert any("guess" in n for n in far)
+    out = _predict(w, WEATHER_SPRAY, m, rate_kgha=5.0).attrs["notes"]
+    assert any("outside the doses" in n for n in out)

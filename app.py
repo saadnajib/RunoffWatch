@@ -47,6 +47,7 @@ with st.sidebar:
     cn = st.select_slider("Runoff tendency (curve number)", options=sorted(CN_SETS), value=81,
                           help="73 = soil takes up water well, 84 = water runs off easily")
     horizon = st.slider("Days after spraying to look at", 3, 30, 14)
+    dose = st.number_input("Dose (kg/ha)", min_value=0.05, max_value=5.0, value=2.4, step=0.05)
 
 try:
     weather = prepare_weather(pd.read_csv(up) if up else example_weather())
@@ -65,7 +66,7 @@ if not candidates:
     st.warning("No candidate day lies inside the weather table.")
     st.stop()
 
-table = compare_spray_days(weather, candidates, horizon, soil, models)
+table = compare_spray_days(weather, candidates, horizon, soil, models, rate_kgha=dose)
 for note in table.attrs["notes"]:
     st.warning(note)
 ranked = table[table["rank"].notna()].sort_values("predicted_loss_gha")
@@ -79,7 +80,7 @@ m1.caption(f"if sprayed on {best.spray_date}")
 m2.metric("Highest predicted loss", f"{worst.predicted_loss_gha:.2f} g/ha")
 m2.caption(f"if sprayed on {worst.spray_date}")
 m3.metric("Difference", f"{worst.predicted_loss_gha - best.predicted_loss_gha:.2f} g/ha")
-m3.caption("the dose is 2400 g/ha")
+m3.caption(f"the dose is {1000 * dose:.0f} g/ha")
 
 st.subheader(f"Predicted pesticide loss in the {horizon} days after spraying")
 chart = table.assign(day=table["spray_date"].map(lambda d: d.strftime("%Y-%m-%d (%a)"))).set_index("day")
@@ -93,7 +94,7 @@ st.dataframe(table.rename(columns={
 pick = st.selectbox("Show day-by-day detail for spray day", [c.date() for c in candidates])
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
-    days = predict_days(weather, pd.Timestamp(pick), soil, models).iloc[:horizon]
+    days = predict_days(weather, pd.Timestamp(pick), soil, models, rate_kgha=dose).iloc[:horizon]
 d1, d2 = st.columns(2)
 days.index = days.index.strftime("%Y-%m-%d")
 d1.caption("Rain (mm per day)"); d1.bar_chart(days["rain_mm"])
@@ -102,11 +103,13 @@ d2.caption("Predicted pesticide loss (g/ha per day)"); d2.bar_chart(days["loss_g
 with st.expander("Limits: read before trusting a number", expanded=True):
     st.markdown("""
 - The model learned from **PRZM simulations**, not from field measurements. It tells you what PRZM would say.
-- All simulations used **one herbicide (Flufenacet), one dose (2400 g/ha), winter cereals, sprayed on 1 March**.
-  Other products, doses, crops or seasons are **not covered**.
+- All simulations are for **one herbicide (Flufenacet) on winter cereals**. Other products and crops are **not covered**.
+- Unless the models were trained on runs with varied spray dates and doses, they only know **spraying on
+  1 March with 2400 g/ha**: another dose is then scaled in proportion, and another season is a guess.
+  The app says so above the table when that is the case.
 - "Loss" is pesticide leaving the field edge with runoff water. What reaches a stream is not modelled.
-- Moving the spray day is itself new to the model: in every simulation "days since spraying" and
-  the calendar date moved together.
+- In the runs sprayed on 1 March, "days since spraying" and the calendar date move together, so
+  moving the spray day is new to models trained only on those runs.
 - The sliders change one soil property at a time. Real soils change several together; unusual
   combinations are not covered by the training runs.
 - On years it has not seen, the model underestimates total loss and can miss extreme storms.

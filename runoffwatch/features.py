@@ -19,6 +19,7 @@ Three feature groups:
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 import numpy as np
@@ -40,18 +41,23 @@ HISTORY_FEATURES = [
     "days_since_app", "rain_since_app_mm", "heavy_rain_days_since_app", "temp_since_app_c",
     "rain_first3d_after_app_mm",
 ]
+SPRAY_FEATURES = ["app_doy", "app_rate_kgha"]      # the last spraying: day of the year, and dose in kg/ha
 RUNOFF_FEATURES = WEATHER_FEATURES + SOIL_FEATURES                      # hydrology model
-CONC_FEATURES = HISTORY_FEATURES + [f for f in WEATHER_FEATURES if f != "cn_today"] + SOIL_FEATURES
-CLASSIFIER_FEATURES = HISTORY_FEATURES + WEATHER_FEATURES + SOIL_FEATURES
+CONC_FEATURES = HISTORY_FEATURES + SPRAY_FEATURES + [f for f in WEATHER_FEATURES if f != "cn_today"] + SOIL_FEATURES
+CLASSIFIER_FEATURES = HISTORY_FEATURES + SPRAY_FEATURES + WEATHER_FEATURES + SOIL_FEATURES
+DEFAULT_RATE_KGHA = 2.4    # the dose of the delivered simulations
 
 # Two design decisions that came out of testing on years the models had never seen:
 #
 # * No calendar feature (day of year, month). The weather files are neighbouring grid
 #   cells of one decade, so "date" identifies a storm; with a calendar feature the trees
 #   memorised storms and failed on new years. The crop calendar is still present through
-#   cn_today, and the time since spraying through days_since_app. Note that in this data
-#   set days_since_app IS the calendar (spraying is always on 1 March), so the models
-#   cannot tell "time since spraying" from "time of year".
+#   cn_today, and the time since spraying through days_since_app. In the runs sprayed on
+#   1 March, days_since_app IS the calendar, so "time since spraying" and "time of year"
+#   cannot be told apart. The runs with varied spray dates separate the two; for them the
+#   spray day of the year (app_doy) is a feature: it stands for the crop stage at spraying,
+#   which decides how much of the spray is caught by the leaves. Whether this lets the
+#   trees memorise storms again is checked by the leave-one-year-out test.
 # * cn_runoff_mm, the textbook curve-number runoff for today's rain, is given to the
 #   models as an input. PRZM itself computes runoff with a curve number that it adjusts
 #   for soil moisture, so the models only have to learn that adjustment (a physics-
@@ -78,12 +84,15 @@ def curve_number_runoff(rain_mm, cn) -> np.ndarray:
     return np.where(p > 0.2 * s, (p - 0.2 * s) ** 2 / (p + 0.8 * s), 0.0)
 
 
-def weather_features(daily: pd.DataFrame, app_dates, cn: tuple[float, float, float, float] | None = None) -> pd.DataFrame:
-    """Add all WEATHER and HISTORY features to a daily table.
+def weather_features(daily: pd.DataFrame, app_dates, cn: tuple[float, float, float, float] | None = None,
+                     app_rates_kgha=None) -> pd.DataFrame:
+    """Add all WEATHER, HISTORY and SPRAY features to a daily table.
 
     daily: one row per calendar day (DatetimeIndex, no gaps) with rain_mm, temp_c, pan_evap_mm.
-    app_dates: spraying dates. Days before the first one get NaN history features.
+    app_dates: spraying dates. Days before the first one get NaN history and spray features.
     cn: the four curve numbers of the field (for cn_today); None leaves cn_today NaN.
+    app_rates_kgha: dose of each spraying in kg/ha, one number for all or one per date in
+        `app_dates` (same order). None means DEFAULT_RATE_KGHA.
     """
     need = {"rain_mm", "temp_c", "pan_evap_mm"}
     if not need <= set(daily.columns):
@@ -109,7 +118,14 @@ def weather_features(daily: pd.DataFrame, app_dates, cn: tuple[float, float, flo
     f["cn_runoff_mm"] = curve_number_runoff(r, f["cn_today"]) if cn is not None else np.nan
 
     # --- history since the last spraying ------------------------------------
-    app_dates = pd.DatetimeIndex(sorted(pd.to_datetime(list(app_dates))))
+    given = pd.DatetimeIndex(pd.to_datetime(list(app_dates)))
+    rates = np.broadcast_to(np.asarray(DEFAULT_RATE_KGHA if app_rates_kgha is None else app_rates_kgha, dtype=float),
+                            (len(given),)) if np.ndim(app_rates_kgha) == 0 else np.asarray(app_rates_kgha, dtype=float)
+    if len(rates) != len(given):
+        raise ValueError(f"{len(rates)} doses given for {len(given)} spraying dates")
+    rate_of = pd.Series(rates, index=given)
+    rate_of = rate_of[~rate_of.index.duplicated()]
+    app_dates = given.sort_values()
     is_app = daily.index.isin(app_dates)
     cycle = np.cumsum(is_app)                                   # 0 before the first spraying
     last_app = pd.Series(daily.index.where(is_app), index=daily.index).ffill()
@@ -125,15 +141,21 @@ def weather_features(daily: pd.DataFrame, app_dates, cn: tuple[float, float, flo
     f["temp_since_app_c"] = (since_app(t) / n_days).where(f["days_since_app"] > 0, t)
     first3 = r.where(f["days_since_app"].between(0, 2), 0.0).groupby(cycle).cumsum()
     f["rain_first3d_after_app_mm"] = first3
-    f.loc[cycle == 0, HISTORY_FEATURES] = np.nan
+    on_app_day = pd.Series(daily.index, index=daily.index).where(is_app)
+    f["app_doy"] = on_app_day.dt.dayofyear.ffill().to_numpy(dtype=float)
+    f["app_rate_kgha"] = on_app_day.map(rate_of).ffill().to_numpy(dtype=float)
+    f.loc[cycle == 0, HISTORY_FEATURES + SPRAY_FEATURES] = np.nan
     return f
 
 
 def run_feature_rows(daily: pd.DataFrame, params: dict, clean_until: pd.Timestamp | None) -> pd.DataFrame:
     """Rain-day rows of one run: features + targets + the 'pesticide results trusted' flag."""
     cn = tuple(params[f"cn_{i}"] for i in range(1, 5))
-    app_dates = daily.index[daily["applied_gha"] > 0]
-    f = weather_features(daily, app_dates, cn)
+    applied = daily.loc[daily["applied_gha"] > 0, "applied_gha"]
+    f = weather_features(daily, applied.index, cn, (applied / 1000.0).to_numpy())
+    # year of the last spraying: one spraying and everything that follows it until the next one
+    last_app = pd.Series(f.index, index=f.index) - pd.to_timedelta(f["days_since_app"].fillna(0), unit="D")
+    f["app_season"] = last_app.dt.year.where(f["days_since_app"].notna()).astype(float)
     for c in SOIL_FEATURES:
         f[c] = params[c]
     f["runoff_mm"] = daily["runoff_mm"]
@@ -143,26 +165,48 @@ def run_feature_rows(daily: pd.DataFrame, params: dict, clean_until: pd.Timestam
     return f[f["rain_mm"] >= MIN_RAIN_MM]
 
 
-def build_feature_table(interim: str | Path = "data/interim", out: str | Path = "data/processed/features.parquet",
+def field_of(run: str) -> str:
+    """Name of the field a run belongs to: copies made by `rerun --variants` end in __v1, __v2, ..."""
+    return re.sub(r"__v\d+$", "", run)
+
+
+def build_feature_table(interim: str | Path | list = "data/interim", out: str | Path = "data/processed/features.parquet",
                         limit: int | None = None) -> pd.DataFrame:
-    """Build the table for all readable runs. Needs `qc` and `audit` output in `interim`."""
-    interim = Path(interim)
-    rq = pd.read_csv(interim / "run_quality.csv", index_col="run", parse_dates=["clean_until"])
-    rq = rq[rq["clean_until"].notna() & rq["usle_k"].notna()]
-    runs = list(rq.index)[:limit]
-    parts = []
-    for i, run in enumerate(runs, start=1):
-        daily = pd.read_parquet(interim / "daily" / f"{run}.parquet",
-                                columns=["rain_mm", "temp_c", "pan_evap_mm", "runoff_mm", "pest_runoff_gha", "applied_gha"])
-        rows = run_feature_rows(daily, rq.loc[run].to_dict(), rq.at[run, "clean_until"])
-        num = rows.select_dtypes("number").columns
-        rows[num] = rows[num].astype("float32")
-        parts.append(rows.assign(run=run, met_hash=rq.at[run, "met_hash"]).rename_axis("date").reset_index())
-        if i % 1000 == 0 or i == len(runs):
-            log.info("features: %d / %d runs", i, len(runs))
+    """Build the table for all readable runs. Needs `qc` and `audit` output in `interim`.
+
+    interim: one folder, or a list of folders whose runs go into one table (for example the
+        runs sprayed on 1 March and the copies with varied spray dates). `limit` is per folder.
+
+    Besides features and targets every row gets: `field` (several runs can be copies of one
+    field) and `water_row`, which is true for exactly one run per field. Rain and runoff are the
+    same in all copies of a field, so everything about water uses only the `water_row` rows.
+    """
+    folders = [Path(p) for p in (interim if isinstance(interim, (list, tuple)) else [interim])]
+    parts, seen_fields = [], set()
+    for folder in folders:
+        rq = pd.read_csv(folder / "run_quality.csv", index_col="run", parse_dates=["clean_until"])
+        rq = rq[rq["clean_until"].notna() & rq["usle_k"].notna()]
+        runs = sorted(rq.index)[:limit]
+        first_run_of = {}
+        for run in runs:
+            first_run_of.setdefault(field_of(run), run)
+        for i, run in enumerate(runs, start=1):
+            daily = pd.read_parquet(folder / "daily" / f"{run}.parquet",
+                                    columns=["rain_mm", "temp_c", "pan_evap_mm", "runoff_mm", "pest_runoff_gha", "applied_gha"])
+            rows = run_feature_rows(daily, rq.loc[run].to_dict(), rq.at[run, "clean_until"])
+            num = rows.select_dtypes("number").columns
+            rows[num] = rows[num].astype("float32")
+            field = field_of(run)
+            parts.append(rows.assign(run=run, field=field, met_hash=rq.at[run, "met_hash"],
+                                     water_row=(field not in seen_fields) and first_run_of[field] == run)
+                         .rename_axis("date").reset_index())
+            if i % 1000 == 0 or i == len(runs):
+                log.info("features: %s: %d / %d runs", folder, i, len(runs))
+        seen_fields |= set(first_run_of)
     table = pd.concat(parts, ignore_index=True)
-    table["run"] = table["run"].astype("category")
-    table["met_hash"] = table["met_hash"].astype("category")
+    del parts
+    for c in ("run", "field", "met_hash"):
+        table[c] = table[c].astype("category")
     table["high_loss"] = table["loss_gha"] >= HIGH_LOSS_GHA
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
