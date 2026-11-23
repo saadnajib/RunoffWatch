@@ -590,7 +590,7 @@ cd RunoffWatch
 python -m venv .venv
 .venv\Scripts\activate          # Windows; on Mac/Linux: source .venv/bin/activate
 pip install -e ".[dev,app]"
-python -m pytest -q             # 429 passed (23 Nov, with PyTorch installed)
+python -m pytest -q             # 522 passed (23 Nov, with PyTorch installed)
 python -m runoffwatch whatif
 streamlit run app.py
 ```

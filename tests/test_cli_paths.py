@@ -199,3 +199,13 @@ def test_rerun_main_passes_variant_options(tmp_path, monkeypatch):
     assert main(RR) == 0
     assert seen["windows"] == rerun.DEFAULT_WINDOWS and seen["doses"] == rerun.DEFAULT_DOSES
     assert (seen["variants"], seen["out"], seen["fields_from"]) == (0, "data/raw/runs_fixed", None)
+
+
+# add-weather is not tied to a data set: its defaults stay the same with every --dataset
+
+@pytest.mark.parametrize("dataset", [[], ["--dataset", "delivered"], ["--dataset", "varied"]])
+def test_cli_add_weather_defaults(dataset):
+    a = parse_args([*dataset, "add-weather"])
+    assert (a.runs, a.source) == ("data/raw/runs_varied", "data/raw/runs")
+    a = parse_args(["add-weather", "--runs", "R", "--source", "S"])
+    assert (a.runs, a.source) == ("R", "S")

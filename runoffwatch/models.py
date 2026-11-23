@@ -490,7 +490,10 @@ def loss_by_spray_date(clean: pd.DataFrame) -> pd.DataFrame:
     if s.empty:
         return pd.DataFrame()
     s["pct_of_dose_lost"] = 100 * s["loss_gha"] / (1000 * s["rate"])
-    when = pd.Timestamp("2001-01-01") + pd.to_timedelta(s["app_doy"].clip(upper=365) - 1, unit="D")
+    # the real date: day of the year counted in the year of the spraying (leap years shift it by one)
+    year = s.index.get_level_values("app_season").astype(int)
+    when = pd.Series(pd.to_datetime({"year": year, "month": 1, "day": 1}).to_numpy(), index=s.index) \
+        + pd.to_timedelta(s["app_doy"] - 1, unit="D")
     s["sprayed"] = when.dt.strftime("%m %b ") + np.where(when.dt.day <= 15, "1-15", "16-end")
     out = s.groupby("sprayed").agg(seasons=("loss_gha", "size"), mean_pct_of_dose_lost=("pct_of_dose_lost", "mean"),
                                    median_pct_of_dose_lost=("pct_of_dose_lost", "median"),

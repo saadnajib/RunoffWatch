@@ -81,6 +81,12 @@ def predict_fields(weather: pd.DataFrame, fields: pd.DataFrame, models: dict, ap
     app_day, app_month, rate_kgha: every field is sprayed on this day of every year with this dose.
     An "application year" runs from one spraying to the day before the next.
     """
+    try:
+        pd.Timestamp(year=2001, month=app_month, day=app_day)
+    except ValueError:
+        raise ValueError(f"day {app_day}, month {app_month} is not a date that exists every year") from None
+    if not (np.isfinite(rate_kgha) and rate_kgha > 0):
+        raise ValueError("the dose must be a number above zero")
     meta = models["meta"]
     fields = fields.assign(grid=[grid_of(r) for r in fields.index])
     by_grid = {g: d.set_index("date").rename(columns=WEATHER_COLUMNS) for g, d in weather.groupby("GRID_NO")}

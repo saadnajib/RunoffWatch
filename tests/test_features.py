@@ -263,3 +263,169 @@ def test_run_feature_rows_drops_first_three_days_not_first_three_rain_days():
     rain_days = d.index[d["rain_mm"] >= MIN_RAIN_MM]
     assert rows.index[0] == rain_days[0]
     assert rows.index[0] >= d.index[40]
+
+
+# --------------------------------------------------------------------------- #
+# Spray features (varied spray dates and doses)
+# --------------------------------------------------------------------------- #
+from runoffwatch.features import (CLASSIFIER_FEATURES, CONC_FEATURES, DEFAULT_RATE_KGHA,  # noqa: E402
+                                  RUNOFF_FEATURES, SPRAY_FEATURES, build_feature_table, field_of)
+
+
+def test_spray_features_in_conc_and_classifier_not_in_runoff():
+    assert SPRAY_FEATURES == ["app_doy", "app_rate_kgha"]
+    assert set(SPRAY_FEATURES) <= set(CONC_FEATURES)
+    assert set(SPRAY_FEATURES) <= set(CLASSIFIER_FEATURES)
+    assert not set(SPRAY_FEATURES) & set(RUNOFF_FEATURES)
+    assert DEFAULT_RATE_KGHA == 2.4
+
+
+def test_spray_features_default_dose_and_nan_before_first_spraying(feats):
+    d, f = feats
+    assert set(SPRAY_FEATURES) <= set(f.columns)
+    assert f[SPRAY_FEATURES].iloc[:APP1].isna().all().all()
+    assert (f["app_rate_kgha"].iloc[APP1:] == 2.4).all()
+    np.testing.assert_array_equal(f["app_doy"].iloc[APP1:APP2], d.index[APP1].dayofyear)
+    np.testing.assert_array_equal(f["app_doy"].iloc[APP2:], d.index[APP2].dayofyear)
+
+
+def test_spray_features_single_number_applies_to_all():
+    d = small_daily()
+    f = weather_features(d, [d.index[APP1], d.index[APP2]], app_rates_kgha=0.6)
+    assert f["app_rate_kgha"].iloc[:APP1].isna().all()
+    assert (f["app_rate_kgha"].iloc[APP1:] == 0.6).all()
+
+
+def test_spray_features_sequence_follows_each_spraying():
+    d = small_daily()
+    f = weather_features(d, [d.index[APP1], d.index[APP2]], app_rates_kgha=[0.5, 1.5])
+    assert (f["app_rate_kgha"].iloc[APP1:APP2] == 0.5).all()
+    assert (f["app_rate_kgha"].iloc[APP2:] == 1.5).all()
+
+
+def test_spray_features_unsorted_dates_keep_their_own_dose():
+    d = small_daily()
+    f = weather_features(d, [d.index[APP2], d.index[APP1]], app_rates_kgha=[1.5, 0.5])
+    assert (f["app_rate_kgha"].iloc[APP1:APP2] == 0.5).all()
+    assert (f["app_rate_kgha"].iloc[APP2:] == 1.5).all()
+    sorted_f = weather_features(d, [d.index[APP1], d.index[APP2]], app_rates_kgha=[0.5, 1.5])
+    _assert_equal_nan(f, sorted_f)
+
+
+@pytest.mark.parametrize("rates", [[1.0], [1.0, 2.0, 3.0], []])
+def test_spray_features_wrong_number_of_doses_raises(rates):
+    d = small_daily()
+    with pytest.raises(ValueError, match="doses"):
+        weather_features(d, [d.index[APP1], d.index[APP2]], app_rates_kgha=rates)
+
+
+def test_spray_features_no_sprayings():
+    f = weather_features(small_daily(), [])
+    assert f[SPRAY_FEATURES].isna().all().all()
+    f = weather_features(small_daily(), [], app_rates_kgha=[])
+    assert f[SPRAY_FEATURES].isna().all().all()
+
+
+def test_spray_features_dose_does_not_change_other_features(feats):
+    d, f = feats
+    g = weather_features(d, [d.index[APP1], d.index[APP2]], cn=(81, 81, 86, 91), app_rates_kgha=[0.3, 4.0])
+    other = [c for c in f.columns if c != "app_rate_kgha"]
+    _assert_equal_nan(f[other], g[other])
+
+
+def test_run_feature_rows_dose_from_applied_gha_and_app_season():
+    d = _run_daily(days=500)
+    d["applied_gha"] = 0.0
+    first, second = d.index[30], d.index[420]           # 2020-02-09 and 2021-03-05
+    d.loc[first, "applied_gha"] = 240.0                 # g/ha -> 0.24 kg/ha
+    d.loc[second, "applied_gha"] = 1200.0
+    rows = run_feature_rows(d, _params(), None)
+    before = rows.index < first
+    mid = (rows.index >= first) & (rows.index < second)
+    after = rows.index >= second
+    assert before.any() and mid.any() and after.any()
+    assert rows.loc[before, ["app_rate_kgha", "app_doy", "app_season"]].isna().all().all()
+    np.testing.assert_allclose(rows.loc[mid, "app_rate_kgha"], 0.24)
+    np.testing.assert_allclose(rows.loc[after, "app_rate_kgha"], 1.2)
+    assert (rows.loc[mid, "app_doy"] == first.dayofyear).all()
+    assert (rows.loc[after, "app_doy"] == second.dayofyear).all()
+    # the season is the calendar year of the last spraying, also in the next calendar year
+    assert (rows.loc[mid, "app_season"] == 2020).all()
+    assert (rows.loc[mid & (rows.index.year == 2021), "app_season"] == 2020).all()
+    assert (rows.loc[mid & (rows.index.year == 2021)]).shape[0] > 0
+    assert (rows.loc[after, "app_season"] == 2021).all()
+
+
+@pytest.mark.parametrize("run, field", [
+    ("run_1_grid_5__v2", "run_1_grid_5"), ("run_1_grid_5__v10", "run_1_grid_5"),
+    ("run_1_grid_5", "run_1_grid_5"), ("run_1_grid_5_v2", "run_1_grid_5_v2"),
+    ("run_1__v2_grid_5", "run_1__v2_grid_5"), ("run_1_grid_5__vx", "run_1_grid_5__vx"),
+])
+def test_field_of(run, field):
+    assert field_of(run) == field
+
+
+# --------------------------------------------------------------------------- #
+# build_feature_table: several folders, field and water_row
+# --------------------------------------------------------------------------- #
+def _write_interim(folder, runs, clean_until="2020-12-31", seed=0):
+    (folder / "daily").mkdir(parents=True)
+    rq = []
+    for i, run in enumerate(runs):
+        d = _run_daily(days=120, seed=seed + i)
+        d.to_parquet(folder / "daily" / f"{run}.parquet")
+        rq.append({"run": run, "clean_until": clean_until, "met_hash": f"{i:032x}", **_params()})
+    pd.DataFrame(rq).to_csv(folder / "run_quality.csv", index=False)
+
+
+def _water_runs(t):
+    return set(t.loc[t["water_row"], "run"].astype(str))
+
+
+def test_build_feature_table_one_folder_field_and_water_row(tmp_path):
+    _write_interim(tmp_path / "a", ["run_1_grid_1__v2", "run_1_grid_1__v1", "run_2_grid_2"])
+    t = build_feature_table(tmp_path / "a", tmp_path / "f.parquet")
+    assert {"field", "water_row", "run", "met_hash"} <= set(t.columns)
+    assert t["water_row"].dtype == bool
+    assert dict(t.groupby("run", observed=True)["field"].first().astype(str)) == {
+        "run_1_grid_1__v1": "run_1_grid_1", "run_1_grid_1__v2": "run_1_grid_1", "run_2_grid_2": "run_2_grid_2"}
+    assert _water_runs(t) == {"run_1_grid_1__v1", "run_2_grid_2"}       # alphabetically first run of each field
+    # water_row is the same on every row of a run
+    assert (t.groupby("run", observed=True)["water_row"].nunique() == 1).all()
+    back = pd.read_parquet(tmp_path / "f.parquet")
+    assert _water_runs(back) == _water_runs(t)
+
+
+def test_build_feature_table_several_folders_first_folder_wins(tmp_path):
+    _write_interim(tmp_path / "fixed", ["run_1_grid_1", "run_2_grid_2"])
+    _write_interim(tmp_path / "varied", ["run_1_grid_1__v1", "run_1_grid_1__v2", "run_3_grid_3__v2",
+                                         "run_3_grid_3__v1"], seed=10)
+    t = build_feature_table([tmp_path / "fixed", tmp_path / "varied"], tmp_path / "f.parquet")
+    assert set(t["run"].astype(str)) == {"run_1_grid_1", "run_2_grid_2", "run_1_grid_1__v1", "run_1_grid_1__v2",
+                                         "run_3_grid_3__v1", "run_3_grid_3__v2"}
+    # one run per field: field 1 from the first folder, field 3 (only in the second) its first copy
+    assert _water_runs(t) == {"run_1_grid_1", "run_2_grid_2", "run_3_grid_3__v1"}
+    per_field = t[t["water_row"]].groupby("field", observed=True)["run"].nunique()
+    assert (per_field == 1).all() and len(per_field) == t["field"].nunique() == 3
+    # a tuple works as well, and the order of the folders decides
+    t2 = build_feature_table((tmp_path / "varied", tmp_path / "fixed"), tmp_path / "g.parquet")
+    assert _water_runs(t2) == {"run_1_grid_1__v1", "run_3_grid_3__v1", "run_2_grid_2"}
+
+
+def test_build_feature_table_limit_is_per_folder(tmp_path):
+    _write_interim(tmp_path / "a", ["run_1_grid_1", "run_2_grid_2", "run_3_grid_3"])
+    _write_interim(tmp_path / "b", ["run_1_grid_1__v1", "run_4_grid_4__v1", "run_5_grid_5__v1"], seed=5)
+    t = build_feature_table([tmp_path / "a", tmp_path / "b"], tmp_path / "f.parquet", limit=2)
+    assert set(t["run"].astype(str)) == {"run_1_grid_1", "run_2_grid_2", "run_1_grid_1__v1", "run_4_grid_4__v1"}
+    assert _water_runs(t) == {"run_1_grid_1", "run_2_grid_2", "run_4_grid_4__v1"}
+
+
+def test_build_feature_table_untrusted_first_run_is_skipped(tmp_path):
+    """A run without clean_until is left out; the next run of the field carries the water rows."""
+    _write_interim(tmp_path / "a", ["run_1_grid_1__v1", "run_1_grid_1__v2"])
+    rq = pd.read_csv(tmp_path / "a" / "run_quality.csv")
+    rq.loc[rq["run"] == "run_1_grid_1__v1", "clean_until"] = np.nan
+    rq.to_csv(tmp_path / "a" / "run_quality.csv", index=False)
+    t = build_feature_table(tmp_path / "a", tmp_path / "f.parquet")
+    assert set(t["run"].astype(str)) == {"run_1_grid_1__v2"}
+    assert _water_runs(t) == {"run_1_grid_1__v2"}

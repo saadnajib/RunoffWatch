@@ -121,8 +121,8 @@ def predict_days(weather: pd.DataFrame, spray_date, soil: dict | None = None, mo
     spray_date = pd.Timestamp(spray_date)
     if spray_date not in w.index:
         raise ValueError(f"spray date {spray_date.date()} is not inside the weather table")
-    if not rate_kgha > 0:
-        raise ValueError("the dose must be above zero")
+    if not (np.isfinite(rate_kgha) and rate_kgha > 0):
+        raise ValueError("the dose must be a number above zero")
     notes = check_inputs(w, soil, spray_date, meta, rate_kgha)
     for note in notes:
         warnings.warn(note, stacklevel=2)
