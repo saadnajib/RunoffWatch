@@ -376,7 +376,7 @@ pesticide loss = runoff x concentration
 | Sum of all loss, surrogate / PRZM | 0.99 (0.86–1.12) | – |
 | High-loss days, PR-AUC | 0.97 (0.93–0.99) | rain today 0.10; classifier 0.94 (0.87–0.98) |
 | Alarm "predicted loss ≥ 1 g/ha" | 5,937 alarms, 92 % real, 90 % of high-loss days found (81–97 % by year) | – |
-| Speed (measured on the delivered data, not re-measured) | about 0.01 s per 10-year run | PRZM: 2–4 s |
+| Speed | about 0.03 s per 10-year run | PRZM: about 3.4 s (measured in the re-run) |
 
 Delivered data vs corrected data (same test, headline numbers):
 
