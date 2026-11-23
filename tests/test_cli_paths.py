@@ -7,12 +7,12 @@ import pytest
 from runoffwatch.__main__ import DATASET_ARGS, build_parser, parse_args, resolve_paths
 from runoffwatch.paths import DATASETS, DEFAULT_DATASET
 
-KEYS = {"runs", "interim", "features", "models", "results", "figures", "france_out", "trust"}
+KEYS = {"runs", "interim", "features", "models", "results", "figures", "france_out", "trust", "features_from", "fields_interim"}
 
 
 def test_datasets_have_the_same_keys():
-    assert set(DATASETS) == {"corrected", "delivered"}
-    assert set(DATASETS["corrected"]) == set(DATASETS["delivered"]) == KEYS
+    assert set(DATASETS) == {"corrected", "delivered", "varied"}
+    assert set(DATASETS["corrected"]) == set(DATASETS["delivered"]) == set(DATASETS["varied"]) == KEYS
     assert DEFAULT_DATASET == "corrected"
 
 
@@ -54,9 +54,23 @@ def test_examples_by_hand(dataset):
     assert (a.runs, a.interim, a.trust, a.results, a.figures) == (
         p["runs"], p["interim"], p["trust"], p["results"], p["figures"])
     a = parse_args(["--dataset", dataset, "france"])
-    assert (a.interim, a.features, a.models, a.out) == (p["interim"], p["features"], p["models"], p["france_out"])
+    assert (a.interim, a.features, a.models, a.out) == (p["fields_interim"], p["features"], p["models"], p["france_out"])
     a = parse_args(["--dataset", dataset, "features"])
-    assert (a.interim, a.out) == (p["interim"], p["features"])
+    assert (a.interim, a.out) == (p["features_from"], p["features"])
+
+
+def test_varied_dataset_builds_on_the_corrected_runs():
+    v = DATASETS["varied"]
+    assert v["runs"] == "data/raw/runs_varied" and v["trust"] == "balance"
+    assert v["features_from"] == ["data/interim_fixed", "data/interim_varied"]      # 1 March runs plus the copies
+    assert v["fields_interim"] == "data/interim_fixed"                              # one run per field for the long run
+    assert v["models"] != DATASETS["corrected"]["models"] and v["results"] != DATASETS["corrected"]["results"]
+    a = parse_args(["--dataset", "varied", "features", "--interim", "A", "B"])
+    assert a.interim == ["A", "B"]
+    a = parse_args(["whatif", "--dose", "0.24"])
+    assert a.dose == 0.24
+    a = parse_args(["france", "--spray", "15.10", "--dose", "1.2"])
+    assert (a.spray, a.dose) == ("15.10", 1.2)
 
 
 @pytest.mark.parametrize("dataset", ["corrected", "delivered"])

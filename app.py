@@ -47,6 +47,7 @@ with st.sidebar:
     cn = st.select_slider("Runoff tendency (curve number)", options=sorted(CN_SETS), value=81,
                           help="73 = soil takes up water well, 84 = water runs off easily")
     horizon = st.slider("Days after spraying to look at", 3, 30, 14)
+    dose = st.number_input("Dose (kg/ha)", min_value=0.05, max_value=5.0, value=2.4, step=0.05)
 
 try:
     weather = prepare_weather(pd.read_csv(up) if up else example_weather())
@@ -65,7 +66,7 @@ if not candidates:
     st.warning("No candidate day lies inside the weather table.")
     st.stop()
 
-table = compare_spray_days(weather, candidates, horizon, soil, models)
+table = compare_spray_days(weather, candidates, horizon, soil, models, rate_kgha=dose)
 for note in table.attrs["notes"]:
     st.warning(note)
 ranked = table[table["rank"].notna()].sort_values("predicted_loss_gha")
@@ -79,7 +80,7 @@ m1.caption(f"if sprayed on {best.spray_date}")
 m2.metric("Highest predicted loss", f"{worst.predicted_loss_gha:.2f} g/ha")
 m2.caption(f"if sprayed on {worst.spray_date}")
 m3.metric("Difference", f"{worst.predicted_loss_gha - best.predicted_loss_gha:.2f} g/ha")
-m3.caption("the dose is 2400 g/ha")
+m3.caption(f"the dose is {1000 * dose:.0f} g/ha")
 
 st.subheader(f"Predicted pesticide loss in the {horizon} days after spraying")
 chart = table.assign(day=table["spray_date"].map(lambda d: d.strftime("%Y-%m-%d (%a)"))).set_index("day")
@@ -93,7 +94,7 @@ st.dataframe(table.rename(columns={
 pick = st.selectbox("Show day-by-day detail for spray day", [c.date() for c in candidates])
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
-    days = predict_days(weather, pd.Timestamp(pick), soil, models).iloc[:horizon]
+    days = predict_days(weather, pd.Timestamp(pick), soil, models, rate_kgha=dose).iloc[:horizon]
 d1, d2 = st.columns(2)
 days.index = days.index.strftime("%Y-%m-%d")
 d1.caption("Rain (mm per day)"); d1.bar_chart(days["rain_mm"])

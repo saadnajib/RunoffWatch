@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .features import DEFAULT_RATE_KGHA, HIGH_LOSS_GHA, MIN_RAIN_MM, weather_features
+from .features import DEFAULT_RATE_KGHA, HIGH_LOSS_GHA, MIN_RAIN_MM, field_of, weather_features
 from .models import conc_per_mm, load_models
 from .przm_inp import SOIL_FEATURES
 from .quality import app_year
@@ -58,7 +58,7 @@ def load_weather(path: str | Path) -> pd.DataFrame:
 
 def grid_of(run_name: str) -> int:
     """Agri4Cast grid number from a run folder name (run_0000140_grid_086080 -> 86080)."""
-    return int(run_name.rsplit("grid_", 1)[1])
+    return int(field_of(run_name).rsplit("grid_", 1)[1])
 
 
 def check_shift(weather: pd.DataFrame, daily_dir: str | Path, runs: list[str]) -> dict:
@@ -130,7 +130,14 @@ def run_france(weather_path: str | Path = "data/raw/france_weather/france_weathe
                interim: str | Path = "data/interim", features_path: str | Path = "data/processed/features.parquet",
                model_dir: str | Path = "models", out_path: str | Path = "data/processed/france_field_years.parquet",
                results: str | Path = "docs/results", figures: str | Path = "docs/figures",
-               limit: int | None = None) -> dict:
+               limit: int | None = None, app_day: int = 1, app_month: int = 3,
+               rate_kgha: float = DEFAULT_RATE_KGHA) -> dict:
+    """Predict every field for every year of the weather table.
+
+    app_day, app_month, rate_kgha: the spraying that is assumed for every field and year. The
+    comparison with PRZM's own totals is only made for the delivered spraying (1 March, 2.4 kg/ha),
+    because that is what the PRZM runs in `interim` were sprayed with.
+    """
     from sklearn.metrics import r2_score
 
     interim, results = Path(interim), Path(results)
@@ -138,6 +145,7 @@ def run_france(weather_path: str | Path = "data/raw/france_weather/france_weathe
     models = load_models(model_dir)
     rq = pd.read_csv(interim / "run_quality.csv", index_col="run")
     fields = rq[rq["clean_until"].notna() & rq["usle_k"].notna()][SOIL_FEATURES + [f"cn_{k}" for k in (1, 3, 4)]]
+    fields = fields[~pd.Index([field_of(r) for r in fields.index]).duplicated()]      # one run per field
     fields = fields.iloc[:limit]
     have = set(weather["GRID_NO"].unique())
     missing = [r for r in fields.index if grid_of(r) not in have]
@@ -149,8 +157,8 @@ def run_france(weather_path: str | Path = "data/raw/france_weather/france_weathe
     if not shift["matches"]:
         raise ValueError(f"run weather does not equal the weather table shifted by {YEAR_SHIFT} years: {shift}")
 
-    fy = predict_fields(weather, fields, models)
-    last_full = int(weather["date"].max().year) - 1          # the last application year ends in February
+    fy = predict_fields(weather, fields, models, app_day, app_month, rate_kgha)
+    last_full = int(weather["date"].max().year) - 1          # the last spraying has no full year after it
     fy = fy[fy["app_year"] <= last_full]
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     fy.to_parquet(out_path, index=False)
@@ -175,12 +183,15 @@ def run_france(weather_path: str | Path = "data/raw/france_weather/france_weathe
                                          max_rain_mm=("max_rain_mm", "max"))
 
     # consistency with PRZM on the years it simulated (NOT a test: the final models were trained on these)
-    pz = przm_field_years(features_path).merge(fy, on=["run", "app_year"], how="inner")
-    clean = pz[pz["clean"]]
-    consistency = {"field_years": int(len(pz)), "field_years_trusted_pesticide": int(len(clean)),
-                   "runoff_r2_yearly": float(r2_score(pz["runoff_przm"], pz["runoff_mm"])),
-                   "loss_r2_yearly": float(r2_score(clean["loss_przm"], clean["loss_gha"])),
-                   "loss_sum_ratio": float(clean["loss_gha"].sum() / clean["loss_przm"].sum())}
+    delivered_spraying = (app_day, app_month) == (1, 3) and abs(rate_kgha - DEFAULT_RATE_KGHA) < 1e-9
+    consistency = None
+    if delivered_spraying:
+        pz = przm_field_years(features_path).merge(fy, on=["run", "app_year"], how="inner")
+        clean = pz[pz["clean"]]
+        consistency = {"field_years": int(len(pz)), "field_years_trusted_pesticide": int(len(clean)),
+                       "runoff_r2_yearly": float(r2_score(pz["runoff_przm"], pz["runoff_mm"])),
+                       "loss_r2_yearly": float(r2_score(clean["loss_przm"], clean["loss_gha"])),
+                       "loss_sum_ratio": float(clean["loss_gha"].sum() / clean["loss_przm"].sum())}
 
     train_max_rain = float(models["meta"]["trained_on"]["feature_ranges"]["rain_mm"][1])
     yearly_total = fy.groupby("app_year")["loss_gha"].mean()
@@ -189,6 +200,7 @@ def run_france(weather_path: str | Path = "data/raw/france_weather/france_weathe
                     "last_day": str(weather["date"].max().date())},
         "year_shift_check": shift, "year_shift": YEAR_SHIFT,
         "fields": int(fy["run"].nunique()), "grid_cells_used": int(fy["grid"].nunique()),
+        "spraying": {"day": app_day, "month": app_month, "rate_kgha": rate_kgha},
         "application_years": [int(fy["app_year"].min()), int(fy["app_year"].max())],
         "field_years": int(len(fy)),
         "by_period": json.loads(by_period.round(4).to_json(orient="index")),

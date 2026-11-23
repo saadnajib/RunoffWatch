@@ -77,6 +77,37 @@ def _check_member_names(names: list[str], arc: Path) -> None:
             raise ValueError(f"{arc.name}: unsafe path inside archive: {n!r}")
 
 
+def add_weather(results_root: str | Path, source_root: str | Path) -> int:
+    """Put the weather file of each field into the result folders that came without one.
+
+    `rerun --variants` does not copy the weather file into every copy of a field, because it is
+    identical to the one in the original folder. The other commands expect it next to the
+    results. A copy `<field>__v2` gets the file of `<field>`. Hard links are used where the disk
+    allows it, so no extra room is needed. Returns the number of folders that got a file.
+    """
+    import os
+    import re
+    import shutil
+
+    source = {}
+    for p in Path(source_root).rglob("*.met"):
+        source.setdefault(p.parent.name, p)
+    added = 0
+    for d in sorted(p for p in Path(results_root).glob("*/*") if p.is_dir()):
+        if any(f.suffix.lower() == ".met" for f in d.iterdir()):
+            continue
+        met = source.get(re.sub(r"__v\d+$", "", d.name))
+        if met is None:
+            log.warning("no weather file found for %s", d.name)
+            continue
+        try:
+            os.link(met, d / met.name)
+        except OSError:
+            shutil.copyfile(met, d / met.name)
+        added += 1
+    return added
+
+
 def find_runs(root: str | Path) -> list[Path]:
     """All run folders below root (a run folder is one that holds a .ZTS file)."""
     root = Path(root)
