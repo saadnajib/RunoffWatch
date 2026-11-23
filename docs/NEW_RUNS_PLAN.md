@@ -1,5 +1,15 @@
 # Plan for new simulation runs
 
+**Note 23 Nov 2026:** varied spray dates and doses can now be produced locally, on a Windows
+computer, with `python -m runoffwatch rerun --exe ... --variants 2` (see the README, Part B,
+step 2, and `docs/PROJECT_HANDOFF.md`, section 8.1). It makes extra copies of every field that
+already has a corrected result. Each copy gets a different random spray date in each year, inside
+one window (15 Feb to 30 Apr, or 1 Oct to 30 Nov), and one dose (0.24, 1.20 or 2.40 kg/ha). It
+also keeps the two corrected settings (Henry constant and reference soil moisture). It does not
+cover the rest of the older plan below: half-life (DT50) and sorption (Koc) are not varied, the
+soil and weather stay those of each field, and there is no control group. The tool has not been
+run with the real program yet. The plan below stays as it was written.
+
 **Status: prepared, not submitted.** The run files can be generated on your
 own computer. Uploading them to the modelling workstation needs the agreement
 of the model owners in Landau first.

@@ -97,3 +97,91 @@ def test_unknown_dataset_and_trust_rejected():
         parse_args(["--dataset", "other", "audit"])
     with pytest.raises(SystemExit):
         parse_args(["audit", "--trust", "other"])
+
+
+# --------------------------------------------------------------------------- #
+# rerun: --out and --fields-from defaults depend on --variants
+# --------------------------------------------------------------------------- #
+from pathlib import Path  # noqa: E402
+
+from runoffwatch.__main__ import RERUN_OUT, RERUN_VARIED_OUT, main  # noqa: E402
+
+RR = ["rerun", "--exe", "WINPRZM.exe"]
+
+
+def test_rerun_out_constants():
+    assert (RERUN_OUT, RERUN_VARIED_OUT) == ("data/raw/runs_fixed", "data/raw/runs_varied")
+
+
+@pytest.mark.parametrize("dataset", ["corrected", "delivered"])
+@pytest.mark.parametrize("fixed_exists", [False, True])
+def test_rerun_plain_defaults(tmp_path, monkeypatch, dataset, fixed_exists):
+    monkeypatch.chdir(tmp_path)
+    if fixed_exists:
+        (tmp_path / "data/raw/runs_fixed").mkdir(parents=True)
+    a = parse_args(["--dataset", dataset] + RR)
+    assert (a.runs, a.out, a.fields_from, a.variants) == ("data/raw/runs", "data/raw/runs_fixed", None, 0)
+    assert (a.spray_windows, a.doses, a.seed) == (None, None, 1)
+
+
+def test_rerun_variants_defaults_without_fixed_folder(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    a = parse_args(RR + ["--variants", "3"])
+    assert (a.out, a.fields_from, a.variants) == ("data/raw/runs_varied", None, 3)
+
+
+def test_rerun_variants_defaults_with_fixed_folder(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data/raw/runs_fixed").mkdir(parents=True)
+    a = parse_args(RR + ["--variants", "2"])
+    assert (a.out, a.fields_from) == ("data/raw/runs_varied", "data/raw/runs_fixed")
+
+
+def test_rerun_fixed_must_be_a_folder(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data/raw").mkdir(parents=True)
+    (tmp_path / "data/raw/runs_fixed").write_text("not a folder")
+    assert parse_args(RR + ["--variants", "2"]).fields_from is None
+
+
+def test_rerun_explicit_out_and_fields_from_win(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data/raw/runs_fixed").mkdir(parents=True)
+    a = parse_args(RR + ["--variants", "2", "--out", "O", "--fields-from", "F"])
+    assert (a.out, a.fields_from) == ("O", "F")
+    a = parse_args(RR + ["--out", "O2"])
+    assert (a.out, a.fields_from) == ("O2", None)
+    a = parse_args(RR + ["--fields-from", "F2"])                     # also allowed without variants
+    assert (a.out, a.fields_from) == ("data/raw/runs_fixed", "F2")
+    a = parse_args(RR + ["--variants", "1", "--out", "O3"])
+    assert (a.out, a.fields_from) == ("O3", "data/raw/runs_fixed")
+
+
+def test_rerun_variant_options_are_parsed(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    a = parse_args(RR + ["--variants", "4", "--spray-windows", "01.03-31.03,01.10-15.10", "--doses", "0.5,1.0",
+                         "--seed", "9"])
+    assert (a.variants, a.spray_windows, a.doses, a.seed) == (4, "01.03-31.03,01.10-15.10", "0.5,1.0", 9)
+
+
+def test_rerun_main_passes_variant_options(tmp_path, monkeypatch):
+    from runoffwatch import rerun
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data/raw/runs_fixed").mkdir(parents=True)
+    seen = {}
+
+    def fake(runs, out, exe, work, **kw):
+        seen.update(runs=runs, out=out, exe=exe, work=work, **kw)
+        return [{"status": "ok"}]
+
+    monkeypatch.setattr(rerun, "rerun_all", fake)
+    assert main(RR + ["--variants", "2", "--spray-windows", " 01.03-31.03 , 01.10-15.10,", "--doses", "0.5,1.0",
+                      "--seed", "9", "--henry", "keep"]) == 0
+    assert (seen["runs"], seen["out"], seen["exe"]) == ("data/raw/runs", "data/raw/runs_varied", "WINPRZM.exe")
+    assert seen["windows"] == ("01.03-31.03", "01.10-15.10") and seen["doses"] == ("0.5", "1.0")
+    assert (seen["variants"], seen["seed"], seen["fields_from"]) == (2, 9, "data/raw/runs_fixed")
+    assert seen["henry"] is None and seen["moisture_ref"] == rerun.MOISTURE_REF_FIXED
+    seen.clear()
+    assert main(RR) == 0
+    assert seen["windows"] == rerun.DEFAULT_WINDOWS and seen["doses"] == rerun.DEFAULT_DOSES
+    assert (seen["variants"], seen["out"], seen["fields_from"]) == (0, "data/raw/runs_fixed", None)

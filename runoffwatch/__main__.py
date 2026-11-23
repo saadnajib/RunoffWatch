@@ -12,6 +12,7 @@ A path given on the command line always wins over the data set's default.
 Commands (run in this order):
   extract    unpack the .7z archives          -> data/raw/runs/ (always the delivered data)
   rerun      run PRZM again on your Windows PC with the two corrected settings -> data/raw/runs_fixed/
+             with --variants N: N extra copies per field with varied spray dates and dose -> data/raw/runs_varied/
   inventory  what differs between the runs?   -> <interim>/inventory_*.csv
   qc         quality-check every run          -> <interim>/runs_qc.csv (+ daily parquet)
   audit      Task 1: which results are trusted -> <interim>/run_quality.csv, <results>, <figures>
@@ -121,13 +122,22 @@ def build_parser() -> argparse.ArgumentParser:
     rr = sub.add_parser("rerun", help="run PRZM again on Windows with corrected Henry constant and moisture setting")
     rr.add_argument("--exe", required=True, help=r"path to WINPRZM.exe, e.g. C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe")
     rr.add_argument("--runs", default="data/raw/runs", help="folder with the original run folders")
-    rr.add_argument("--out", default="data/raw/runs_fixed", help="where the new results go (same layout as --runs)")
+    rr.add_argument("--out", default=None,
+                    help="where the new results go (default: data/raw/runs_fixed, or data/raw/runs_varied with --variants)")
     rr.add_argument("--work", default=r"C:\Temp\rr", help="short scratch folder; PRZM cannot handle long paths")
     rr.add_argument("--henry", default=None, help="Henry constant, at most 8 characters (default: 0.37E-06); 'keep' = unchanged")
     rr.add_argument("--moisture-ref", default=None, help="reference soil moisture (default: 1); 'keep' = unchanged")
     rr.add_argument("--workers", type=int, default=4, help="PRZM runs at the same time")
     rr.add_argument("--limit", type=int, help="only the first N folders (for a quick test)")
     rr.add_argument("--retry-failed", action="store_true", help="also retry folders where PRZM reported an error last time")
+    rr.add_argument("--variants", type=int, default=0,
+                    help="extra copies per field with varied spray dates and dose (0 = plain re-run)")
+    rr.add_argument("--spray-windows", default=None,
+                    help="spray windows for the copies, day.month-day.month, comma separated (default: 15.02-30.04,01.10-30.11)")
+    rr.add_argument("--doses", default=None, help="doses in kg/ha for the copies, comma separated (default: 0.24,1.20,2.40)")
+    rr.add_argument("--seed", type=int, default=1, help="number that fixes the random spray dates")
+    rr.add_argument("--fields-from", default=None,
+                    help="only fields with a finished result in this folder (default with --variants: data/raw/runs_fixed if it exists)")
 
     r = sub.add_parser("run", help="analyse one run folder")
     r.add_argument("folder")
@@ -136,12 +146,21 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+RERUN_OUT = "data/raw/runs_fixed"            # plain re-run: one corrected run per field
+RERUN_VARIED_OUT = "data/raw/runs_varied"    # re-run with --variants: varied spray dates and dose
+
+
 def resolve_paths(a: argparse.Namespace) -> argparse.Namespace:
     """Fill every path left at None with the chosen data set's default (in place; also returned)."""
     paths = DATASETS[a.dataset]
     for arg, key in DATASET_ARGS.get(a.cmd, {}).items():
         if getattr(a, arg, None) is None:
             setattr(a, arg, paths[key])
+    if a.cmd == "rerun":           # always starts from the delivered folder; the target depends on the kind of re-run
+        if a.out is None:
+            a.out = RERUN_VARIED_OUT if a.variants else RERUN_OUT
+        if a.variants and a.fields_from is None and Path(RERUN_OUT).is_dir():
+            a.fields_from = RERUN_OUT
     return a
 
 
@@ -181,9 +200,14 @@ def main(argv=None) -> int:
     elif a.cmd == "rerun":
         from . import rerun
         pick = lambda v, default: default if v is None else (None if v == "keep" else v)
+        split = lambda text, default: default if text is None else tuple(x.strip() for x in text.split(",") if x.strip())
         recs = rerun.rerun_all(a.runs, a.out, a.exe, a.work, henry=pick(a.henry, rerun.HENRY_FIXED),
                                moisture_ref=pick(a.moisture_ref, rerun.MOISTURE_REF_FIXED), workers=a.workers, limit=a.limit,
-                               retry_failed=a.retry_failed)
+                               retry_failed=a.retry_failed, variants=a.variants,
+                               windows=split(a.spray_windows, rerun.DEFAULT_WINDOWS),
+                               doses=split(a.doses, rerun.DEFAULT_DOSES), seed=a.seed, fields_from=a.fields_from)
+        if a.variants:
+            print(f"spray plan: {Path(a.out) / 'rerun_plan.csv'}")
         counts = {}
         for rec in recs:
             counts[rec["status"]] = counts.get(rec["status"], 0) + 1

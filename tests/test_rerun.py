@@ -23,6 +23,8 @@ from runoffwatch.rerun import (HENRY_FIXED, MAX_PATH_CHARS, MOISTURE_REF_FIXED, 
 CRLF = b"\r\n"
 WORK_NAME = r"C:\Temp\rr\w0"
 
+YEARS = list(range(90, 100))
+APP_LINES = [f"  0103{yy:02d}  0 2    5  2.40    1    0" for yy in YEARS]   # 1 March, 2.40 kg/ha
 PRE_LINES = [
     "Run 1",
     "                    Simulation Location: R1Crop: Synthetic",
@@ -30,8 +32,10 @@ PRE_LINES = [
     "Chemical Input Data: ",
     "      10       1       0       0",
     "Synthocide  ",
+    *APP_LINES,
     "       0    0.07    0.50",
 ]
+APP = PRE_LINES.index("Chemical Input Data: ") + 3   # index of the first application line
 CHEM_LINES = [
     "Soil Series:         R1",
     "     100           0   0   2   0   0   0   2   1   0",
@@ -276,9 +280,9 @@ def test_find_inputs_empty_root_raises(tmp_path):
 # --------------------------------------------------------------------------- #
 # rerun_one
 # --------------------------------------------------------------------------- #
-def _one(tmp_path, runner, **kw):
+def _one(tmp_path, runner, *, dest_name: str = "run_x", **kw):
     src = make_folder(tmp_path / "runs")
-    dest = tmp_path / "out" / "batchA" / "run_x"
+    dest = tmp_path / "out" / "batchA" / dest_name
     work = tmp_path / "work"
     rec = rerun_one(src, dest, work, Path("WINPRZM.exe"), runner=runner, work_name=WORK_NAME, **kw)
     return src, dest, work, rec
@@ -600,3 +604,422 @@ def test_rerun_all_skips_fields_przm_could_not_calculate(tree, tmp_path):
     assert again.calls == []
     retried = rerun_all(tree, out, "WINPRZM.exe", "rr", workers=1, retry_failed=True, runner=again)
     assert len(retried) == 4 and {r["status"] for r in retried} == {"ok"}
+
+
+# --------------------------------------------------------------------------- #
+# Spray dates and doses: read_applications / patch_applications
+# --------------------------------------------------------------------------- #
+from runoffwatch.rerun import (DEFAULT_DOSES, DEFAULT_WINDOWS, Variant, make_variants,   # noqa: E402
+                               parse_window, patch_applications, read_applications)
+
+DATES10 = [(d, m) for d, m in [(15, 2), (20, 2), (1, 3), (5, 3), (10, 3), (31, 3), (1, 4), (15, 4), (28, 2), (30, 4)]]
+
+
+def test_inp_helper_has_ten_applications_before_soil_series():
+    lines = inp_bytes().split(CRLF)
+    assert lines[APP - 3] == b"Chemical Input Data: "
+    assert APP + 10 < SOIL and lines[SOIL].startswith(b"Soil Series")
+
+
+def test_read_applications_values():
+    apps = read_applications(inp_bytes())
+    assert len(apps) == 10
+    assert [a["year"] for a in apps] == YEARS
+    assert all(a["day"] == 1 and a["month"] == 3 for a in apps)
+    assert all(a["rate_kgha"] == pytest.approx(2.4) for a in apps)
+    assert read_applications(inp_bytes().replace(CRLF, b"\n")) == apps
+
+
+def test_patch_applications_changes_only_the_application_lines():
+    raw = inp_bytes()
+    new = patch_applications(raw, DATES10, "1.20")
+    assert len(new) == len(raw)
+    old_lines, new_lines = raw.split(CRLF), new.split(CRLF)
+    assert len(new_lines) == len(old_lines) and new.count(CRLF) == raw.count(CRLF)
+    assert b"\n" not in new.replace(CRLF, b"")
+    changed = [i for i, (a, b) in enumerate(zip(old_lines, new_lines)) if a != b]
+    assert changed == list(range(APP, APP + 10))
+    assert new_lines[APP] == b"  150290  0 2    5  1.20    1    0"
+    apps = read_applications(new)
+    assert [(a["day"], a["month"]) for a in apps] == DATES10
+    assert [a["year"] for a in apps] == YEARS
+    assert all(a["rate_kgha"] == pytest.approx(1.2) for a in apps)
+    assert read_settings(new) == read_settings(raw)
+
+
+def test_patch_applications_keeps_lf_files_lf():
+    raw = inp_bytes().replace(CRLF, b"\n")
+    new = patch_applications(raw, DATES10, "0.24")
+    assert b"\r" not in new and len(new) == len(raw)
+    assert read_applications(new)[0]["rate_kgha"] == pytest.approx(0.24)
+
+
+def test_patch_applications_single_date_for_every_year():
+    apps = read_applications(patch_applications(inp_bytes(), [(15, 4)]))
+    assert [(a["day"], a["month"], a["year"]) for a in apps] == [(15, 4, y) for y in YEARS]
+    assert all(a["rate_kgha"] == pytest.approx(2.4) for a in apps)      # dose untouched
+
+
+def test_patch_applications_none_changes_nothing():
+    raw = inp_bytes()
+    assert patch_applications(raw) == raw
+    assert patch_applications(raw, None, None) == raw
+    only_rate = patch_applications(raw, rate="0.5")
+    assert [(a["day"], a["month"]) for a in read_applications(only_rate)] == [(1, 3)] * 10
+
+
+@pytest.mark.parametrize("dates", [DATES10[:9], DATES10 + [(1, 3)], [(1, 3), (2, 3)], []])
+def test_patch_applications_wrong_number_of_dates(dates):
+    with pytest.raises(RerunError):
+        patch_applications(inp_bytes(), dates)
+
+
+@pytest.mark.parametrize("date", [(31, 2), (29, 2), (0, 3), (1, 13), (31, 4)])
+def test_patch_applications_impossible_date(date):
+    with pytest.raises(RerunError, match="not a date"):
+        patch_applications(inp_bytes(), [date])
+
+
+def test_patch_applications_accepts_29_february_only_in_leap_years():
+    dates = [(1, 3)] * 10
+    dates[YEARS.index(92)] = (29, 2)                  # 1992 is a leap year
+    assert read_applications(patch_applications(inp_bytes(), dates))[2]["day"] == 29
+
+
+@pytest.mark.parametrize("rate", ["abc", "", "0", "0.00", "-1", "1234567", "12.3456"])
+def test_patch_applications_bad_dose(rate):
+    with pytest.raises(RerunError):
+        patch_applications(inp_bytes(), rate=rate)
+
+
+@pytest.mark.parametrize("rate", ["nan", "inf"])
+def test_patch_applications_rejects_non_finite_dose(rate):
+    with pytest.raises(RerunError):
+        patch_applications(inp_bytes(), rate=rate)
+
+
+def test_patch_applications_without_block():
+    lines = [l for l in PRE_LINES + CHEM_LINES + POST_LINES if not l.startswith("Chemical Input Data")]
+    with pytest.raises(RerunError, match="Chemical Input Data"):
+        patch_applications(inp_bytes(lines), [(1, 3)])
+    with pytest.raises(RerunError, match="Chemical Input Data"):
+        read_applications(inp_bytes(lines))
+
+
+def test_patch_applications_damaged_block():
+    lines = PRE_LINES + CHEM_LINES + POST_LINES
+    bad = list(lines); bad[APP + 4] = "  xx0394  0 2    5  2.40    1    0"
+    with pytest.raises(RerunError, match="application line"):
+        read_applications(inp_bytes(bad))
+    truncated = lines[:APP + 4]
+    with pytest.raises(RerunError):
+        read_applications(inp_bytes(truncated))
+
+
+def test_patch_inp_and_patch_applications_commute():
+    raw = inp_bytes()
+    a = patch_applications(patch_inp(raw), DATES10, "0.24")
+    b = patch_inp(patch_applications(raw, DATES10, "0.24"))
+    assert a == b
+    assert read_settings(a)["henry"] == pytest.approx(float(HENRY_FIXED))
+    assert read_applications(a)[0]["day"] == 15
+
+
+# --------------------------------------------------------------------------- #
+# parse_window / make_variants
+# --------------------------------------------------------------------------- #
+def test_parse_window_day_numbers():
+    assert parse_window("15.02-30.04") == (46, 120)
+    assert parse_window("01.10-30.11") == (274, 334)
+    assert parse_window(" 01.01-31.12 ") == (1, 365)
+    assert parse_window("01.03-01.03") == (60, 60)                  # single day
+
+
+@pytest.mark.parametrize("text", ["", "abc", "15.02", "15/02-30/04", "32.01-05.02", "15.13-01.12",
+                                  "29.02-01.03", "15.02-30.04-01.05", "15.02.2020-30.04", "a.b-c.d"])
+def test_parse_window_bad_text(text):
+    with pytest.raises(RerunError, match="15.02-30.04"):
+        parse_window(text)
+
+
+def test_parse_window_ending_before_start():
+    with pytest.raises(RerunError, match="ends before"):
+        parse_window("30.04-15.02")
+    with pytest.raises(RerunError, match="ends before"):
+        parse_window("01.12-31.01")
+
+
+def test_make_variants_is_reproducible():
+    a = make_variants("run_7", 10, 4, seed=3)
+    assert a == make_variants("run_7", 10, 4, seed=3)
+    assert all(isinstance(v, Variant) for v in a)
+    with pytest.raises(Exception):
+        a[0].rate = "9"                                           # frozen
+    assert make_variants("run_7", 10, 4, seed=4) != a
+    assert make_variants("run_8", 10, 4, seed=3) != a
+    assert make_variants("run_7", 10, 0) == []
+
+
+def test_make_variants_dates_inside_window_and_real_in_every_year():
+    import datetime as dt
+    for name in [f"field_{i}" for i in range(40)]:
+        for v in make_variants(name, 10, 3):
+            assert v.window in DEFAULT_WINDOWS and v.rate in DEFAULT_DOSES
+            assert len(v.dates) == 10
+            first, last = parse_window(v.window)
+            for day, month in v.dates:
+                assert (day, month) != (29, 2)
+                assert first <= dt.date(2001, month, day).timetuple().tm_yday <= last
+                for year in range(1990, 2000):
+                    dt.date(year, month, day)                       # raises if not a real date
+            assert read_applications(patch_applications(inp_bytes(), list(v.dates), v.rate))[0]["day"] == v.dates[0][0]
+
+
+def test_make_variants_suffixes_and_one_date_per_year():
+    vs = make_variants("f", 7, 5)
+    assert [v.suffix for v in vs] == ["__v1", "__v2", "__v3", "__v4", "__v5"]
+    assert all(len(v.dates) == 7 for v in vs)
+    assert len({v.dates for v in vs}) == 5                          # different draws per copy
+
+
+def test_make_variants_dates_vary_between_years():
+    vs = make_variants("f", 10, 3, windows=("15.02-30.04",))
+    assert all(len(set(v.dates)) > 1 for v in vs)
+    single = make_variants("f", 10, 2, windows=("10.03-10.03",))
+    assert all(set(v.dates) == {(10, 3)} for v in single)
+
+
+def test_make_variants_two_windows_two_copies_cover_both():
+    for name in [f"field_{i}" for i in range(30)]:
+        assert {v.window for v in make_variants(name, 10, 2)} == set(DEFAULT_WINDOWS)
+
+
+def test_make_variants_doses_used_about_equally():
+    from collections import Counter
+    count = Counter(v.rate for i in range(600) for v in make_variants(f"field_{i}", 2, 1))
+    assert set(count) == set(DEFAULT_DOSES)
+    assert all(150 <= c <= 250 for c in count.values()), count
+    wins = Counter(v.window for i in range(600) for v in make_variants(f"field_{i}", 2, 1))
+    assert all(240 <= c <= 360 for c in wins.values()), wins
+
+
+@pytest.mark.parametrize("kw", [dict(windows=("15.02-30.04", "bad")), dict(windows=("30.04-15.02",)),
+                                dict(doses=("abc",)), dict(doses=("1234567",)), dict(doses=("1.2", "x"))])
+def test_make_variants_bad_window_or_dose(kw):
+    with pytest.raises(RerunError):
+        make_variants("f", 10, 2, **kw)
+
+
+def test_make_variants_rejects_zero_dose():
+    with pytest.raises(RerunError):
+        make_variants("f", 10, 2, doses=("0",))
+
+
+@pytest.mark.parametrize("kw", [dict(windows=()), dict(doses=())])
+def test_make_variants_empty_lists_raise_rerun_error(kw):
+    with pytest.raises(RerunError):
+        make_variants("f", 10, 2, **kw)
+
+
+# --------------------------------------------------------------------------- #
+# rerun_one with a variant
+# --------------------------------------------------------------------------- #
+def test_rerun_one_with_variant(tmp_path):
+    v = make_variants("run_x", 10, 1, seed=5)[0]
+    _, dest, _, rec = _one(tmp_path, FakeRunner(), dest_name="run_x__v1", variant=v)
+    assert rec["status"] == "ok", rec
+    assert rec["run"] == "run_x__v1" == dest.name and rec["batch"] == "batchA"
+    stored = (dest / "Run 1-1_123.inp").read_bytes()
+    apps = read_applications(stored)
+    assert tuple((a["day"], a["month"]) for a in apps) == v.dates
+    assert all(a["rate_kgha"] == pytest.approx(float(v.rate)) for a in apps)
+    assert [a["year"] for a in apps] == YEARS
+    s = read_settings(stored)
+    assert s["henry"] == pytest.approx(float(HENRY_FIXED))
+    assert s["moisture_ref"] == pytest.approx(float(MOISTURE_REF_FIXED))
+    assert stored == patch_applications(patch_inp(inp_bytes()), list(v.dates), v.rate)
+    assert (dest / "focusprzm_weather.met").exists()                # copy_weather defaults to True here
+
+
+def test_rerun_one_without_weather_copy(tmp_path):
+    runner = FakeRunner()
+    _, dest, work, rec = _one(tmp_path, runner, copy_weather=False)
+    assert rec["status"] == "ok"
+    assert sorted(p.name for p in dest.iterdir()) == sorted(["Run 1-1_123.inp", RUN_FILE, "RUN X.ZTS", "RUN X.OUT"])
+    assert is_done(dest)
+    assert (work / "focusprzm_weather.met").exists()               # PRZM still had its weather file
+
+
+def test_rerun_one_variant_on_inp_without_application_block_fails(tmp_path):
+    src = make_folder(tmp_path / "runs")
+    lines = [l for l in PRE_LINES + CHEM_LINES + POST_LINES if not l.startswith("Chemical Input Data")]
+    (src / "Run 1-1_123.inp").write_bytes(inp_bytes(lines))
+    runner = FakeRunner()
+    v = make_variants("run_x", 10, 1)[0]
+    rec = rerun_one(src, tmp_path / "out" / "run_x__v1", tmp_path / "work", Path("x.exe"), runner=runner,
+                    work_name=WORK_NAME, variant=v)
+    assert rec["status"] == "failed" and "Chemical Input Data" in rec["note"]
+    assert rec["run"] == "run_x__v1" and runner.calls == []
+
+
+# --------------------------------------------------------------------------- #
+# rerun_all with variants
+# --------------------------------------------------------------------------- #
+FIELDS = [("batchA", "run_1"), ("batchA", "run_2"), ("batchA", "run_3"), ("batchB", "run_4")]
+
+
+def _read_plan(out: Path) -> list[dict]:
+    with open(out / "rerun_plan.csv", newline="") as fh:
+        return list(csv.DictReader(fh))
+
+
+def test_rerun_all_variants_layout_plan_and_settings(tree, tmp_path):
+    out = tmp_path / "out"
+    runner = FakeRunner()
+    recs = rerun_all(tree, out, "WINPRZM.exe", "rr", workers=2, variants=3, seed=7, runner=runner)
+    assert len(recs) == 12 and {r["status"] for r in recs} == {"ok"}, recs
+    want = sorted(f"{run}__v{k}" for _, run in FIELDS for k in (1, 2, 3))
+    assert sorted(r["run"] for r in recs) == want
+    for batch, run in FIELDS:
+        assert not (out / batch / run).exists()
+        assert sorted(p.name for p in (out / batch).iterdir() if p.name.startswith(run)) == [
+            f"{run}__v1", f"{run}__v2", f"{run}__v3"]
+    plan = _read_plan(out)
+    assert len(plan) == 12 and sorted(p["run"] for p in plan) == want
+    for p in plan:
+        d = out / p["batch"] / p["run"]
+        assert p["run"].startswith(p["field"] + "__v")
+        apps = read_applications((d / "Run 1-1_123.inp").read_bytes())
+        assert " ".join(f"{a['day']:02d}.{a['month']:02d}" for a in apps) == p["spray_dates_day.month"]
+        assert all(a["rate_kgha"] == pytest.approx(float(p["dose_kgha"])) for a in apps)
+        assert p["window"] in DEFAULT_WINDOWS and p["dose_kgha"] in DEFAULT_DOSES
+        k = int(p["run"].rsplit("__v", 1)[1])
+        v = make_variants(p["field"], 10, 3, seed=7)[k - 1]
+        assert (p["window"], p["dose_kgha"]) == (v.window, v.rate)
+        assert not (d / "focusprzm_weather.met").exists()             # default: no weather copy with variants
+    settings = (out / "rerun_settings.txt").read_text()
+    for line in ["variants=3", f"windows={','.join(DEFAULT_WINDOWS)}", f"doses={','.join(DEFAULT_DOSES)}", "seed=7",
+                 f"henry={HENRY_FIXED}", f"moisture_ref={MOISTURE_REF_FIXED}"]:
+        assert line in settings.splitlines()
+    assert sorted(r["run"] for r in _read_log(out)) == want
+
+
+def test_rerun_all_variants_second_call_does_nothing(tree, tmp_path):
+    out = tmp_path / "out"
+    rerun_all(tree, out, "WINPRZM.exe", "rr", variants=2, runner=FakeRunner())
+    plan = (out / "rerun_plan.csv").read_bytes()
+    again = FakeRunner()
+    assert rerun_all(tree, out, "WINPRZM.exe", "rr", variants=2, runner=again) == []
+    assert again.calls == []
+    assert (out / "rerun_plan.csv").read_bytes() == plan
+    assert len(_read_log(out)) == 8
+
+
+@pytest.mark.parametrize("kw", [dict(windows=("01.03-31.03",)), dict(doses=("1.00",)), dict(seed=2),
+                                dict(variants=3)])
+def test_rerun_all_variants_refuse_other_plan_in_same_folder(tree, tmp_path, kw):
+    out = tmp_path / "out"
+    rerun_all(tree, out, "WINPRZM.exe", "rr", variants=2, limit=1, runner=FakeRunner())
+    other = FakeRunner()
+    args = dict(variants=2) | kw
+    with pytest.raises(RerunError, match="other settings"):
+        rerun_all(tree, out, "WINPRZM.exe", "rr", runner=other, **args)
+    assert other.calls == []
+
+
+def test_rerun_all_plain_run_refused_in_varied_folder(tree, tmp_path):
+    out = tmp_path / "out"
+    rerun_all(tree, out, "WINPRZM.exe", "rr", variants=2, limit=1, runner=FakeRunner())
+    other = FakeRunner()
+    with pytest.raises(RerunError):
+        rerun_all(tree, out, "WINPRZM.exe", "rr", runner=other)
+    assert other.calls == []
+
+
+def test_rerun_all_varied_run_refused_in_plain_folder(tree, tmp_path):
+    out = tmp_path / "out"
+    rerun_all(tree, out, "WINPRZM.exe", "rr", limit=1, runner=FakeRunner())
+    other = FakeRunner()
+    with pytest.raises(RerunError):
+        rerun_all(tree, out, "WINPRZM.exe", "rr", variants=2, runner=other)
+    assert other.calls == []
+
+
+def _finished(root: Path, batch: str, run: str, zts: int = 1000) -> Path:
+    d = root / batch / run
+    d.mkdir(parents=True)
+    (d / "R.ZTS").write_bytes(b"Z" * zts)
+    (d / "R.OUT").write_bytes(b"out")
+    return d
+
+
+def test_rerun_all_fields_from(tree, tmp_path):
+    fixed = tmp_path / "fixed"
+    _finished(fixed, "batchA", "run_1")
+    _finished(fixed, "batchB", "run_4")
+    _finished(fixed, "batchA", "run_2", zts=100)                     # not finished
+    out = tmp_path / "out"
+    recs = rerun_all(tree, out, "WINPRZM.exe", "rr", variants=2, fields_from=fixed, runner=FakeRunner())
+    assert sorted(r["run"] for r in recs) == ["run_1__v1", "run_1__v2", "run_4__v1", "run_4__v2"]
+    assert sorted(p["field"] for p in _read_plan(out)) == ["run_1", "run_1", "run_4", "run_4"]
+
+
+def test_rerun_all_fields_from_without_results(tree, tmp_path):
+    empty = tmp_path / "fixed"
+    _finished(empty, "batchA", "run_1", zts=10)
+    runner = FakeRunner()
+    with pytest.raises(FileNotFoundError):
+        rerun_all(tree, tmp_path / "out", "WINPRZM.exe", "rr", variants=2, fields_from=empty, runner=runner)
+    with pytest.raises(FileNotFoundError):
+        rerun_all(tree, tmp_path / "out", "WINPRZM.exe", "rr", variants=2, fields_from=tmp_path / "missing",
+                  runner=runner)
+    assert runner.calls == []
+
+
+def test_rerun_all_limit_counts_fields_not_copies(tree, tmp_path):
+    runner = FakeRunner()
+    recs = rerun_all(tree, tmp_path / "out", "WINPRZM.exe", "rr", variants=3, limit=2, runner=runner)
+    assert len(recs) == 6 and len(runner.calls) == 6
+    assert sorted(r["run"] for r in recs) == sorted(f"run_{i}__v{k}" for i in (1, 2) for k in (1, 2, 3))
+    assert len(_read_plan(tmp_path / "out")) == 6
+
+
+def test_rerun_all_copy_weather_defaults_and_override(tree, tmp_path):
+    rerun_all(tree, tmp_path / "plain", "WINPRZM.exe", "rr", limit=1, runner=FakeRunner())
+    assert (tmp_path / "plain" / "batchA" / "run_1" / "focusprzm_weather.met").exists()
+    rerun_all(tree, tmp_path / "varied", "WINPRZM.exe", "rr", variants=1, limit=1, runner=FakeRunner())
+    assert not (tmp_path / "varied" / "batchA" / "run_1__v1" / "focusprzm_weather.met").exists()
+    rerun_all(tree, tmp_path / "varied_met", "WINPRZM.exe", "rr", variants=1, limit=1, copy_weather=True,
+              runner=FakeRunner())
+    assert (tmp_path / "varied_met" / "batchA" / "run_1__v1" / "focusprzm_weather.met").exists()
+    rerun_all(tree, tmp_path / "plain_nomet", "WINPRZM.exe", "rr", limit=1, copy_weather=False, runner=FakeRunner())
+    assert not (tmp_path / "plain_nomet" / "batchA" / "run_1" / "focusprzm_weather.met").exists()
+
+
+@pytest.mark.parametrize("kw", [dict(variants=-1), dict(variants=2, windows=("bad",)),
+                                dict(variants=2, doses=("abc",))])
+def test_rerun_all_bad_variant_arguments_raise_before_any_run(tree, tmp_path, kw):
+    runner = FakeRunner()
+    with pytest.raises(RerunError):
+        rerun_all(tree, tmp_path / "out", "WINPRZM.exe", "rr", runner=runner, **kw)
+    assert runner.calls == [] and not (tmp_path / "out").exists()
+
+
+def test_rerun_all_variants_damaged_field_does_not_stop_others(tree, tmp_path):
+    (tree / "batchA" / "run_2" / "Run 1-1_123.inp").write_bytes(b"not an inp\r\n")
+    out = tmp_path / "out"
+    recs = rerun_all(tree, out, "WINPRZM.exe", "rr", workers=2, variants=2, runner=FakeRunner())
+    by_run = {r["run"]: r["status"] for r in recs}
+    assert len(recs) == 8
+    assert by_run["run_2__v1"] == by_run["run_2__v2"] == "failed"
+    assert {s for r, s in by_run.items() if not r.startswith("run_2")} == {"ok"}
+    assert len(_read_plan(out)) == 8
+
+
+def test_rerun_all_variants_field_without_application_block(tree, tmp_path):
+    lines = [l for l in PRE_LINES + CHEM_LINES + POST_LINES if not l.startswith("Chemical Input Data")]
+    (tree / "batchA" / "run_3" / "Run 1-1_123.inp").write_bytes(inp_bytes(lines))
+    recs = rerun_all(tree, tmp_path / "out", "WINPRZM.exe", "rr", variants=1, runner=FakeRunner())
+    by_run = {r["run"]: r for r in recs}
+    assert by_run["run_3__v1"]["status"] == "failed" and "Chemical Input Data" in by_run["run_3__v1"]["note"]
+    assert sum(r["status"] == "ok" for r in recs) == 3

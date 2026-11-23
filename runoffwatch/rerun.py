@@ -17,6 +17,14 @@ numbers, starts WINPRZM.exe on it and stores the result in the same folder
 layout as the original data, so every other command of this package can be
 pointed at the new folder.
 
+Varying the spray date and the dose
+-----------------------------------
+In the delivered data every field is sprayed on 1 March with 2.4 kg/ha, so a model cannot learn
+what another spray day or another dose would do. With `variants > 0`, `rerun_all` makes several
+extra copies of each field. Each copy gets its own dose and, for every simulated year, its own
+spray date drawn from one time window (for example 15 Feb to 30 Apr). The draw depends only on
+the seed, the field name and the copy number, so the same command always makes the same runs.
+
 PRZM details that matter here
 -----------------------------
 * The .inp file has fixed columns and Windows line endings. Only the wanted
@@ -30,6 +38,7 @@ PRZM details that matter here
 from __future__ import annotations
 
 import csv
+import datetime as dt
 import logging
 import os
 import re
@@ -37,7 +46,9 @@ import shutil
 import subprocess
 import threading
 import time
+import zlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
@@ -50,6 +61,8 @@ RUN_FILE = "Run 1.run"
 _PATH_LINE = re.compile(rb"^(  PATH {2,})(\S+)(\r?)$", re.M)
 
 
+DEFAULT_WINDOWS = ("15.02-30.04", "01.10-30.11")   # spray windows, day.month-day.month
+DEFAULT_DOSES = ("0.24", "1.20", "2.40")            # kg/ha
 ERROR_BOX_TITLE = "Fortran"   # title of the message box PRZM shows when a calculation fails
 SKIP_NEXT_TIME = {"przm_error"}   # outcomes that will not change when the same folder is run again
 
@@ -74,9 +87,11 @@ def _fixed(line: bytes, start: int, end: int, text: str) -> bytes:
 
 def _number(text: str) -> None:
     try:
-        float(text)
+        value = float(text)
     except (TypeError, ValueError):
         raise RerunError(f"not a number: {text!r}") from None
+    if value != value or value in (float("inf"), float("-inf")):
+        raise RerunError(f"not a usable number: {text!r}")
 
 
 def _chem_lines(lines: list[bytes]) -> int:
@@ -119,6 +134,117 @@ def patch_inp(raw: bytes, henry: str | None = HENRY_FIXED, moisture_ref: str | N
             raise RerunError("moisture line is shorter than 24 columns")
         lines[soil + 7] = _fixed(lines[soil + 7], 16, 24, moisture_ref)
     return nl.join(lines)
+
+
+def _application_lines(lines: list[bytes]) -> tuple[int, int]:
+    """(index of the first application line, number of applications) in an .inp file."""
+    for i, l in enumerate(lines):
+        if l.startswith(b"Chemical Input Data"):
+            try:
+                n = int(lines[i + 1].split()[0])
+            except (IndexError, ValueError):
+                raise RerunError("cannot read the number of applications") from None
+            first = i + 3
+            for a in lines[first:first + n]:
+                if len(a) < 24 or not a[2:8].isdigit():
+                    raise RerunError(f"unexpected application line: {a!r}")
+                _number(a[18:24].decode())
+            if len(lines[first:first + n]) != n:
+                raise RerunError("the .inp file ends inside the application block")
+            return first, n
+    raise RerunError("no 'Chemical Input Data' line in the .inp file")
+
+
+def read_applications(raw: bytes) -> list[dict]:
+    """Day, month, two-digit year and dose (kg/ha) of every application in an .inp file."""
+    lines = raw.split(b"\r\n") if b"\r\n" in raw else raw.split(b"\n")
+    first, n = _application_lines(lines)
+    return [{"day": int(a[2:4]), "month": int(a[4:6]), "year": int(a[6:8]), "rate_kgha": float(a[18:24])}
+            for a in lines[first:first + n]]
+
+
+def patch_applications(raw: bytes, dates: list[tuple[int, int]] | None = None, rate: str | None = None) -> bytes:
+    """Return the .inp content with new spray dates and/or a new dose.
+
+    dates: one (day, month) per application, in the order of the file (one per simulated year);
+           a list with a single entry is used for every year. The year of each line is kept.
+    rate:  dose in kg/ha as text, at most 6 characters (for example "1.20").
+    `None` leaves a value as it is. Nothing else in the file changes.
+    """
+    nl = b"\r\n" if b"\r\n" in raw else b"\n"
+    lines = raw.split(nl)
+    first, n = _application_lines(lines)
+    if dates is not None:
+        if len(dates) == 1:
+            dates = list(dates) * n
+        if len(dates) != n:
+            raise RerunError(f"{len(dates)} spray dates given for {n} applications")
+        for k, (day, month) in enumerate(dates):
+            year = 1900 + int(lines[first + k][6:8])
+            try:
+                dt.date(year, int(month), int(day))
+            except (TypeError, ValueError):
+                raise RerunError(f"not a date: day {day}, month {month}, year {year}") from None
+            lines[first + k] = lines[first + k][:2] + f"{int(day):02d}{int(month):02d}".encode() + lines[first + k][6:]
+    if rate is not None:
+        _number(rate)
+        if float(rate) <= 0:
+            raise RerunError(f"dose must be above zero, not {rate!r}")
+        for k in range(n):
+            lines[first + k] = _fixed(lines[first + k], 18, 24, rate)
+    return nl.join(lines)
+
+
+def parse_window(text: str) -> tuple[int, int]:
+    """'15.02-30.04' -> (first, last) as day numbers of a year without 29 February."""
+    try:
+        a, b = text.strip().split("-")
+        (d1, m1), (d2, m2) = (tuple(int(x) for x in part.split(".")) for part in (a, b))
+        first, last = (dt.date(2001, m, d).timetuple().tm_yday for d, m in ((d1, m1), (d2, m2)))
+    except (ValueError, TypeError):
+        raise RerunError(f"spray window must look like 15.02-30.04 (day.month-day.month), not {text!r}") from None
+    if last < first:
+        raise RerunError(f"spray window {text!r} ends before it starts (windows across New Year are not supported)")
+    return first, last
+
+
+@dataclass(frozen=True)
+class Variant:
+    """One extra copy of a field: its name ending, spray window, dose and one spray date per year."""
+    suffix: str
+    window: str
+    rate: str
+    dates: tuple[tuple[int, int], ...]
+
+
+def make_variants(run_name: str, n_years: int, variants: int, windows=DEFAULT_WINDOWS, doses=DEFAULT_DOSES,
+                  seed: int = 1) -> list[Variant]:
+    """The spray plan of one field. Depends only on the arguments, never on what was run before.
+
+    Each copy gets one window and one dose (both walk through the lists, starting at a point that
+    differs from field to field) and, inside its window, a different random spray day every year.
+    """
+    import random
+
+    if not windows or not doses:
+        raise RerunError("at least one spray window and one dose are needed")
+    spans = [parse_window(w) for w in windows]
+    for d in doses:
+        _number(d)
+        _fixed(b" " * 6, 0, 6, d)
+        if float(d) <= 0:
+            raise RerunError(f"dose must be above zero, not {d!r}")
+    out = []
+    start = zlib.crc32(f"{seed}|{run_name}".encode())
+    for k in range(1, variants + 1):
+        rng = random.Random(zlib.crc32(f"{seed}|{run_name}|{k}".encode()))
+        w = (start + k) % len(spans)
+        dose = doses[(start // len(spans) + k) % len(doses)]
+        days = [rng.randint(*spans[w]) for _ in range(n_years)]
+        dates = tuple(((dt.date(2001, 1, 1) + dt.timedelta(days=d - 1)).day,
+                       (dt.date(2001, 1, 1) + dt.timedelta(days=d - 1)).month) for d in days)
+        out.append(Variant(f"__v{k}", windows[w], dose, dates))
+    return out
 
 
 def patch_run(raw: bytes, work_dir: str) -> bytes:
@@ -236,16 +362,24 @@ def is_done(dest: Path) -> bool:
 
 def rerun_one(src: Path, dest: Path, work: Path, exe: Path, *, henry: str | None = HENRY_FIXED,
               moisture_ref: str | None = MOISTURE_REF_FIXED, timeout: float = 120,
-              runner: Callable[[Path, Path, float], None] = run_winprzm, work_name: str | None = None) -> dict:
-    """Re-run one folder. Returns a small record for the log."""
+              runner: Callable[[Path, Path, float], None] = run_winprzm, work_name: str | None = None,
+              variant: Variant | None = None, copy_weather: bool = True) -> dict:
+    """Re-run one folder. Returns a small record for the log.
+
+    variant: also change the spray dates and the dose (see make_variants).
+    copy_weather: store the weather file next to the results (it is identical to the one in `src`).
+    """
     t0 = time.time()
-    rec = {"run": src.name, "batch": src.parent.name, "status": "ok", "seconds": 0.0, "zts_bytes": 0, "note": ""}
+    rec = {"run": dest.name, "batch": src.parent.name, "status": "ok", "seconds": 0.0, "zts_bytes": 0, "note": ""}
     try:
         files = _by_suffix(src)
         inp, met = files[".inp"], files[".met"]
         _empty(work)
         (work / "output").mkdir(parents=True, exist_ok=True)
-        (work / inp.name).write_bytes(patch_inp(inp.read_bytes(), henry, moisture_ref))
+        content = patch_inp(inp.read_bytes(), henry, moisture_ref)
+        if variant is not None:
+            content = patch_applications(content, list(variant.dates), variant.rate)
+        (work / inp.name).write_bytes(content)
         shutil.copyfile(met, work / met.name)
         (work / RUN_FILE).write_bytes(patch_run((src / RUN_FILE).read_bytes(), work_name or str(work)))
         runner(work, exe, timeout)
@@ -253,7 +387,8 @@ def rerun_one(src: Path, dest: Path, work: Path, exe: Path, *, henry: str | None
         if ".zts" not in produced or ".out" not in produced:
             raise RerunError("PRZM wrote no result files")
         dest.mkdir(parents=True, exist_ok=True)
-        for p in (work / inp.name, work / met.name, work / RUN_FILE, produced[".zts"], produced[".out"]):
+        keep = [work / inp.name, work / RUN_FILE, produced[".zts"], produced[".out"]]
+        for p in keep + ([work / met.name] if copy_weather else []):
             shutil.copyfile(p, dest / p.name)
         rec["zts_bytes"] = produced[".zts"].stat().st_size
         if rec["zts_bytes"] <= 400:
@@ -285,14 +420,31 @@ def _last_status(log_path: Path, wanted: set[str]) -> set[str]:
 def rerun_all(runs_root: str | Path, out_root: str | Path, exe: str | Path, work_root: str | Path = r"C:\Temp\rr", *,
               henry: str | None = HENRY_FIXED, moisture_ref: str | None = MOISTURE_REF_FIXED, workers: int = 4,
               limit: int | None = None, timeout: float = 120, retry_failed: bool = False,
+              variants: int = 0, windows=DEFAULT_WINDOWS, doses=DEFAULT_DOSES, seed: int = 1,
+              fields_from: str | Path | None = None, copy_weather: bool | None = None,
               runner: Callable[[Path, Path, float], None] = run_winprzm) -> list[dict]:
     """Re-run every folder with input files. Folders that are already done are skipped,
     so the command can be stopped and started again. Folders for which PRZM itself reported a
     calculation error are also skipped the next time, unless `retry_failed` is set.
 
+    variants: 0 = one run per field, spray date and dose as delivered. Above 0 = that many extra
+        copies per field with varied spray dates and dose (see make_variants); the folders are
+        named <field>__v1, <field>__v2, ... and the plan is written to <out_root>/rerun_plan.csv.
+    fields_from: a folder of finished results (for example data/raw/runs_fixed); only fields that
+        have a full result there are used. Saves the time for fields PRZM cannot calculate.
+    copy_weather: store a copy of the weather file with every result. Default: yes for plain
+        re-runs, no for varied ones (it is the same file as in `runs_root` and takes a lot of room).
+
     The log is written to <out_root>/rerun_log.csv.
     """
     exe, out_root, work_root = Path(exe), Path(out_root), Path(work_root)
+    if variants < 0:
+        raise RerunError("variants must be 0 or more")
+    windows, doses = tuple(windows), tuple(doses)
+    if variants:
+        make_variants("check", 1, 1, windows, doses, seed)          # fails early on a bad window or dose
+    if copy_weather is None:
+        copy_weather = variants == 0
     for value, width in ((henry, 8), (moisture_ref, 8)):
         if value is not None:
             _number(value)
@@ -304,20 +456,50 @@ def rerun_all(runs_root: str | Path, out_root: str | Path, exe: str | Path, work
             raise FileNotFoundError(f"PRZM program not found: {exe}")
         work_root = work_root.resolve()
         patch_run(b"  PATH   a\r\n  PATH   b\r\n", str(work_root / f"w{max(1, workers) - 1}"))   # path short enough?
-    todo = [(s, out_root / s.parent.name / s.name) for s in find_inputs(runs_root)][:limit]
+    sources = find_inputs(runs_root)
+    if fields_from is not None:
+        good = {p.name for p in Path(fields_from).glob("*/*") if is_done(p)}
+        if not good:
+            raise FileNotFoundError(f"no finished results under {fields_from}")
+        sources = [s for s in sources if s.name in good]
+    sources = sources[:limit]
+    plan: dict[Path, Variant | None] = {}
+    todo = []
+    for s in sources:
+        if not variants:
+            todo.append((s, out_root / s.parent.name / s.name)); plan[todo[-1][1]] = None
+            continue
+        try:
+            n_years = len(read_applications(_by_suffix(s)[".inp"].read_bytes()))
+        except (RerunError, KeyError, OSError):
+            n_years = 0                       # rerun_one reports the damaged input file
+        for v in make_variants(s.name, max(n_years, 1), variants, windows, doses, seed):
+            todo.append((s, out_root / s.parent.name / (s.name + v.suffix))); plan[todo[-1][1]] = v
     out_root.mkdir(parents=True, exist_ok=True)
     log_path = out_root / "rerun_log.csv"
     known_bad = set() if retry_failed else _last_status(log_path, SKIP_NEXT_TIME)
     not_done = [(s, d) for s, d in todo if not is_done(d)]
-    pending = [(s, d) for s, d in not_done if s.name not in known_bad]
+    pending = [(s, d) for s, d in not_done if d.name not in known_bad]
     log.info("%d folders with inputs, %d already done, %d failed in PRZM before (skipped), %d to run",
              len(todo), len(todo) - len(not_done), len(not_done) - len(pending), len(pending))
     settings = f"henry={henry}\nmoisture_ref={moisture_ref}\n"
+    if variants:
+        settings += f"variants={variants}\nwindows={','.join(windows)}\ndoses={','.join(doses)}\nseed={seed}\n"
     note = out_root / "rerun_settings.txt"
-    if note.exists() and not note.read_text().startswith(settings):
-        raise RerunError(f"{out_root} already holds results made with other settings "
-                         f"({' '.join(note.read_text().split()[:2])}). Choose another output folder.")
+    if note.exists():
+        before = "".join(l for l in note.read_text().splitlines(keepends=True) if not l.startswith("source="))
+        if before != settings:
+            raise RerunError(f"{out_root} already holds results made with other settings "
+                             f"({' '.join(before.split())}). Choose another output folder.")
     note.write_text(settings + f"source={Path(runs_root).resolve()}\n")
+    if variants:
+        with open(out_root / "rerun_plan.csv", "w", newline="") as fh:
+            wr = csv.writer(fh)
+            wr.writerow(["run", "field", "batch", "window", "dose_kgha", "spray_dates_day.month"])
+            for (src_dir, dest_dir) in todo:
+                v = plan[dest_dir]
+                wr.writerow([dest_dir.name, src_dir.name, src_dir.parent.name, v.window, v.rate,
+                             " ".join(f"{a:02d}.{b:02d}" for a, b in v.dates)])
 
     free = [work_root / f"w{i}" for i in range(max(1, workers))]
     for w in free:
@@ -332,7 +514,8 @@ def rerun_all(runs_root: str | Path, out_root: str | Path, exe: str | Path, work
             w = free.pop()
         try:
             own = w / exe.name if runner is run_winprzm else exe
-            return rerun_one(src, dest, w, own, henry=henry, moisture_ref=moisture_ref, timeout=timeout, runner=runner)
+            return rerun_one(src, dest, w, own, henry=henry, moisture_ref=moisture_ref, timeout=timeout, runner=runner,
+                             variant=plan[dest], copy_weather=copy_weather)
         finally:
             with lock:
                 free.append(w)
