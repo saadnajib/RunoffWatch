@@ -91,6 +91,9 @@ needs new PRZM runs in which they vary.
 
 ### Likely cause (a hypothesis for the Landau group to confirm)
 
+> **Update 23 Nov 2026:** this hypothesis was tested with local PRZM runs and holds. The test also
+> showed that the runs we kept as "trusted" are affected. See [section 6](#6-local-re-runs-two-settings-are-wrong-23-nov-2026).
+
 The broken numbers sit in the gas-diffusion term. The runs use a Henry
 constant of **0.03** and an air diffusion coefficient of 4,300 cm²/day
 (echoed by PRZM in each `.OUT` file). Our guess: with this high Henry constant
@@ -192,9 +195,10 @@ The technical notes of the modelling group answered some of our questions:
 ## 5. Questions for the Landau group
 
 1. Is a Henry constant of 0.03 intended for Flufenacet, or is it the template
-   default? (In the run we inspected, PRZM reports about 2.0 of the 2.4 kg/ha
-   leaving through the air each year, and the gas-diffusion numbers are `NaN`
-   from the first year.)
+   default? Our local test runs (section 6) show that it causes the broken numbers and that a
+   realistic value removes them.
+1b. Is the reference soil moisture of 100 read by this PRZM version as a fraction? With 100 the
+   pesticide decays about 25 times too slowly in our test runs; with 1 it behaves as expected.
 2. May we submit our own runs? A design is prepared: 200 control runs that
    change only the Henry constant, and 2,000 runs with varied spray date, dose,
    half-life and sorption.
@@ -204,3 +208,79 @@ The technical notes of the modelling group answered some of our questions:
    (`..._runoff_grd.tif`). Is the step after PRZM needed for anything we use?
 6. Why were the real substances and doses of the sampled fields not used, and is the 16-year
    shift of the weather labels intended?
+
+## 6. Local re-runs: two settings are wrong (23 Nov 2026)
+
+The PRZM program (`WINPRZM.exe`) from this year's project folder runs on an ordinary Windows
+computer in about 3 seconds per field. We used it for two small tests: 30 runs in total, on six
+fields from the data set (three clearly broken, one that crashed, two that pass our check; the two
+passing ones turned out to have identical inputs) plus the example run that comes with the program.
+All numbers are in [`results/local_rerun_tests.csv`](results/local_rerun_tests.csv).
+
+### Test 1: the Henry constant (21 runs)
+
+Each field was run three times. Only the Henry constant differs.
+
+| Field | Henry 0.03 (as delivered) | Henry 3.7e-7 | Henry 0 |
+|---|---|---|---|
+| broken 1 | 1.2e15 g/ha lost in ten years | 37 g/ha | 37 g/ha |
+| broken 2 | 1.7e9 g/ha | 39 g/ha | 39 g/ha |
+| broken 3 | 7.2e10 g/ha | 46 g/ha | 46 g/ha |
+| crashed | stops on day 1,344 | all ten years, 174 g/ha | 174 g/ha |
+| passes our check | 22 g/ha | 62 g/ha | 62 g/ha |
+| program's example | 36 g/ha | 35 g/ha | 35 g/ha |
+
+What this shows:
+
+- **The local program gives exactly the delivered numbers.** With Henry 0.03, all six fields from
+  the data set reproduce the stored daily losses, including the crash on day 1,344. So the fault
+  does not come from the modelling workstation.
+- **The Henry constant causes the explosion.** With a small value every run finishes, and PRZM's
+  own pesticide balance error drops from up to 1e19 to about 1e-7.
+- **The runs that pass our check are affected too.** With Henry 0.03, PRZM lets 65-80 % of every
+  dose evaporate (1.5 to 2 of 2.4 kg/ha per year). With a small value almost nothing evaporates and
+  the loss with runoff is about three times higher. Even in these runs the balance error grows
+  from year to year.
+- **The `NaN` values are not the fault.** They stay in the "gas diffusion" column after the fix.
+  They are a printing problem in that column, not a sign of a broken run.
+- A realistic value and zero give the same result, so the exact small number does not matter.
+
+Is 0.03 wrong for Flufenacet? Published Henry's law constants are about 0.0006 to 0.0013 Pa m³/mol,
+which is 2.4e-7 to 5.3e-7 as the dimensionless number PRZM uses. That makes 0.03 about 100,000
+times too high. (These values were taken from search results for the PPDB and PubChem entries; the
+pages themselves could not be opened from our environment, so they should be checked once more.)
+The example run that comes with the program is labelled "Lindane" and uses the same 0.03, which
+suggests it is a template value.
+
+### Test 2: why the pesticide piles up in the soil (9 runs)
+
+With the Henry constant fixed, a second problem became visible. The input says half of the
+pesticide decays in 42 days, yet about four yearly doses (9 to 10 kg/ha) are still in the soil
+after ten years. Three fields were run again, each time with one decay setting changed.
+
+| Setting changed | Pesticide in the soil after ten years | Ten-year loss with runoff (field that passes our check) |
+|---|---|---|
+| none (Henry fixed only) | 9.1 to 13.8 kg/ha | 62 g/ha |
+| moisture correction switched off (exponent 0) | 0.02 to 1.4 kg/ha | 30 g/ha |
+| reference moisture 1 instead of 100 | 0.06 to 1.9 kg/ha | 33 g/ha |
+| temperature correction switched off (Q10 = 1) | 6.9 to 12.1 kg/ha | 62 g/ha |
+
+(The higher end of each range is the program's example run, whose decay rate is 3.5 times lower.)
+
+The moisture correction slows decay in dry soil: rate × (moisture / reference moisture)^0.7. The
+input files give the reference as 100, meant as 100 % of field capacity. The results fit this
+program working with moisture as a fraction, where field capacity is 1: then 100 makes decay
+100^0.7 = 25 times slower, which is the size of the effect we see. We cannot tell from outside
+whether the input or the program is at fault. The practical fix is the same: reference moisture 1.
+
+### What follows
+
+- The delivered pesticide results are wrong for all runs, not only for the ones our check removes.
+  In the passing runs two errors work against each other (too much evaporation, too little decay).
+- The water results (rain, runoff, infiltration) do not depend on these settings and stay valid.
+- All results in `MODEL_REPORT.md` were learned from the delivered data. The methods stay; the
+  numbers have to be redone on corrected simulations.
+- Corrected simulations can be made locally: 6,958 folders have input files (the 3,958 with
+  results plus 2,992 that stopped early and 8 with empty results), and the editor works on 6,945 of them (13 input files are
+  damaged). `python -m runoffwatch rerun` does this; see the README.
+- Both corrections are our reading of the evidence. The model owners should confirm them.
