@@ -98,7 +98,7 @@ pip install -e ".[dev,app]"
 python -m pytest -q
 ```
 
-You should see `204 passed, 1 skipped` (the skipped one needs PyTorch).
+You should see `246 passed, 1 skipped` (the skipped one needs PyTorch; with PyTorch installed it is `247 passed`).
 
 **Step 5. Ask the model a question.** This compares 7 possible spray days for a made-up weather example.
 
@@ -248,7 +248,7 @@ report for one single run.
 | `runoffwatch/lstm.py` | Second surrogate: an LSTM, compared with the trees |
 | `runoffwatch/longrun.py` | Surrogate on 45 years of Agri4Cast weather for France |
 | `runoffwatch/design.py` | Generator for new simulation runs (run files and task archives) |
-| `tests/` | 208 tests on synthetic run folders (no project data in git) |
+| `tests/` | 247 tests on synthetic run folders (no project data in git) |
 | `runoffwatch/pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code, kept for reference |
 
 Code and documents were written with the help of an AI assistant (Claude).
