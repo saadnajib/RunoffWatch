@@ -1,17 +1,26 @@
-"""Command line: python -m runoffwatch <command> ...
+"""Command line: python -m runoffwatch [--dataset corrected|delivered] <command> ...
+
+Two data sets (see runoffwatch/paths.py):
+  corrected  (default) the re-runs with the two corrected settings, in data/raw/runs_fixed/;
+             results in data/interim_fixed/, data/processed/*_fixed.parquet, models/, docs/results/,
+             docs/figures/; audit trusts a run when PRZM's own balance error is small
+  delivered  the simulations as delivered, in data/raw/runs/ (two wrong settings);
+             results in data/interim/, data/processed/, models/delivered/, docs/results/delivered/,
+             docs/figures/delivered/; audit uses the envelope rule
+A path given on the command line always wins over the data set's default.
 
 Commands (run in this order):
-  extract    unpack the .7z archives          -> data/raw/runs/
-  inventory  what differs between the runs?   -> data/interim/inventory_*.csv
-  qc         quality-check every run          -> data/interim/runs_qc.csv (+ daily parquet)
-  audit      Task 1: which results are trusted -> data/interim/run_quality.csv, docs/figures
-  features   one row per rain day             -> data/processed/features.parquet
-  train      Tasks 2+3: surrogate + classifier -> models/, docs/results, docs/figures
-  lstm       second surrogate (LSTM) compared with the trees (needs PyTorch)
-  france     surrogate on 46 years of Agri4Cast weather for France -> docs/results/france_*.csv
-  whatif     spray-day comparison from a weather file (uses the trained surrogate)
-  design     run files for new simulations (spray date, dose, substance); nothing is uploaded
+  extract    unpack the .7z archives          -> data/raw/runs/ (always the delivered data)
   rerun      run PRZM again on your Windows PC with the two corrected settings -> data/raw/runs_fixed/
+  inventory  what differs between the runs?   -> <interim>/inventory_*.csv
+  qc         quality-check every run          -> <interim>/runs_qc.csv (+ daily parquet)
+  audit      Task 1: which results are trusted -> <interim>/run_quality.csv, <results>, <figures>
+  features   one row per rain day             -> <features> parquet
+  train      Tasks 2+3: surrogate + classifier -> <models>, <results>, <figures>
+  lstm       second surrogate (LSTM) compared with the trees (needs PyTorch)
+  france     surrogate on 46 years of Agri4Cast weather for France -> <results>/france_*.csv
+  whatif     spray-day comparison from a weather file (uses the trained surrogate in <models>)
+  design     run files for new simulations (spray date, dose, substance); nothing is uploaded
   run        analyse a single run folder (tables + plots)
 """
 
@@ -19,11 +28,32 @@ import argparse
 import logging
 from pathlib import Path
 
+from .paths import DATASETS, DEFAULT_DATASET
 
-def main(argv=None) -> int:
+# per sub-command: argument name -> key in paths.DATASETS. Arguments left at None are filled from the
+# chosen data set. The keys without a command-line option are only set on the namespace.
+DATASET_ARGS = {
+    "inventory": {"runs": "runs", "out": "interim"},
+    "qc": {"runs": "runs", "out": "interim"},
+    "audit": {"runs": "runs", "interim": "interim", "trust": "trust", "results": "results", "figures": "figures"},
+    "features": {"interim": "interim", "out": "features"},
+    "train": {"features": "features", "models": "models", "results": "results", "figures": "figures"},
+    "lstm": {"interim": "interim", "features": "features", "models": "models", "results": "results",
+             "figures": "figures"},
+    "design": {"interim": "interim", "runs": "runs"},
+    "france": {"interim": "interim", "features": "features", "models": "models", "out": "france_out",
+               "results": "results", "figures": "figures"},
+    "whatif": {"models": "models"},
+}
+DS = " (default: from --dataset)"
+
+
+def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="runoffwatch", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("-v", "--verbose", action="store_true", help="show every per-run warning")
+    p.add_argument("--dataset", choices=sorted(DATASETS), default=DEFAULT_DATASET,
+                   help="which simulations to work on (default: %(default)s); paths given explicitly still win")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     e = sub.add_parser("extract", help="unpack archives")
@@ -31,34 +61,36 @@ def main(argv=None) -> int:
     e.add_argument("--out", default="data/raw/runs")
 
     i = sub.add_parser("inventory", help="find what differs between runs")
-    i.add_argument("--runs", default="data/raw/runs")
-    i.add_argument("--out", default="data/interim")
+    i.add_argument("--runs", default=None, help="run folders" + DS)
+    i.add_argument("--out", default=None, help="interim folder" + DS)
 
     q = sub.add_parser("qc", help="quality-check every run")
-    q.add_argument("--runs", default="data/raw/runs")
-    q.add_argument("--out", default="data/interim")
+    q.add_argument("--runs", default=None, help="run folders" + DS)
+    q.add_argument("--out", default=None, help="interim folder" + DS)
     q.add_argument("--no-daily", action="store_true", help="skip writing daily parquet files")
     q.add_argument("--workers", type=int, default=4)
     q.add_argument("--limit", type=int, help="only the first N runs (for a quick test)")
 
     au = sub.add_parser("audit", help="Task 1: which results can be trusted? (needs inventory + qc)")
-    au.add_argument("--runs", default="data/raw/runs")
-    au.add_argument("--interim", default="data/interim")
+    au.add_argument("--runs", default=None, help="run folders" + DS)
+    au.add_argument("--interim", default=None, help="interim folder" + DS)
+    au.add_argument("--trust", choices=["envelope", "balance"], default=None,
+                    help="rule that decides which pesticide results are trusted" + DS)
 
     fe = sub.add_parser("features", help="build the feature table (needs audit)")
-    fe.add_argument("--interim", default="data/interim")
-    fe.add_argument("--out", default="data/processed/features.parquet")
+    fe.add_argument("--interim", default=None, help="interim folder" + DS)
+    fe.add_argument("--out", default=None, help="feature table" + DS)
 
     tr = sub.add_parser("train", help="Tasks 2+3: train and evaluate surrogate and classifier")
-    tr.add_argument("--features", default="data/processed/features.parquet")
-    tr.add_argument("--models", default="models")
+    tr.add_argument("--features", default=None, help="feature table" + DS)
+    tr.add_argument("--models", default=None, help="model folder" + DS)
     tr.add_argument("--rounds", type=int, default=1500)
     tr.add_argument("--cv", action="store_true",
                     help="instead of training the final models: leave-one-year-out evaluation (slow)")
 
     ls = sub.add_parser("lstm", help="train an LSTM surrogate and compare it with the tree surrogate (needs PyTorch)")
-    ls.add_argument("--interim", default="data/interim")
-    ls.add_argument("--features", default="data/processed/features.parquet")
+    ls.add_argument("--interim", default=None, help="interim folder" + DS)
+    ls.add_argument("--features", default=None, help="feature table" + DS)
     ls.add_argument("--epochs", type=int, default=20)
     ls.add_argument("--limit", type=int, help="only the first N runs (quick test)")
 
@@ -69,8 +101,8 @@ def main(argv=None) -> int:
     de.add_argument("--seed", type=int, default=1)
     de.add_argument("--name", default="rw_exp1", help="prefix of the task archives; must be new for every submission")
     de.add_argument("--out", default="data/design/exp1")
-    de.add_argument("--interim", default="data/interim")
-    de.add_argument("--runs", default="data/raw/runs")
+    de.add_argument("--interim", default=None, help="interim folder with run_quality.csv" + DS)
+    de.add_argument("--runs", default=None, help="run folders to copy from" + DS)
     de.add_argument("--weather-dir", help="folder with the original MARS weather CSVs (<met_hash>.csv), if you have them")
     de.add_argument("--overwrite", action="store_true")
 
@@ -84,7 +116,7 @@ def main(argv=None) -> int:
     wi.add_argument("--first-day", help="first candidate spray day (YYYY-MM-DD); default: day 31 of the table")
     wi.add_argument("--candidates", type=int, default=7, help="number of consecutive candidate days")
     wi.add_argument("--horizon", type=int, default=14, help="days after spraying to add up")
-    wi.add_argument("--models", default="models")
+    wi.add_argument("--models", default=None, help="model folder" + DS)
 
     rr = sub.add_parser("rerun", help="run PRZM again on Windows with corrected Henry constant and moisture setting")
     rr.add_argument("--exe", required=True, help=r"path to WINPRZM.exe, e.g. C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe")
@@ -101,7 +133,24 @@ def main(argv=None) -> int:
     r.add_argument("folder")
     r.add_argument("--out", default="reports")
 
-    a = p.parse_args(argv)
+    return p
+
+
+def resolve_paths(a: argparse.Namespace) -> argparse.Namespace:
+    """Fill every path left at None with the chosen data set's default (in place; also returned)."""
+    paths = DATASETS[a.dataset]
+    for arg, key in DATASET_ARGS.get(a.cmd, {}).items():
+        if getattr(a, arg, None) is None:
+            setattr(a, arg, paths[key])
+    return a
+
+
+def parse_args(argv=None) -> argparse.Namespace:
+    return resolve_paths(build_parser().parse_args(argv))
+
+
+def main(argv=None) -> int:
+    a = parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     from . import batch
@@ -143,11 +192,14 @@ def main(argv=None) -> int:
         print("ok = finished | przm_error = PRZM cannot calculate this field | empty, failed, timeout = see the log")
     elif a.cmd == "audit":
         from .quality import audit
-        s = audit(a.runs, a.interim)
+        s = audit(a.runs, a.interim, results=a.results, figures=a.figures, trust=a.trust)
         print(f"\nfolders: {s['folders']} {s['status_counts']}")
-        print(f"readable runs: {s['readable_runs']} | with broken pesticide years: {s['envelope_rule_bad_runs']}")
-        print(f"trusted pesticide data: {s['clean_run_years']:.0f} of {s['total_run_years']:.0f} run-years")
-        print("details: data/interim/run_quality.csv, docs/results/quality_summary.json, docs/figures/q*.png")
+        print(f"readable runs: {s['readable_runs']} | above the envelope: {s['envelope_rule_bad_runs']} | "
+              f"balance error above tolerance: {s['runs_with_balance_error_above_tolerance']}")
+        print(f"trust rule: {s['trust_rule']} | trusted runs: {s['trusted_runs']} | "
+              f"trusted pesticide data: {s['clean_run_years']:.0f} of {s['total_run_years']:.0f} run-years")
+        print(f"details: {Path(a.interim) / 'run_quality.csv'}, {Path(a.results) / 'quality_summary.json'}, "
+              f"{Path(a.figures) / 'q*.png'}")
     elif a.cmd == "features":
         from .features import build_feature_table
         t = build_feature_table(a.interim, a.out)
@@ -156,18 +208,21 @@ def main(argv=None) -> int:
         import json
         from .models import train_all, yearly_cv
         if a.cv:
-            print(json.dumps(yearly_cv(a.features, rounds=a.rounds), indent=2))
-            print("per year: docs/results/cv_by_year.csv | figure: docs/figures/m7_scores_by_held_out_year.png")
+            print(json.dumps(yearly_cv(a.features, results=a.results, figures=a.figures, rounds=a.rounds), indent=2))
+            print(f"per year: {Path(a.results) / 'cv_by_year.csv'} | "
+                  f"figure: {Path(a.figures) / 'm7_scores_by_held_out_year.png'}")
             return 0
-        m = train_all(a.features, a.models, rounds=a.rounds)
+        m = train_all(a.features, a.models, results=a.results, figures=a.figures, rounds=a.rounds)
         print(json.dumps({k: m[k] for k in ("split", "runoff", "loss", "high_loss")}, indent=2))
-        print("models in", a.models, "| metrics in docs/results/model_metrics.json | figures in docs/figures/m*.png")
+        print(f"models in {a.models} | metrics in {Path(a.results) / 'model_metrics.json'} | "
+              f"figures in {Path(a.figures) / 'm*.png'}")
     elif a.cmd == "lstm":
         import json
         from .lstm import train_and_compare
-        m = train_and_compare(a.interim, a.features, epochs=a.epochs, limit=a.limit)
+        m = train_and_compare(a.interim, a.features, model_dir=a.models, results=a.results, figures=a.figures,
+                              epochs=a.epochs, limit=a.limit)
         print(json.dumps({k: m[k] for k in ("rows_compared", "epochs_run", "train_minutes", "lstm", "trees")}, indent=2))
-        print("details: docs/results/lstm_vs_trees.json | figure: docs/figures/m8_lstm_vs_trees.png")
+        print(f"details: {Path(a.results) / 'lstm_vs_trees.json'} | figure: {Path(a.figures) / 'm8_lstm_vs_trees.png'}")
     elif a.cmd == "design":
         import pandas as pd
         from . import design as dz
@@ -180,10 +235,12 @@ def main(argv=None) -> int:
     elif a.cmd == "france":
         import json
         from .longrun import run_france
-        m = run_france(a.weather, limit=a.limit)
+        m = run_france(a.weather, interim=a.interim, features_path=a.features, model_dir=a.models, out_path=a.out,
+                       results=a.results, figures=a.figures, limit=a.limit)
         print(json.dumps(m, indent=2))
-        print("per year: docs/results/france_by_year.csv | per grid cell: docs/results/france_by_grid.csv | "
-              "figures: docs/figures/f1_france_by_year.png, f2_france_map.png")
+        res, fig = Path(a.results), Path(a.figures)
+        print(f"per year: {res / 'france_by_year.csv'} | per grid cell: {res / 'france_by_grid.csv'} | "
+              f"figures: {fig / 'f1_france_by_year.png'}, {fig / 'f2_france_map.png'} | field-years: {a.out}")
     elif a.cmd == "whatif":
         import pandas as pd
         from .whatif import compare_spray_days, example_weather, prepare_weather

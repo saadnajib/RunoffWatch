@@ -22,7 +22,7 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
 > delivered simulations are wrong (the Henry constant and the reference soil moisture; see
 > [docs/DATA_REPORT.md, section 6](docs/DATA_REPORT.md#6-local-re-runs-two-settings-are-wrong-23-nov-2026)).
 > The pesticide numbers below were learned from the delivered data and will change once the
-> simulations are redone with [`rerun`](#part-c-redo-the-simulations-with-corrected-settings-windows-only).
+> simulations are redone with [`rerun`](#step-2-redo-the-simulations-with-corrected-settings-windows-only).
 > The water results and the methods are not affected.
 
 - The data: 9,977 real fields in France (a random sample of real pesticide applications), each
@@ -50,7 +50,10 @@ sprayed on 1 March. It is not validated against measurements.
 There are two ways to use this repository:
 
 - **Part A: try it in 5 minutes.** No data needed. The trained models are already in the repository.
-- **Part B: redo the whole project from the raw simulation data.** About 45 minutes, most of it waiting.
+- **Part B: redo the whole project from the raw simulation data**, with the corrected simulations.
+  Roughly 2-3 hours, most of it waiting for PRZM on a Windows PC.
+- **Part C: the delivered data.** The same steps on the simulations as delivered, which is how the
+  fault was found.
 
 You need Python 3.10 or newer and Git. All commands are typed in a terminal
 (on Windows: "PowerShell" or "Command Prompt").
@@ -98,7 +101,7 @@ pip install -e ".[dev,app]"
 python -m pytest -q
 ```
 
-You should see `253 passed, 1 skipped` (the skipped one needs PyTorch; with PyTorch installed it is `254 passed`).
+You should see `343 passed, 1 skipped` (the skipped one needs PyTorch; with PyTorch installed it is `344 passed`).
 
 **Step 5. Ask the model a question.** This compares 7 possible spray days for a made-up weather example.
 
@@ -125,72 +128,27 @@ starting about 30 days before the first spray day. Then:
 python -m runoffwatch whatif --weather my_weather.csv --first-day 2027-03-01 --candidates 7
 ```
 
-### Part B: redo the whole project from the raw data
+### Part B: from the raw data to the corrected results
 
 Do Part A, steps 1-3, first.
+
+The commands below work on the **corrected** simulations unless you say otherwise. They read
+`data/raw/runs_fixed/` and write to `data/interim_fixed/`, `data/processed/features_fixed.parquet`,
+`models/`, `docs/results/` and `docs/figures/`. A path you give yourself (for example `--runs`)
+always wins.
 
 **Step 1. Get the data.** Download the ten `.7z` files (`run_000000_to_000999__....7z`
 to `run_009000_to_009976__....7z`, 350 MB in total) from the project's Google Drive
 folder and put them into the folder `data/raw/archives/` (create it if it does not
-exist). Do not rename or unpack them. The data is never uploaded to GitHub.
-
-**Step 2. Run the seven commands below, one after the other, in this order.**
-Each one needs the results of the one before.
-
-| # | Command | What it does | Time | What you get |
-|---|---|---|---|---|
-| 1 | `extract` | Unpacks the archives | 1 min | 9,977 run folders in `data/raw/runs/` (3.7 GB) |
-| 2 | `inventory` | Finds what is different between the runs | 5 s | `data/interim/inventory_*.csv` |
-| 3 | `qc` | Reads every run and does basic checks | 1 min | `data/interim/runs_qc.csv` and one daily table per run |
-| 4 | `audit` | **Task 1:** decides which results can be trusted | 30 s | `data/interim/run_quality.csv`, figures `docs/figures/q*.png` |
-| 5 | `features` | Builds the table the models learn from (one row per rain day) | 2 min | `data/processed/features.parquet` |
-| 6 | `train` | **Tasks 2 and 3:** trains the emulator and the high-loss classifier | 2 min | `models/`, figures `docs/figures/m*.png`, `docs/results/model_metrics.json` |
-| 7 | `train --cv` | Honest test: leaves out one year at a time | 25 min | `docs/results/cv_summary.json`, `cv_by_year.csv` |
+exist). Do not rename or unpack them. The data is never uploaded to GitHub. Then unpack them:
 
 ```bash
 python -m runoffwatch extract
 ```
-```bash
-python -m runoffwatch inventory
-```
-```bash
-python -m runoffwatch qc
-```
-```bash
-python -m runoffwatch audit
-```
-```bash
-python -m runoffwatch features
-```
-```bash
-python -m runoffwatch train
-```
-```bash
-python -m runoffwatch train --cv
-```
 
-Times are for a laptop with 4 cores. You need about 5 GB of free disk space.
+You get 9,977 run folders in `data/raw/runs/` (about 3.7 GB). These are the delivered simulations.
 
-**Optional extras** (need the steps above):
-
-| Command | What it does | Time |
-|---|---|---|
-| `pip install -e ".[lstm]"` then `python -m runoffwatch lstm` | Trains a second surrogate, an LSTM neural network, and compares it with the tree surrogate on the same test data | 10-20 min |
-| `python -m runoffwatch france` | Runs the surrogate on the 1979-2024 Agri4Cast weather for France (needs `france_weather_1979_2024.csv` in `data/raw/france_weather/`; pass it with `--weather`) | 8 min |
-| `python -m runoffwatch design` | Writes run files for NEW simulations (varied spray date, dose, substance) into `data/design/`. Nothing is uploaded; see [docs/NEW_RUNS_PLAN.md](docs/NEW_RUNS_PLAN.md) | 1 min |
-
-**Step 3. Look at the results.**
-
-| The three project tasks | Where to look |
-|---|---|
-| **Task 1.** Find the broken simulations | [docs/DATA_REPORT.md](docs/DATA_REPORT.md), numbers in `docs/results/quality_summary.json` |
-| **Task 2.** Predict high-loss days and explain them | [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md), sections 3 and 4 |
-| **Task 3.** Fast copy of the simulator (emulator) | [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md), sections 1 to 3; try it with Part A, steps 5 and 6 |
-
-Running Part B overwrites the models, figures and result files that came with
-the repository. The numbers should come out the same as in the reports.
-
-### Part C: redo the simulations with corrected settings (Windows only)
+#### Step 2. Redo the simulations with corrected settings (Windows only)
 
 PRZM itself is a Windows program (`WINPRZM.exe`, in this year's project cloud folder). It needs
 about 3 seconds per field, so all 6,958 fields with input files take roughly 1.5 hours with four
@@ -198,7 +156,7 @@ runs at a time.
 
 1. Put the program at a short path without spaces, for example
    `C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe`. PRZM cannot handle long paths.
-2. Make sure the original runs are unpacked in `data/raw/runs/` (Part B, step 1).
+2. Make sure the original runs are unpacked in `data/raw/runs/` (step 1).
 3. Try 20 fields first:
 
 ```bash
@@ -220,14 +178,103 @@ run and goes on, so nobody has to click. These fields are skipped on the next st
 data either. By default the Henry constant becomes `0.37E-06` and the reference soil moisture
 `1`; `--henry keep` or `--moisture-ref keep` leaves one of them as delivered.
 
+The next steps also work on Mac or Linux: copy the folder `data/raw/runs_fixed/` there.
+
+**Step 3. Run the six commands below, one after the other, in this order.**
+Each one needs the results of the one before.
+
+| # | Command | What it does | What you get |
+|---|---|---|---|
+| 1 | `inventory` | Finds what is different between the runs | `data/interim_fixed/inventory_*.csv` |
+| 2 | `qc` | Reads every run and does basic checks | `data/interim_fixed/runs_qc.csv` and one daily table per run |
+| 3 | `audit` | **Task 1:** decides which results can be trusted (here: PRZM's own balance error must stay small) | `data/interim_fixed/run_quality.csv`, `docs/results/quality_summary.json`, figures `docs/figures/q*.png` |
+| 4 | `features` | Builds the table the models learn from (one row per rain day) | `data/processed/features_fixed.parquet` |
+| 5 | `train` | **Tasks 2 and 3:** trains the emulator and the high-loss classifier | `models/`, figures `docs/figures/m*.png`, `docs/results/model_metrics.json` |
+| 6 | `train --cv` | Honest test: leaves out one year at a time (the slow one) | `docs/results/cv_summary.json`, `cv_by_year.csv` |
+
+```bash
+python -m runoffwatch inventory
+```
+```bash
+python -m runoffwatch qc
+```
+```bash
+python -m runoffwatch audit
+```
+```bash
+python -m runoffwatch features
+```
+```bash
+python -m runoffwatch train
+```
+```bash
+python -m runoffwatch train --cv
+```
+
+On the delivered data these six steps took about 30 minutes on a laptop with 4 cores, most of it
+`train --cv`. The corrected data has more fields with results, so expect somewhat longer. One data
+set needs about 5 GB of free disk space (measured on the delivered data); both need about twice that.
+
+**Optional extras** (need the steps above; times are approximate, measured on the delivered data):
+
+| Command | What it does | Time |
+|---|---|---|
+| `pip install -e ".[lstm]"` then `python -m runoffwatch lstm` | Trains a second surrogate, an LSTM neural network, and compares it with the tree surrogate on the same test data | about 10-20 min |
+| `python -m runoffwatch france` | Runs the surrogate on the 1979-2024 Agri4Cast weather for France (needs `france_weather_1979_2024.csv` in `data/raw/france_weather/`; pass it with `--weather`) | about 8 min |
+| `python -m runoffwatch design` | Writes run files for NEW simulations (varied spray date, dose, substance) into `data/design/`. Nothing is uploaded; see [docs/NEW_RUNS_PLAN.md](docs/NEW_RUNS_PLAN.md) | about 1 min |
+
+**Step 4. Look at the results.**
+
+| The three project tasks | Where to look |
+|---|---|
+| **Task 1.** Find the broken simulations | [docs/DATA_REPORT.md](docs/DATA_REPORT.md), numbers in `docs/results/quality_summary.json` |
+| **Task 2.** Predict high-loss days and explain them | [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md), sections 3 and 4 |
+| **Task 3.** Fast copy of the simulator (emulator) | [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md), sections 1 to 3; try it with Part A, steps 5 and 6 |
+
+Running Part B overwrites the models, figures and result files that came with the repository
+(`models/`, `docs/results/`, `docs/figures/`). The reports were written with the delivered data,
+so until they are updated your numbers will differ from them.
+
+### Part C: the delivered data (how the fault was found)
+
+The same steps work on the simulations as delivered. Put `--dataset delivered` right after
+`python -m runoffwatch`, before the command. Do Part B, step 1 first (`extract` always unpacks the
+delivered data; no re-run is needed).
+
+```bash
+python -m runoffwatch --dataset delivered inventory
+```
+```bash
+python -m runoffwatch --dataset delivered qc
+```
+```bash
+python -m runoffwatch --dataset delivered audit
+```
+```bash
+python -m runoffwatch --dataset delivered features
+```
+```bash
+python -m runoffwatch --dataset delivered train
+```
+```bash
+python -m runoffwatch --dataset delivered train --cv
+```
+
+These read `data/raw/runs/` and use `data/interim/` and `data/processed/features.parquet` on the
+way. `audit` uses the plausibility rule (the "envelope") that found the broken runs. The results
+live in `docs/results/delivered/`, `docs/figures/delivered/` and `models/delivered/`, so they never
+overwrite the corrected ones. The extras take the same option, for example
+`python -m runoffwatch --dataset delivered whatif` uses the models in `models/delivered/`.
+
 ### If something goes wrong
 
 | Message | What to do |
 |---|---|
 | `No module named runoffwatch` | The environment is not switched on (Part A, step 2), or step 3 was skipped |
 | `No .7z or .zip archives in data/raw/archives` | The data files are not in that folder (Part B, step 1) |
+| `No run folders ... under data/raw/runs_fixed` | Run `rerun` first (Part B, step 2), or add `--dataset delivered` to work on the delivered data |
 | `No run folders ... under data/raw/runs` | Run `extract` first |
-| `... runs_qc.csv` or `run_quality.csv` not found | A step was skipped; run the seven commands in order |
+| `... runs_qc.csv` or `run_quality.csv` not found | A step was skipped, or you mixed data sets; run the commands of Part B, step 3 in order, all with or all without `--dataset delivered` |
 | `missing [...]. Run python -m runoffwatch train first` | The `models/` folder is empty; run `git checkout models` to get the shipped models back, or run `train` |
 | `python` is not recognised (Windows) | Use `py` instead of `python` |
 
@@ -252,7 +299,7 @@ report for one single run.
 | `runoffwatch/lstm.py` | Second surrogate: an LSTM, compared with the trees |
 | `runoffwatch/longrun.py` | Surrogate on 45 years of Agri4Cast weather for France |
 | `runoffwatch/design.py` | Generator for new simulation runs (run files and task archives) |
-| `tests/` | 254 tests on synthetic run folders (no project data in git) |
+| `tests/` | 344 tests on synthetic run folders (no project data in git) |
 | `runoffwatch/pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code, kept for reference |
 
 Code and documents were written with the help of an AI assistant (Claude).

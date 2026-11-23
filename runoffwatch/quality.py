@@ -234,6 +234,7 @@ def build_run_quality(runs_root: str | Path, interim: str | Path, trust: str = "
     first_app = pd.Timestamp(year=int(events["date"].dt.year.min()), month=APP_MONTH, day=1)
     rq["clean_years"] = ((rq["clean_until"] - first_app).dt.days / 365.25).clip(lower=0).round(2)
     rq["pesticide_years"] = ((pd.to_datetime(rq["end"]) - first_app).dt.days / 365.25).clip(lower=0).round(2)
+    rq["clean_years"] = rq["clean_years"].where(~(rq["clean_years"] > rq["pesticide_years"]), rq["pesticide_years"])
     rq = rq.join(run_parameters(runs))
     return rq, envelope, events, decay
 
@@ -312,7 +313,9 @@ def audit(runs_root: str | Path = "data/raw/runs", interim: str | Path = "data/i
         "trust_rule": trust,
         "balance_tolerance_kgha": BALANCE_TOLERANCE,
         "runs_with_balance_error_above_tolerance": int((bal > BALANCE_TOLERANCE).sum()),
-        "balance_error_quantiles_kgha": {q: float(bal.quantile(float(q))) for q in ("0.5", "0.9", "0.99", "1.0")},
+        # "higher" picks a real value instead of interpolating, so one infinite error stays visible
+        "balance_error_quantiles_kgha": ({q: float(np.quantile(bal.dropna().to_numpy(), float(q), method="higher"))
+                                          for q in ("0.5", "0.9", "0.99", "1.0")} if bal.notna().any() else {}),
         "trusted_runs": int(readable["clean_until"].notna().sum()),
         "folders": int(len(rq)),
         "status_counts": rq["status"].value_counts().to_dict(),

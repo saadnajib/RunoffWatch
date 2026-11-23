@@ -157,7 +157,9 @@ def write_full_inp(path: Path, lines: list[str] | None = None, **kwargs) -> Path
     return path
 
 
-def write_out(path: Path, decay: list[float]) -> None:
+def write_out(path: Path, decay: list[float], balance: list | None = None) -> None:
+    """`balance`: optional yearly 'PESTICIDE BALANCE ERROR' values (kg/ha; a str is written as is,
+    e.g. "NaN"). Without it no balance lines are written, as before."""
     lines = [" PRZM-3 OUTPUT (synthetic)", ""]
     for i, v in enumerate(decay):
         lines += [
@@ -166,8 +168,11 @@ def write_out(path: Path, decay: list[float]) -> None:
             " PST TOTAL PLANT UPTAKE OF PESTICIDE        0.0000000    ",
             f" PST TOTAL SOIL DECAY OF PESTICIDE         {v:.8g}    ",
             " PST TOTAL EROSION OF PESTICIDE            0.88552383E-07",
-            "",
         ]
+        if balance is not None and i < len(balance):
+            b = balance[i]
+            lines.append(f" PST PESTICIDE BALANCE ERROR              {b if isinstance(b, str) else f'{b:.8E}'}")
+        lines.append("")
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -196,7 +201,8 @@ def build_run(base: Path, *, name: str = "run_0000001_grid_000001", days: int = 
               warm_mismatch: bool = False, log_error: bool = False,
               decay: list[float] | None = None, zts_days: int | None = None,
               app_days: tuple[int, ...] = (5,), runoff_gha: float = 0.38,
-              write_out_file: bool = True, factors: dict[str, str] | None = None) -> SyntheticRun:
+              write_out_file: bool = True, factors: dict[str, str] | None = None,
+              balance: list | None = None, inp_lines: list[str] | None = None) -> SyntheticRun:
     folder = base / name
     folder.mkdir(parents=True)
     dates = pd.date_range(start, periods=days, freq="D")
@@ -245,12 +251,15 @@ def build_run(base: Path, *, name: str = "run_0000001_grid_000001", days: int = 
                                                   zip(zts_rows.index, zts_rows[ZTS_VARS].itertuples(index=False))]) + "\n")
 
     inp_file = folder / "Run 1-1_a1234567890.inp"
-    write_inp(inp_file, factors if factors is not None else DEFAULT_FACTORS)
+    if inp_lines is not None:                                # e.g. full_inp_lines(), for run_parameters
+        write_full_inp(inp_file, inp_lines)
+    else:
+        write_inp(inp_file, factors if factors is not None else DEFAULT_FACTORS)
 
     files = {"met": met_file, "zts": zts_file, "inp": inp_file}
     if write_out_file:
         out_file = folder / "RUN 1-1_A1234567890.OUT"
-        write_out(out_file, decay if decay is not None else (UNSTABLE_DECAY if unstable else STABLE_DECAY))
+        write_out(out_file, decay if decay is not None else (UNSTABLE_DECAY if unstable else STABLE_DECAY), balance)
         files["out"] = out_file
     (folder / "Run 1.run").write_text("PRZM                    ON\nVADOFT                  OFF\nENDRUN\n")
     write_log(folder / "mc.log", log_error)

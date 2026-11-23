@@ -132,3 +132,145 @@ def test_folder_status(tmp_path):
         "run_0000004_grid_000004": "has_output",
     }
     assert (st["batch"] == "run_000000_to_000999").all()
+
+
+# --------------------------------------------------------------------------- #
+# Balance errors and the two trust rules (build_run_quality, audit)
+# --------------------------------------------------------------------------- #
+TOL = quality.BALANCE_TOLERANCE
+# run name -> extra arguments for conftest.build_run; two years, sprayed on 1 March 1990 and 1991
+BALANCE_RUNS = {
+    "run_0000001_grid_000001": dict(balance=[1e-8, 2e-8]),             # clean
+    "run_0000002_grid_000002": dict(balance=[1e-8, 5.0]),              # large error in year 2
+    "run_0000003_grid_000003": dict(balance=[1e-8, 1e-8], zts_days=300),  # small errors, but crashed
+    "run_0000004_grid_000004": dict(),                                 # no balance lines at all
+    "run_0000005_grid_000005": dict(balance=[1e-8, "NaN"]),            # NaN counts as infinitely large
+    "run_0000006_grid_000006": dict(balance=[-TOL / 2, 1e-7]),         # negative: the size counts
+    "run_0000007_grid_000007": dict(balance=[TOL, 1e-9]),              # exactly at the tolerance
+    **{f"run_00000{i}_grid_0000{i}": dict(balance=[1e-8, 1e-8]) for i in range(10, 14)},  # more clean runs
+}
+TRUSTED = {"run_0000001_grid_000001", "run_0000006_grid_000006", "run_0000007_grid_000007",
+           *(f"run_00000{i}_grid_0000{i}" for i in range(10, 14))}
+
+
+@pytest.fixture(scope="module")
+def balance_data(tmp_path_factory):
+    """Run folders plus the `inventory` and `qc` output that build_run_quality needs."""
+    from conftest import build_run, full_inp_lines
+
+    from runoffwatch import batch
+
+    tmp = tmp_path_factory.mktemp("balance")
+    root = tmp / "runs"
+    for i, (name, kw) in enumerate(BALANCE_RUNS.items()):
+        build_run(root / "run_000000_to_000999", name=name, days=730, app_days=(59, 424),
+                  inp_lines=full_inp_lines(slope=1 + i), **kw)
+    runs = batch.find_runs(root)
+    interim = tmp / "interim"
+    interim.mkdir()
+    batch.inventory(runs)[0].to_csv(interim / "inventory_runs.csv", index=False)
+    # qc_run one by one: the same rows qc_all writes, without starting worker processes
+    pd.DataFrame([batch.qc_run(r, interim / "daily") for r in runs]).to_csv(interim / "runs_qc.csv", index=False)
+    return root, interim
+
+
+@pytest.fixture(scope="module")
+def rq_envelope(balance_data):
+    return quality.build_run_quality(*balance_data)[0]
+
+
+@pytest.fixture(scope="module")
+def rq_balance(balance_data):
+    return quality.build_run_quality(*balance_data, trust="balance")[0]
+
+
+def test_balance_error_table(balance_data):
+    from runoffwatch.batch import find_runs
+
+    t = quality.balance_error_table(find_runs(balance_data[0]))
+    assert t["run_0000001_grid_000001"] == pytest.approx(2e-8)
+    assert t["run_0000002_grid_000002"] == pytest.approx(5.0)
+    assert np.isnan(t["run_0000004_grid_000004"])
+    assert t["run_0000005_grid_000005"] == np.inf
+    assert t["run_0000006_grid_000006"] == pytest.approx(TOL / 2)      # absolute value
+
+
+def test_build_run_quality_rejects_unknown_rule(balance_data):
+    with pytest.raises(ValueError, match="trust"):
+        quality.build_run_quality(*balance_data, trust="other")
+
+
+@pytest.mark.parametrize("mode", ["envelope", "balance"])
+def test_new_columns_in_both_modes(mode, rq_envelope, rq_balance):
+    rq = rq_envelope if mode == "envelope" else rq_balance
+    assert {"max_balance_error", "above_envelope_app_year"} <= set(rq.columns)
+    assert rq.loc["run_0000002_grid_000002", "max_balance_error"] == pytest.approx(5.0)
+    assert rq.loc["run_0000003_grid_000003", "crashed"]
+
+
+def test_envelope_mode_is_unchanged(rq_envelope):
+    pd.testing.assert_series_equal(rq_envelope["above_envelope_app_year"], rq_envelope["first_bad_app_year"],
+                                   check_names=False)
+    # the envelope rule does not look at balance errors: the run with error 5 kg/ha keeps its clean years
+    assert rq_envelope.loc["run_0000002_grid_000002", "clean_until"] == pd.Timestamp("1991-03-01")
+
+
+def test_balance_mode_keeps_envelope_result_for_information(rq_envelope, rq_balance):
+    pd.testing.assert_series_equal(rq_balance["above_envelope_app_year"], rq_envelope["above_envelope_app_year"])
+
+
+def test_balance_mode_trusts_clean_runs_to_the_end(rq_balance):
+    for run in sorted(TRUSTED):
+        row = rq_balance.loc[run]
+        assert row["clean_until"] == pd.Timestamp(row["end"]) + pd.Timedelta(days=1), run
+        assert row["clean_until"] == pd.Timestamp("1992-01-01"), run
+        assert np.isnan(row["first_bad_app_year"]), run
+
+
+@pytest.mark.parametrize("run", ["run_0000002_grid_000002",     # large balance error
+                                 "run_0000003_grid_000003",     # crashed
+                                 "run_0000004_grid_000004",     # no balance error reported
+                                 "run_0000005_grid_000005"])    # NaN balance error
+def test_balance_mode_does_not_trust(run, rq_balance):
+    row = rq_balance.loc[run]
+    assert pd.isna(row["clean_until"])
+    assert not np.isnan(row["first_bad_app_year"])
+    assert pd.isna(row["clean_years"])
+
+
+def test_balance_mode_trusted_set(rq_balance):
+    assert set(rq_balance.index[rq_balance["clean_until"].notna()]) == TRUSTED
+
+
+def test_balance_mode_clean_years_not_more_than_pesticide_years(rq_balance):
+    t = rq_balance[rq_balance["clean_until"].notna()]
+    assert (t["clean_years"] <= t["pesticide_years"]).all(), t[["clean_years", "pesticide_years"]]
+
+
+@pytest.fixture(scope="module")
+def audit_balance(balance_data, tmp_path_factory):
+    import warnings
+
+    out = tmp_path_factory.mktemp("audit")
+    with warnings.catch_warnings(), np.errstate(all="ignore"):
+        warnings.simplefilter("ignore")            # tiny synthetic data: undefined AUC, tight layout
+        s = quality.audit(*balance_data, results=out / "results", figures=out / "figures", trust="balance")
+    return s, out
+
+
+def test_audit_balance_summary(audit_balance, balance_data):
+    s, out = audit_balance
+    assert s["trust_rule"] == "balance"
+    assert s["balance_tolerance_kgha"] == TOL
+    assert s["trusted_runs"] == len(TRUSTED)
+    assert s["runs_with_balance_error_above_tolerance"] == 2      # the 5 kg/ha run and the NaN run
+    assert (out / "results" / "quality_summary.json").exists()
+    rq = pd.read_csv(balance_data[1] / "run_quality.csv", index_col="run")
+    assert {"max_balance_error", "above_envelope_app_year"} <= set(rq.columns)
+    assert set(rq.index[rq["clean_until"].notna()]) == TRUSTED
+
+
+def test_audit_balance_quantiles_keep_the_largest_error(audit_balance):
+    s, _ = audit_balance
+    # one run reports NaN, which counts as infinitely large: the maximum must say so
+    assert s["balance_error_quantiles_kgha"]["1.0"] == np.inf
