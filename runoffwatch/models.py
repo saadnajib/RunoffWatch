@@ -325,6 +325,8 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
     calendar["by_rain_and_weeks"].to_csv(results / "risk_by_rain_and_weeks_since_spraying.csv")
     by_spray = loss_by_spray_date(t[t["pest_clean"]])
     by_spray.to_csv(results / "loss_by_spray_date.csv")
+    from .figures import spray_date_figure
+    spray_date_figure(by_spray, Path(figures))
 
     # ---------------- Final models: all weather files, all years -------------
     # The models above exist only to be tested. The models that are saved and used by the
