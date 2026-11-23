@@ -11,6 +11,7 @@ Commands (run in this order):
   france     surrogate on 46 years of Agri4Cast weather for France -> docs/results/france_*.csv
   whatif     spray-day comparison from a weather file (uses the trained surrogate)
   design     run files for new simulations (spray date, dose, substance); nothing is uploaded
+  rerun      run PRZM again on your Windows PC with the two corrected settings -> data/raw/runs_fixed/
   run        analyse a single run folder (tables + plots)
 """
 
@@ -85,6 +86,16 @@ def main(argv=None) -> int:
     wi.add_argument("--horizon", type=int, default=14, help="days after spraying to add up")
     wi.add_argument("--models", default="models")
 
+    rr = sub.add_parser("rerun", help="run PRZM again on Windows with corrected Henry constant and moisture setting")
+    rr.add_argument("--exe", required=True, help=r"path to WINPRZM.exe, e.g. C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe")
+    rr.add_argument("--runs", default="data/raw/runs", help="folder with the original run folders")
+    rr.add_argument("--out", default="data/raw/runs_fixed", help="where the new results go (same layout as --runs)")
+    rr.add_argument("--work", default=r"C:\Temp\rr", help="short scratch folder; PRZM cannot handle long paths")
+    rr.add_argument("--henry", default=None, help="Henry constant, at most 8 characters (default: 0.37E-06); 'keep' = unchanged")
+    rr.add_argument("--moisture-ref", default=None, help="reference soil moisture (default: 1); 'keep' = unchanged")
+    rr.add_argument("--workers", type=int, default=4, help="PRZM runs at the same time")
+    rr.add_argument("--limit", type=int, help="only the first N folders (for a quick test)")
+
     r = sub.add_parser("run", help="analyse one run folder")
     r.add_argument("folder")
     r.add_argument("--out", default="reports")
@@ -117,6 +128,17 @@ def main(argv=None) -> int:
         print(f"\nruns checked: {len(qc)} | read errors: {(~qc['read_ok']).sum()} | "
               f"unstable: {int(ok['unstable'].sum())} | with log errors: {int((ok['n_log_errors'] > 0).sum())}")
         print(f"summary written to {out / 'runs_qc.csv'}")
+    elif a.cmd == "rerun":
+        from . import rerun
+        pick = lambda v, default: default if v is None else (None if v == "keep" else v)
+        recs = rerun.rerun_all(a.runs, a.out, a.exe, a.work, henry=pick(a.henry, rerun.HENRY_FIXED),
+                               moisture_ref=pick(a.moisture_ref, rerun.MOISTURE_REF_FIXED), workers=a.workers, limit=a.limit)
+        counts = {}
+        for rec in recs:
+            counts[rec["status"]] = counts.get(rec["status"], 0) + 1
+        print(f"\nruns started now: {len(recs)} {counts}")
+        print(f"results in {a.out} | log: {Path(a.out) / 'rerun_log.csv'}")
+        print(f"next: python -m runoffwatch qc --runs {a.out} --out data/interim_fixed")
     elif a.cmd == "audit":
         from .quality import audit
         s = audit(a.runs, a.interim)

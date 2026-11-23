@@ -18,6 +18,13 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
 
 ## Main results so far
 
+> **Important, 23 Nov 2026:** test runs of PRZM on our own computer showed that two settings in the
+> delivered simulations are wrong (the Henry constant and the reference soil moisture; see
+> [docs/DATA_REPORT.md, section 6](docs/DATA_REPORT.md#6-local-re-runs-two-settings-are-wrong-23-nov-2026)).
+> The pesticide numbers below were learned from the delivered data and will change once the
+> simulations are redone with [`rerun`](#part-c-redo-the-simulations-with-corrected-settings-windows-only).
+> The water results and the methods are not affected.
+
 - The data: 9,977 real fields in France (a random sample of real pesticide applications), each
   with its own soil, slope and Agri4Cast weather. **3,958 runs contain results.** Pesticide, dose
   and spray date are the same in every run. The weather is labelled 1990-1999 but is really 2006-2015.
@@ -183,6 +190,32 @@ Times are for a laptop with 4 cores. You need about 5 GB of free disk space.
 Running Part B overwrites the models, figures and result files that came with
 the repository. The numbers should come out the same as in the reports.
 
+### Part C: redo the simulations with corrected settings (Windows only)
+
+PRZM itself is a Windows program (`WINPRZM.exe`, in this year's project cloud folder). It needs
+about 3 seconds per field, so all 6,958 fields with input files take roughly 1.5 hours with four
+runs at a time.
+
+1. Put the program at a short path without spaces, for example
+   `C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe`. PRZM cannot handle long paths.
+2. Make sure the original runs are unpacked in `data/raw/runs/` (Part B, step 1).
+3. Try 20 fields first:
+
+```bash
+python -m runoffwatch rerun --exe C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe --limit 20
+```
+
+4. If that works, run all of them. The command skips fields that are already done, so you can stop
+   it with Ctrl+C and start it again later:
+
+```bash
+python -m runoffwatch rerun --exe C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe
+```
+
+The new results go to `data/raw/runs_fixed/` in the same layout as the originals, with a log in
+`rerun_log.csv`. By default the Henry constant becomes `0.37E-06` and the reference soil moisture
+`1`; `--henry keep` or `--moisture-ref keep` leaves one of them as delivered.
+
 ### If something goes wrong
 
 | Message | What to do |
@@ -204,6 +237,7 @@ report for one single run.
 |---|---|
 | `runoffwatch/przm_io.py`, `przm_inp.py` | Read PRZM run folders: daily results in plain units, field and soil settings |
 | `runoffwatch/batch.py` | Unpack archives, inventory what differs between runs, quality-check every run |
+| `runoffwatch/rerun.py` | Runs PRZM again on Windows with the two corrected settings |
 | `runoffwatch/quality.py` | Task 1: which results can be trusted (envelope rule, Isolation Forest, causes) |
 | `runoffwatch/features.py` | One row per rain day: weather, spray history and soil inputs |
 | `runoffwatch/models.py` | Surrogate (runoff x concentration), high-loss classifier, baselines, evaluation |
