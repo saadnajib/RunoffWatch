@@ -285,13 +285,23 @@ whether the input or the program is at fault. The practical fix is the same: ref
   damaged). `python -m runoffwatch rerun` does this; see the README.
 - Both corrections are our reading of the evidence. The model owners should confirm them.
 
-### First use of `rerun` (23 Nov 2026, 20 folders)
+### The full re-run (23 Nov 2026)
 
-The first 20 folders with input files were re-run with both corrections. 14 finished. 6 stopped
-at once with PRZM error boxes: a NaN reaches `EXP` in the pesticide transport routine or `LOG` in
-the erosion routine. All 6 are folders that hold no results in the delivered data. A seventh
-folder without delivered results did finish with the corrected settings. So most of the 2,992
-folders that "stopped early" seem to fail inside PRZM for a reason that is not the Henry constant.
-We have not found what they have in common: neither the weather cell nor a single input setting
-separates them (a model on all input settings reaches only AUC 0.72; very sandy soils with a low
-erodibility factor fail most often, about 88 %).
+All 6,958 folders with input files were re-run with both corrections on one Windows PC
+(four runs at a time, 1.5 hours, about 3.4 seconds per finished field).
+
+| In the delivered data | Folders | Finished now | PRZM calculation error | Input file damaged |
+|---|---|---|---|---|
+| has results | 3,958 | 3,958 | 0 | 0 |
+| inputs only (stopped early) | 2,992 | 1,652 | 1,335 | 5 |
+| empty result file | 8 | 0 | 0 | 8 |
+| **all** | **6,958** | **5,610** | **1,335** | **13** |
+
+- Every field that had results finishes again, with all ten years. This includes the 263 runs
+  that crashed in the delivered data and the 1,966 our plausibility rule had flagged.
+- 1,652 fields that gave nothing in the delivered data now finish. One of the 5,610 result files
+  is almost empty, so 5,609 fields have a full ten-year result: 42 % more fields than before.
+- 1,335 fields still stop at once with a PRZM error box (a NaN reaches `EXP` in the pesticide
+  transport routine or `LOG` in the erosion routine). We have not found what they have in common:
+  neither the weather cell nor a single input setting separates them from the others.
+- Still to do: check the new results (balance errors, the plausibility rule) and redo the models.
