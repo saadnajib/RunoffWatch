@@ -2,7 +2,7 @@
 
 All numbers come from `python -m runoffwatch inventory | qc | audit` on the 10
 archives from the project Drive (run on 12 Nov 2026). Machine-readable version:
-[`results/quality_summary.json`](results/quality_summary.json).
+[`results/delivered/quality_summary.json`](results/delivered/quality_summary.json).
 
 ## 1. What the data set contains
 
@@ -15,7 +15,7 @@ archives from the project Drive (run on 12 Nov 2026). Machine-readable version:
 | Simulated period | labelled 1 Jan 1990 - 31 Dec 1999, daily; the weather is really 2006 - 2015 (see below) |
 | Different weather files | **695** (one weather file is shared by 1 to 77 runs) |
 
-![Folder contents](figures/q1_folder_status.png)
+![Folder contents](figures/delivered/q1_folder_status.png)
 
 So the data set is about 4,000 simulations, not 10,000.
 
@@ -80,7 +80,7 @@ needs new PRZM runs in which they vary.
    The share depends on how strict the test is (section 3): 1,177 runs (30 %)
    are broken beyond doubt, 1,966 (50 %) are flagged by the cautious rule.
 
-![Soil decay growth](figures/q2_soil_decay_growth.png)
+![Soil decay growth](figures/delivered/q2_soil_decay_growth.png)
 
 ### What does *not* seem affected
 
@@ -114,7 +114,7 @@ little sorption, so more pesticide is in the gas phase.
 
 The trend is the same under both definitions; the size of the middle classes is not.
 
-![Breakdown vs subsoil organic carbon](figures/q4_breakdown_vs_subsoil_oc.png)
+![Breakdown vs subsoil organic carbon](figures/delivered/q4_breakdown_vs_subsoil_oc.png)
 
 ## 3. How we decide what to trust (Task 1)
 
@@ -128,7 +128,7 @@ fake mass can have reached the surface (99th percentile per 15-day bin, times
 year. The year before is dropped as well, and the last simulated year is never
 trusted, because a year can only be confirmed by a clean following year.
 
-![Envelope](figures/q3_envelope.png)
+![Envelope](figures/delivered/q3_envelope.png)
 
 **Result**
 
@@ -156,7 +156,7 @@ precaution. That precaution costs about 7 % of the data. An independent review
 estimated its effect on the model scores as small (a few percent of the
 high-loss days and of the loss in the test set).
 
-![Clean runs per year](figures/q5_clean_runs_per_year.png)
+![Clean runs per year](figures/delivered/q5_clean_runs_per_year.png)
 
 **Machine-learning comparison.** An Isolation Forest (unsupervised anomaly
 detection) on four per-run summary numbers flags 652 runs. It finds only 52 %
@@ -304,4 +304,34 @@ All 6,958 folders with input files were re-run with both corrections on one Wind
 - 1,335 fields still stop at once with a PRZM error box (a NaN reaches `EXP` in the pesticide
   transport routine or `LOG` in the erosion routine). We have not found what they have in common:
   neither the weather cell nor a single input setting separates them from the others.
-- Still to do: check the new results (balance errors, the plausibility rule) and redo the models.
+### Health check of the corrected results
+
+Checked with `inventory`, `qc` and `audit` on the 5,610 new result folders.
+
+| Check | Delivered data | Corrected data |
+|---|---|---|
+| Fields with a full ten-year result | 3,695 (263 crashed) | 5,609 |
+| Largest yearly balance error PRZM reports | up to 1e19 kg/ha; about 0.02 kg/ha even in runs that passed our rule | 0.00000004 kg/ha |
+| Pesticide left in the soil at the end | grows without limit | median 0.11, highest 0.21 kg/ha |
+| Evaporation per year | 1.5 to 2 kg/ha of the 2.4 applied | about 0.0004 kg/ha |
+| Ten-year loss with runoff | up to 1.8e34 g/ha | median 14, highest 173 g/ha (0.7 % of what was applied) |
+| Runs with yearly soil decay growing more than 1.5 times per year | common | none |
+
+- **Water is unchanged.** In 300 fields picked at random, daily rain and runoff are identical in
+  the delivered and the corrected result. Only the pesticide numbers differ.
+- **How much the pesticide loss changed.** In the first spray year, the one year we trusted in
+  nearly every delivered run, the corrected loss is 1.15 times the delivered loss in the middle
+  field, and between 0.66 and 2.6 times in most fields. Fields are still ranked similarly
+  (correlation of the logarithms 0.84), but the amounts are different.
+- **Our old plausibility rule is not needed here.** Applied to the corrected data it would still
+  flag 387 fields (7 %), 49 of them above 50 times the reference, none above 1,000 times. These
+  are not faults: PRZM's balance is exact in all of them, and they are simply the wettest fields
+  with the least organic carbon in the topsoil, where the same rule's reference from the middle
+  field is too strict (a model predicts the flag from rain per year and topsoil carbon with AUC
+  0.99). So for the corrected data the rule that decides what is used is PRZM's own balance check:
+  a run is used completely when its yearly balance error stays below 0.001 kg/ha. All 5,609 full
+  runs pass. (`audit --trust balance`; the old rule is `--trust envelope`.)
+- **What the models now learn from:** 8.2 million rain days, all usable (before: 5.7 million, of
+  which 4.2 million were trusted). 25,940 of them are high-loss days (at least 1 g/ha): 0.32 % of
+  the rain days, carrying 73 % of all loss. In the delivered data it was 0.17 % carrying 55 %.
+  13 % of rain days produce runoff, as before.

@@ -126,6 +126,22 @@ def read_soil_decay(out_path: str | Path) -> list[float]:
             if "TOTAL SOIL DECAY OF PESTICIDE" in l]
 
 
+def read_balance_errors(out_path: str | Path) -> list[float]:
+    """Yearly 'PESTICIDE BALANCE ERROR' values (kg/ha) from a PRZM .OUT file.
+
+    PRZM checks its own bookkeeping every year: what went in must equal what left plus what is
+    still stored. In a healthy run the difference is practically zero.
+    """
+    out = []
+    for l in Path(out_path).read_text(errors="replace").splitlines():
+        if "PESTICIDE BALANCE ERROR" in l:
+            try:
+                out.append(float(l.split()[-1]))
+            except ValueError:
+                out.append(float("nan"))
+    return out
+
+
 def check_soil_decay(out_path: str | Path, max_growth: float = 5.0) -> bool:
     """Detect numerical blow-up in a PRZM run.
 
