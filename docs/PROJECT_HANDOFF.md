@@ -2,7 +2,7 @@
 
 Paste this whole file into a new chat with an AI assistant so it knows the
 project. It is written to be read without any other context. State as of
-23 November 2026 (first written 17 November 2026).
+24 November 2026 (first written 17 November 2026).
 
 **How to use this with an assistant:** it cannot see the code or the data, only
 this text. When you ask for code changes, paste the relevant file from the
@@ -22,6 +22,17 @@ on the full data; do not let an assistant change them from memory.
 > the corrected numbers; the old ones are kept in `docs/results/delivered/`.
 > The water results (rain, runoff) and the methods did not change. Details:
 > section 5.
+>
+> **Also new on 23 Nov 2026: other spray dates and doses.** Until now every
+> simulation was sprayed on 1 March with 2.4 kg/ha, so nothing could be said
+> about another spray day or dose. The re-run tool can now make copies of
+> every field with varied spray dates (spring and autumn) and three doses
+> (section 8.1), and the feature table, the tree models and the advisor were
+> adapted to use them (section 6.7). A trial of 20 runs worked. The full run
+> (11,218 simulations) was started on the owner's PC on 23 Nov. **Its results
+> are not analysed yet, so no number in this document is about other spray
+> dates or doses**, except the small trial in 6.7. What to do when the
+> results arrive is in section 13.
 
 ---
 
@@ -757,10 +768,15 @@ decks. New since 17 Nov:
   test of the code only; no model result for varied spray dates exists yet.
 
 Running: the full varied re-run (5,609 fields × 2 copies, 11,218 runs) on
-the owner's PC (running on 23 Nov 2026).
+the owner's PC. It was started on 23 Nov 2026. As of 24 Nov its results had
+not been uploaded or analysed.
 
 Next, in this order:
-1. Upload the results (`data/raw/runs_varied/`).
+1. Upload the results (`data/raw/runs_varied/`): one zip per batch folder,
+   plus `rerun_plan.csv` and `rerun_log.csv`. On the analysis machine each
+   run folder goes to `data/raw/runs_varied/<batch>/<field>__vN/`, with the
+   batch folder named like the original one (`run_000000_to_000999`, without
+   the long code that follows it in the uploaded names).
 2. Run the `varied` pipeline (section 10: `add-weather`, then `inventory`
    to `train --cv` with `--dataset varied`). The year-by-year test
    (`train --cv`) is the one that counts.
