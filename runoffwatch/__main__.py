@@ -264,7 +264,7 @@ def main(argv=None) -> int:
     elif a.cmd == "design":
         import pandas as pd
         from . import design as dz
-        rq = pd.read_csv(Path(a.interim) / "run_quality.csv", index_col="run", dtype={"met_hash": str})
+        rq = pd.read_csv(Path(a.interim) / "run_quality.csv", index_col="run", dtype={"met_hash": str}, low_memory=False)
         kw = {} if a.henry is None else {"henry": a.henry}
         d = dz.make_design(rq, a.n, a.seed, n_controls=a.controls, weather_dir=a.weather_dir, **kw)
         info = dz.write_design(d, a.out, a.runs, a.weather_dir, name=a.name, overwrite=a.overwrite)

@@ -149,7 +149,7 @@ def run_france(weather_path: str | Path = "data/raw/france_weather/france_weathe
     interim, results = Path(interim), Path(results)
     weather = load_weather(weather_path)
     models = load_models(model_dir)
-    rq = pd.read_csv(interim / "run_quality.csv", index_col="run")
+    rq = pd.read_csv(interim / "run_quality.csv", index_col="run", low_memory=False)
     fields = rq[rq["clean_until"].notna() & rq["usle_k"].notna()][SOIL_FEATURES + [f"cn_{k}" for k in (1, 3, 4)]]
     fields = fields[~pd.Index([field_of(r) for r in fields.index]).duplicated()]      # one run per field
     fields = fields.iloc[:limit]

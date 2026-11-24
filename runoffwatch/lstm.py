@@ -84,7 +84,7 @@ def run_sequences(daily: pd.DataFrame, cn: tuple, clean_until: pd.Timestamp, app
 def build_dataset(interim: str | Path = "data/interim", limit: int | None = None) -> dict:
     """All samples of all readable runs, plus which split each belongs to."""
     interim = Path(interim)
-    rq = pd.read_csv(interim / "run_quality.csv", index_col="run", parse_dates=["clean_until"])
+    rq = pd.read_csv(interim / "run_quality.csv", index_col="run", parse_dates=["clean_until"], low_memory=False)
     rq = rq[rq["clean_until"].notna() & rq["usle_k"].notna()]
     varies = rq["app_varies_between_years"].fillna(False).astype(bool) if "app_varies_between_years" in rq else False
     on_first_march = ((rq["app_day"] == 1) & (rq["app_month"] == 3)).all() if {"app_day", "app_month"} <= set(rq.columns) else True
