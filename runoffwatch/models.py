@@ -232,15 +232,19 @@ def _fit_models(t: pd.DataFrame, tr: np.ndarray, va: np.ndarray | None, rounds) 
     water = t["water_row"].to_numpy(dtype=bool) if "water_row" in t.columns else np.ones(len(t), dtype=bool)
     clean = t["pest_clean"].to_numpy(dtype=bool)
     wet = (t["runoff_mm"] > 0).to_numpy()
-    part = lambda mask, extra: None if mask is None else t[mask & extra]      # noqa: E731
-    runoff = fit_runoff(t[tr & water], part(va, water), n["runoff"])
-    conc = fit_conc(t[tr & clean & wet], part(va, clean & wet), n["conc"])
+    have = lambda cols: [c for c in dict.fromkeys(cols) if c in t.columns]      # noqa: E731
+    r_cols = have(RUNOFF_FEATURES + ["runoff_mm"])                               # only the columns a model reads
+    c_cols = have(CONC_FEATURES + ["runoff_mm", "loss_gha", "pest_clean"])
+    k_cols = have(CLASSIFIER_FEATURES + ["high_loss", "pest_clean"])
+    part = lambda mask, extra, cols: None if mask is None else t.loc[mask & extra, cols]      # noqa: E731
+    runoff = fit_runoff(t.loc[tr & water, r_cols], part(va, water, r_cols), n["runoff"])
+    conc = fit_conc(t.loc[tr & clean & wet, c_cols], part(va, clean & wet, c_cols), n["conc"])
     rows = np.flatnonzero(tr & clean)
     if len(rows) > MAX_CLASSIFIER_ROWS:                 # keep every high-loss day, thin out the others
         pos = t["high_loss"].to_numpy(dtype=bool)[rows]
         keep = pos | (np.random.default_rng(0).random(len(rows)) < (MAX_CLASSIFIER_ROWS - pos.sum()) / max(1, (~pos).sum()))
         rows = rows[keep]
-    clf = fit_classifier(t.iloc[rows], part(va, clean), n["high_loss"])
+    clf = fit_classifier(t.iloc[rows][k_cols], part(va, clean, k_cols), n["high_loss"])
     return runoff, conc, clf
 
 
