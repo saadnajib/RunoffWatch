@@ -46,6 +46,7 @@ log = logging.getLogger("runoffwatch")
 CONC_OUTPUT = "g_per_ha_per_mm_per_kg_applied"   # written to meta.json; older models have "g_per_ha_per_mm"
 CONC_FLOOR = 1e-7          # g/ha per mm; below this the pesticide loss is zero for all purposes
 MODEL_FILES = {"runoff": "runoff.txt", "conc": "conc.txt", "high_loss": "high_loss.txt"}
+SHARE_OF_DOSE_LIMITS_PCT = (0.01, 0.02, 0.05, 0.1, 0.2, 0.5)   # limits for a high-loss day, in percent of the dose
 
 
 # --------------------------------------------------------------------------- #
@@ -494,8 +495,13 @@ def yearly_cv(features_path: str | Path = "data/processed/features.parquet",
         # the same scores for each kind of spraying; with one spray date and one dose there is one group each
         "by_spray_window": _group_scores(P, pd.Series(spray_window(P["app_doy"]), index=P.index)),
         "by_dose_kgha": _group_scores(P, P["app_rate_kgha"].round(3).astype(str)),
+        # the same alarm with a high-loss day defined as a share of the dose instead of a fixed g/ha
+        "alarm_by_share_of_dose": alarm_by_share_of_dose(P),
     }
     results = Path(results); results.mkdir(parents=True, exist_ok=True)
+    # the held-out predictions themselves (data, not for the repository): any other limit can be scored from them
+    fp = Path(features_path)
+    P.to_parquet(fp.with_name(f"{fp.stem}_cv_predictions.parquet"), index=False)
     by_year.round(4).to_csv(results / "cv_by_year.csv")
     (results / "cv_summary.json").write_text(json.dumps(summary, indent=2))
     from .figures import cv_figure
@@ -517,6 +523,33 @@ def _group_scores(P: pd.DataFrame, group: pd.Series) -> dict:
             "alarm_precision": float(pos[alarm].mean()) if alarm.any() else None,
             "alarm_recall": float(alarm[pos].mean()) if pos.any() else None,
         }
+    return out
+
+
+def alarm_by_share_of_dose(P: pd.DataFrame, limits_pct=SHARE_OF_DOSE_LIMITS_PCT) -> dict:
+    """Alarm scores when a high-loss day is a share of the applied dose, not a fixed amount in g/ha.
+
+    A fixed limit means something different for every dose: 1 g/ha is 0.04 % of 2.4 kg/ha but 0.4 % of
+    0.24 kg/ha. Here a day counts as high-loss when PRZM lost at least `limit` percent of the last dose,
+    and the alarm goes off when the predicted loss reaches the same amount. No model is refitted for
+    this; only the predicted loss amount is used. Scores for all rows and for each dose.
+    """
+    limit_gha = 10.0 * _rate(P)                          # 1 % of a dose in kg/ha, expressed in g/ha
+    true, pred = P["loss_gha"].to_numpy(dtype=float), P["loss_pred"].to_numpy(dtype=float)
+    dose = P["app_rate_kgha"].round(3).astype(str).to_numpy() if "app_rate_kgha" in P.columns else None
+
+    def scores(pos, alarm):
+        return {"high_loss_days": int(pos.sum()), "alarms": int(alarm.sum()),
+                "precision": float(pos[alarm].mean()) if alarm.any() else None,
+                "recall": float(alarm[pos].mean()) if pos.any() else None}
+
+    out = {}
+    for pct in limits_pct:
+        pos, alarm = true >= pct * limit_gha, pred >= pct * limit_gha
+        entry = scores(pos, alarm)
+        if dose is not None:
+            entry["by_dose_kgha"] = {d: scores(pos[dose == d], alarm[dose == d]) for d in sorted(set(dose))}
+        out[f"{pct:g}"] = entry
     return out
 
 
