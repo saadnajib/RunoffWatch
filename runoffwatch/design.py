@@ -18,7 +18,8 @@ Two groups of runs:
              date, application rate, DT50, Koc. Henry constant fixed.
 ``control``  existing runs repeated exactly as originally simulated (03-01,
              2400 g/ha, DT50 41.68 d, Koc 377.5, own soil, own weather) except
-             the Henry constant. Half of them are runs that became numerically
+             the Henry constant and the reference soil moisture (both corrected).
+             Half of them are runs that became numerically
              unstable, half stable ones: does the Henry constant 0.03 cause the
              breakdown?
 
@@ -41,6 +42,7 @@ import numpy as np
 import pandas as pd
 
 from .przm_io import read_met
+from .rerun import HENRY_FIXED, MOISTURE_REF_FIXED
 
 log = logging.getLogger("runoffwatch")
 
@@ -54,9 +56,11 @@ SOURCE_HORIZONS = (1, 3, 4)             # run_quality horizons that give the 3 x
 APP_RATES_GHA = (600, 1200, 2400)
 DT50_DAYS = (10, 30, 41.68, 90, 180)
 KOC_VALUES = (30, 100, 377.5, 1000, 3000)
-HENRY_DEFAULT = 2.4e-7
+# Corrected settings, same values as `rerun` uses for the re-runs (one source of truth).
+HENRY_DEFAULT = float(HENRY_FIXED)              # 3.7e-7, dimensionless
+MOISTURE_REF_DEFAULT = float(MOISTURE_REF_FIXED)  # 1 = field capacity (the delivered runs used 100)
 
-ORIGINAL = dict(app_date="03-01", app_rate_gha=2400, dt50_d=41.68, koc=377.5, henry=0.03)
+ORIGINAL = dict(app_date="03-01", app_rate_gha=2400, dt50_d=41.68, koc=377.5, henry=0.03, moisture_ref=100)
 
 SIM_START = "1990-01-01"
 SIM_END = "1999-12-31"
@@ -106,7 +110,6 @@ _FIXED = {
     "Substance_MolecularWeight": "304",
     "Substance_WaterSolubility": "60",
     "Substance_TemperatureAtWhichMeasured": "293",
-    "Substance_ReferenceMoistureForDT50Soil": "100",
     "SprayApplication_PrzmApplicationMethod": "foliar",
     "SprayApplication_IncorporationDepth": "5",
     "CropParameters_Crops": "Cereals,Winter|OffCrop",
@@ -261,6 +264,7 @@ def make_design(run_quality: pd.DataFrame, n: int, seed: int = 0, *,
                 dt50s: Sequence[float] = DT50_DAYS,
                 kocs: Sequence[float] = KOC_VALUES,
                 henry: float = HENRY_DEFAULT,
+                moisture_ref: float = MOISTURE_REF_DEFAULT,
                 sim_start: str = SIM_START, sim_end: str = SIM_END,
                 weather_dir: str | Path | Mapping | None = None) -> pd.DataFrame:
     """Build the run table of a designed experiment (deterministic for a given seed).
@@ -277,11 +281,14 @@ def make_design(run_quality: pd.DataFrame, n: int, seed: int = 0, *,
         simulated (03-01, 2400 g/ha, DT50 41.68, Koc 377.5, own soil and weather)
         except the Henry constant. Stratified half unstable / half stable as far
         as available.
-    henry : Henry constant used in ALL new runs (dimensionless). The default
-        2.4e-7 is an ESTIMATE for Flufenacet and must be confirmed by the model
-        owners (for comparison, VP * MW / (S * R * T) with the template values
-        1e-4 Pa, 304 g/mol, 60 mg/L, 293 K gives about 2.1e-7). The original
-        runs used 0.03.
+    henry : Henry constant used in ALL new runs (dimensionless). The default is
+        ``rerun.HENRY_FIXED`` (0.37E-06), the corrected value also used for the
+        re-runs; published values for Flufenacet give 2.4e-7 to 5.3e-7. The
+        original runs used 0.03.
+    moisture_ref : reference soil moisture for the DT50 (written as
+        ``Substance_ReferenceMoistureForDT50Soil``) in ALL new runs. The default
+        is ``rerun.MOISTURE_REF_FIXED`` (1 = field capacity, as this PRZM program
+        reads it); the original runs used 100.
     weather_dir : optional folder of original MARS CSVs named ``<met_hash>.csv``
         or a mapping met_hash -> path; only used to fill ``weather_source``.
 
@@ -302,6 +309,7 @@ def make_design(run_quality: pd.DataFrame, n: int, seed: int = 0, *,
     dt50s = _check_positive("dt50s", dt50s)
     kocs = _check_positive("kocs", kocs)
     _check_positive("henry", [henry])
+    _check_positive("moisture_ref", [moisture_ref])
     t0, t1 = pd.Timestamp(sim_start), pd.Timestamp(sim_end)
     if t1 < t0:
         raise ValueError(f"sim_end {sim_end} is before sim_start {sim_start}")
@@ -368,6 +376,7 @@ def make_design(run_quality: pd.DataFrame, n: int, seed: int = 0, *,
     design = pd.DataFrame(rows)
     design.insert(0, "run_id", [f"run_{i:06d}" for i in range(1, len(design) + 1)])
     design["henry"] = float(henry)
+    design["moisture_ref"] = float(moisture_ref)
     design["substance"] = [substance_label(a, b) for a, b in zip(design["dt50_d"], design["koc"])]
     design["source_batch"] = design["source_run"].map(rq["batch"])
     design["weather_file"] = design["met_hash"].astype(str) + ".csv"
@@ -377,7 +386,7 @@ def make_design(run_quality: pd.DataFrame, n: int, seed: int = 0, *,
                                 for h in design["met_hash"]]
     first = ["run_id", "group", "source_run", "source_batch", "source_unstable", "met_hash", "weather_file",
              "weather_run", "weather_batch", "weather_source", "app_date", "app_rate_gha", "dt50_d", "koc",
-             "henry", "substance", "sim_start", "sim_end", "slope_pct"]
+             "henry", "moisture_ref", "substance", "sim_start", "sim_end", "slope_pct"]
     return design[first + [c for c in design.columns if c not in first]]
 
 
@@ -401,6 +410,7 @@ def xrun_values(row: pd.Series | Mapping) -> dict[str, str]:
         "DT50": fmt_num(row["dt50_d"]),
         "KocSoil": fmt_num(row["koc"]),
         "Substance_HenryConstant": fmt_henry(row["henry"]),
+        "Substance_ReferenceMoistureForDT50Soil": fmt_num(row.get("moisture_ref", MOISTURE_REF_DEFAULT)),
         "ApplicationRate": fmt_num(row["app_rate_gha"]),
         "ApplicationWindows": f"{row['app_date']} to {row['app_date']}",
         "Fields_Slope": fmt_num(row["slope_pct"]),
@@ -485,6 +495,7 @@ def summarize_design(design: pd.DataFrame) -> dict:
         "n_main": int(len(main)),
         "n_control": int(len(ctrl)),
         "henry": sorted({float(h) for h in design["henry"]}),
+        "moisture_ref": sorted({float(m) for m in design.get("moisture_ref", [MOISTURE_REF_DEFAULT])}),
         "n_weather_files": int(design["weather_file"].nunique()),
         "n_weather_files_main": int(main["weather_file"].nunique()),
         "n_source_soils_main": int(main["source_run"].nunique()),
@@ -503,6 +514,7 @@ def readme_text(design: pd.DataFrame, summary: dict | None = None, n_archives: i
         return ", ".join(f"{k} ({v})" for k, v in d.items())
 
     henry = ", ".join(fmt_henry(h) for h in s["henry"])
+    moisture = ", ".join(fmt_num(m) for m in s.get("moisture_ref", [MOISTURE_REF_DEFAULT]))
     sim = f"{design['sim_start'].iloc[0]} to {design['sim_end'].iloc[0]}" if "sim_start" in design else ""
     out = [
         "RunoffWatch designed experiment",
@@ -516,8 +528,10 @@ def readme_text(design: pd.DataFrame, summary: dict | None = None, n_archives: i
         "",
         f"Runs: {s['n_runs']} in total = {s['n_main']} main + {s['n_control']} control.",
         f"Simulation period: {sim}." if sim else "",
-        f"Henry constant in all new runs: {henry} (an ESTIMATE, to be confirmed by the model owners;",
-        "the original simulations used 0.03).",
+        f"Henry constant in all new runs: {henry} (the original simulations used 0.03).",
+        f"Reference soil moisture for the DT50 in all new runs: {moisture} (1 = field capacity; the original",
+        "simulations used 100). Both are the corrected settings also used for the local re-runs and",
+        "should be confirmed by the model owners.",
         "",
         "Main group",
         "----------",
@@ -534,7 +548,8 @@ def readme_text(design: pd.DataFrame, summary: dict | None = None, n_archives: i
         "Control group",
         "-------------",
         "Existing runs repeated exactly as originally simulated (application 03-01, 2400 g/ha, DT50 41.68 d,",
-        "Koc 377.5, their own soil and their own weather) except the Henry constant. About half come from runs",
+        "Koc 377.5, their own soil and their own weather) except the Henry constant and the reference soil",
+        "moisture. About half come from runs",
         f"that became numerically unstable, half from stable runs ({s['control_unstable']}). Purpose: test whether",
         "the Henry constant 0.03 of the original runs caused the numerical breakdown.",
         "",

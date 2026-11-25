@@ -59,7 +59,8 @@ independently of the others, so that their effects can be separated:
 | Sorption (Koc) | 30, 100, 377.5, 1,000 or 3,000 |
 | Soil and slope | copied from a randomly chosen existing run |
 | Weather | one of 40 existing weather files |
-| Henry constant | one realistic low value for all runs (default 2.4e-7, **an estimate that must be confirmed**) |
+| Henry constant | one realistic low value for all runs (default 0.37E-06, the corrected value `rerun` uses; **to be confirmed**) |
+| Reference soil moisture | 1 for all runs (the corrected value `rerun` uses; the delivered runs had 100) |
 
 Substances are described by their two key properties (DT50 and Koc), not by
 product names. 41.68 days and 377.5 are the values of the existing runs.

@@ -716,12 +716,11 @@ Autumn spraying loses 2 to 7 times more of the dose than spring spraying.
     was meant to test the Henry hypothesis; the local test runs (5.1) have
     now done that on a small scale.
 - **Before submitting:** permission from the model owner; the spray date must
-  be read from the run file on their side; the Henry value (default 2.4e-7) is
-  an estimate to confirm; our weather CSVs are rebuilt from PRZM weather files
-  and may differ from the originals. `design.py` still writes the reference
-  soil moisture 100 (second wrong setting, 5.1) and its own Henry default
-  (2.4e-7), not the 0.37E-06 that `rerun` uses. Both must be fixed before
-  any submission.
+  be read from the run file on their side; our weather CSVs are rebuilt from
+  PRZM weather files and may differ from the originals. `design.py` now writes
+  the same corrected settings as `rerun` (Henry 0.37E-06, reference soil
+  moisture 1, taken from `rerun.py`); both are still our reading of the
+  evidence and should be confirmed.
 - With such runs (from Landau or made locally), dose, DT50 and Koc become
   model inputs and the advisor could compare days, doses and substances.
 
@@ -967,8 +966,8 @@ Next, in this order:
    correct the statement from the first progress presentation that 73 % of
    the data can be trusted: the plausibility check kept 73 % of the
    run-years, but those were wrong too.
-9. Before any submission of new runs to Landau: `design.py` still writes the
-   reference soil moisture 100 and its own Henry default (8.2).
+9. Before any submission of new runs to Landau: confirm the corrected settings
+   that `design.py` now writes (Henry 0.37E-06, reference soil moisture 1; 8.2).
 
 Still open from before:
 - Check a sample of the 45-year predictions against PRZM runs on the same

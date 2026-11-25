@@ -379,3 +379,61 @@ def test_summarize_design(rq):
     assert set(s["main_levels"]["app_rate_gha"]) <= {"600", "1200", "2400"}
     assert s["control_unstable"] == {"False": 2, "True": 2}
     assert s["henry"] == [D.HENRY_DEFAULT]
+
+
+# --------------------------------------------------------------------------- #
+# Corrected settings (same values as `rerun`)
+# --------------------------------------------------------------------------- #
+from runoffwatch import rerun as R                                     # noqa: E402
+
+
+def test_defaults_are_the_rerun_corrections():
+    assert D.HENRY_DEFAULT == float(R.HENRY_FIXED) == pytest.approx(3.7e-7)
+    assert D.MOISTURE_REF_DEFAULT == float(R.MOISTURE_REF_FIXED) == 1
+
+
+def test_xrun_writes_corrected_henry_and_moisture_by_default(rq):
+    d = small(rq, n_controls=4)
+    assert (d["henry"] == float(R.HENRY_FIXED)).all() and (d["moisture_ref"] == 1).all()
+    for _, r in d.iterrows():                                          # main and control runs
+        p = D.parse_xrun(D.render_xrun(r))
+        assert float(p["Substance_HenryConstant"]) == pytest.approx(0.37e-6, rel=0, abs=1e-15)
+        assert p["Substance_HenryConstant"] == "3.7e-07"
+        assert p["Substance_ReferenceMoistureForDT50Soil"] == "1"
+
+
+def test_xrun_caller_chosen_henry_and_moisture(rq):
+    d = small(rq, henry=2.4e-7, moisture_ref=0.5, n_controls=2)
+    p = D.parse_xrun(D.render_xrun(d.iloc[-1]))
+    assert p["Substance_HenryConstant"] == "2.4e-07"
+    assert p["Substance_ReferenceMoistureForDT50Soil"] == "0.5"
+    with pytest.raises(ValueError, match="moisture_ref"):
+        small(rq, moisture_ref=0)
+
+
+def test_xrun_only_the_two_settings_changed(rq):
+    """Against the old defaults (Henry 2.4e-7, reference moisture 100) only those two elements differ."""
+    r = small(rq).iloc[0]
+    old = r.copy()
+    old["henry"], old["moisture_ref"] = 2.4e-7, 100
+    new_lines, old_lines = D.render_xrun(r).splitlines(), D.render_xrun(old).splitlines()
+    assert len(new_lines) == len(old_lines)
+    diff = [(a, b) for a, b in zip(old_lines, new_lines) if a != b]
+    assert diff == [("    <Substance_HenryConstant>2.4e-07</Substance_HenryConstant>",
+                     "    <Substance_HenryConstant>3.7e-07</Substance_HenryConstant>"),
+                    ("    <Substance_ReferenceMoistureForDT50Soil>100</Substance_ReferenceMoistureForDT50Soil>",
+                     "    <Substance_ReferenceMoistureForDT50Soil>1</Substance_ReferenceMoistureForDT50Soil>")]
+    # a row without the new column (design.csv written before the fix) also gets the corrected moisture
+    p = D.parse_xrun(D.render_xrun(r.drop("moisture_ref")))
+    assert p["Substance_ReferenceMoistureForDT50Soil"] == "1"
+
+
+def test_readme_and_summary_state_corrected_settings(rq, runs_root, tmp_path):
+    d = small(rq, n=3, n_controls=0)
+    D.write_design(d, tmp_path / "o", runs_root=runs_root)
+    readme = (tmp_path / "o" / "README.txt").read_text()
+    assert "Henry constant in all new runs: 3.7e-07" in readme
+    assert "Reference soil moisture for the DT50 in all new runs: 1 " in readme
+    assert D.summarize_design(d)["moisture_ref"] == [1.0]
+    written = pd.read_csv(tmp_path / "o" / "design.csv")
+    assert (written["moisture_ref"] == 1).all()
