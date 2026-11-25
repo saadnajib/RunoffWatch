@@ -279,7 +279,8 @@ whether the input or the program is at fault. The practical fix is the same: ref
   In the passing runs two errors work against each other (too much evaporation, too little decay).
 - The water results (rain, runoff, infiltration) do not depend on these settings and stay valid.
 - All results in `MODEL_REPORT.md` were learned from the delivered data. The methods stay; the
-  numbers have to be redone on corrected simulations.
+  numbers have to be redone on corrected simulations. (This was the state during the test; it was
+  done the same day, see "The full re-run" below.)
 - Corrected simulations can be made locally: 6,958 folders have input files (the 3,958 with
   results plus 2,992 that stopped early and 8 with empty results), and the editor works on 6,945 of them (13 input files are
   damaged). `python -m runoffwatch rerun` does this; see the README.
@@ -348,3 +349,38 @@ Checked with `inventory`, `qc` and `audit` on the 5,610 new result folders.
   which 4.2 million were trusted). 25,940 of them are high-loss days (at least 1 g/ha): 0.32 % of
   the rain days, carrying 73 % of all loss. In the delivered data it was 0.17 % carrying 55 %.
   13 % of rain days produce runoff, as before.
+
+### Runs with varied spray dates and doses (25 Nov 2026)
+
+Until now every run was sprayed on 1 March with 2.4 kg/ha. To let the models learn other spray
+days and doses, more runs were made on the project PC with
+`python -m runoffwatch rerun --variants 2`, with the same two corrected settings (Henry constant
+0.37E-06, reference soil moisture 1).
+
+- **How they were made.** Each of the 5,609 fields with a full corrected result got two more runs:
+  one sprayed in spring (15 Feb - 30 Apr) and one in autumn (1 Oct - 30 Nov). Each run has a
+  different random spray day in each of its ten years. The dose of each run is 0.24, 1.20 or
+  2.40 kg/ha. The plan of every run is in `rerun_plan.csv` next to the results.
+- **Received: 11,218 runs. Usable: 11,209**, all with the full ten years.
+- **Balance check.** All 11,209 pass PRZM's own yearly balance check. The largest error is
+  9.3e-7 kg/ha; the limit is 1e-3 kg/ha.
+- **Nine result files are empty (5 fields, all in one batch).** The file has the full size
+  (about 460 KB) but holds only zero bytes. The run on the PC was interrupted while these files
+  were being written. The re-run tool treated them as finished, because it only looked at the file
+  size; this is being fixed. The nine runs are left out (under 0.1 %); those five fields still have
+  their 1 March run.
+- **Feature table** (one row per rain day; the table the models learn from): the 5,609 corrected
+  runs sprayed on 1 March plus the 11,209 new runs, so 16,818 runs. It has 24,589,483 rain days;
+  23,654,303 of them have trusted pesticide values, and 92,768 are high-loss days (at least
+  1 g/ha). The other 935,180 rain days lie in the first simulated year before the first
+  spraying, where there is no pesticide to predict.
+- Numbers in [`results/varied/quality_summary.json`](results/varied/quality_summary.json).
+
+**The crop calendar is the same everywhere.** Every field is winter cereals with the same dates
+in every year: emergence 12 Nov, maturity 10 Jun, harvest 31 Jul. PRZM's curve number (how easily
+rain becomes runoff; higher means more runoff) follows this calendar. The most common set is 81
+from 12 Nov, 86 from 31 Jul, and 91 from 1 Nov to 11 Nov. So between harvest and emergence the
+field runs off much more easily than after emergence. This explains why autumn spraying loses
+much more than spring spraying in these runs, and why the loss drops sharply on 12 Nov
+([MODEL_REPORT.md, section 4](MODEL_REPORT.md#what-przm-says-about-the-spray-date-and-why)). The
+step is a property of the scenario: in reality emergence dates differ by field and year.

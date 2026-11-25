@@ -212,7 +212,8 @@ each year, dose 0.24, 1.20 or 2.40 kg/ha; section 8.1). 11,218 runs arrived;
 (largest error 9.3e-7 kg/ha). 9 runs (5 fields, one batch) are unreadable
 and left out. The feature table holds the 5,609 corrected 1 March runs plus
 the 11,209 varied runs: 16,818 runs, 24,589,483 rain days (23,654,303 with
-trusted pesticide values), 92,768 high-loss days.
+trusted pesticide values; the other 935,180 lie before the first spraying),
+92,768 high-loss days.
 
 **Key facts about the losses (measured on the corrected simulations):**
 - A "rain day" is a day with at least 1 mm of rain. About 13 % of rain days
