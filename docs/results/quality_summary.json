@@ -4,11 +4,13 @@
   "runs_with_balance_error_above_tolerance": 0,
   "balance_error_quantiles_kgha": {
     "0.5": 2.212e-09,
-    "0.9": 6.0103999999999916e-09,
-    "0.99": 1.5968400000000003e-08,
+    "0.9": 6.048e-09,
+    "0.99": 1.597e-08,
     "1.0": 4.407e-08
   },
   "trusted_runs": 5609,
+  "runs_with_warm_up": 5610,
+  "warm_up_until": "1990-11-12",
   "folders": 5616,
   "status_counts": {
     "has_output": 5610,
@@ -39,7 +41,7 @@
   "median_decay_growth_per_year": 0.9799644002124799,
   "share_runs_decay_growing_gt_1p5": 0.0,
   "max_loss_fraction_of_applied": 0.007212208333333333,
-  "clean_run_years": 55192.56000000001,
+  "clean_run_years": 55136.47,
   "total_run_years": 55136.47,
   "runs_with_at_least_3_clean_years": 5609,
   "full_length_years": 9.998631074606434,
