@@ -27,6 +27,10 @@ def test_formats():
     assert ad.fmt_pct(0.9166, 0, share=True) == "92%"
     assert ad.fmt_pct(12.345) == "12.3%"
     assert ad.fmt_pct_small(0.0778) == "0.078%" and ad.fmt_pct_small(0.52) == "0.5%"
+    assert ad.fmt_pct_small(0.0001) == "less than 0.001%" and ad.fmt_pct_small(0) == "0%"
+    assert ad.fmt_int(1553593) == "1,553,593" and ad.fmt_int(None) == "n/a"
+    assert ad.rank_labels([1, 1, 3, pd.NA]) == ["1 (tie)", "1 (tie)", "3", "not ranked"]
+    assert ad.axis_floor(0.776) == 0.75 and ad.axis_floor(0.9) == 0.9 and ad.axis_floor(-0.2) == 0.0
     assert ad.fmt_r2(0.97993) == "0.98"
     assert ad.fmt_day("2026-03-03") == "Tue 3 Mar 2026"
 
@@ -111,6 +115,8 @@ def test_headline_and_template():
     text = ad.headline(ranked, 14)
     assert text.startswith("Lowest predicted loss: spraying on **Tue 3 Mar 2026**: **0.50 g/ha** in the following 14 days.")
     assert "Highest: spraying on **Wed 4 Mar 2026**: **3.25 g/ha**" in text
+    tied = pd.concat([ranked.iloc[:1].assign(spray_date=pd.Timestamp("2026-03-02").date()), ranked])
+    assert "(and 1 other day with the same loss)" in ad.headline(tied, 14)
     w = pd.DataFrame({"rain_mm": [0.0, 1.5], "temp_c": [3.0, 4.0]},
                      index=pd.date_range("2026-01-01", periods=2, name="date"))
     assert ad.weather_template(w).splitlines() == ["date,rain_mm,temp_c", "2026-01-01,0.0,3.0", "2026-01-02,1.5,4.0"]

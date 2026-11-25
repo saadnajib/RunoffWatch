@@ -29,6 +29,7 @@ from runoffwatch.whatif import (CN_SETS, compare_spray_days, example_weather, lo
 
 st.set_page_config(page_title="RunoffWatch", layout="wide")
 SET = ad.model_set()
+EXAMPLE_FIRST_DAY = "2026-03-06"     # with the example weather: candidates before, during and after a storm
 NOT_YET = "Not available yet: {what} is missing or being rewritten. Reload the page later."
 SCORES = {"runoff_r2": "Runoff R²", "loss_r2": "Pesticide loss R²",
           "alarm_precision": "Alarms that are right", "alarm_recall": "High-loss days found"}
@@ -103,20 +104,20 @@ def step_weather():
             up = st.file_uploader("Daily weather CSV", type="csv")
             if up is None:
                 st.info("Upload a file to continue, or switch to the example.")
-                return None
+                return None, False
             raw = pd.read_csv(up)
         try:
             weather = prepare_weather(raw)
         except Exception as e:  # tell the reader what is wrong with the file
             st.error(f"Could not use this weather file: {e}")
-            return None
+            return None, False
         rain = weather["rain_mm"].rename_axis("date").reset_index()
         show(alt.Chart(rain, height=130).mark_bar(color=colors()["cat"][0], cornerRadiusEnd=2).encode(
             x=alt.X("date:T", title=None), y=alt.Y("rain_mm:Q", title="Rain (mm/day)"),
             tooltip=[alt.Tooltip("date:T", title="Day"), alt.Tooltip("rain_mm:Q", title="Rain (mm)")]))
         st.caption(f"{len(weather)} days, {ad.fmt_day(weather.index[0])} to {ad.fmt_day(weather.index[-1])}; "
                    f"{weather['rain_mm'].sum():.0f} mm of rain in total.")
-        return weather
+        return weather, source.startswith("Example")
 
 
 def step_field() -> dict:
@@ -134,7 +135,7 @@ def step_field() -> dict:
     return soil_settings(slope_pct=slope, h1_oc=oc, h1_sand=float(sand), h1_clay=float(clay), cn_2=float(cn))
 
 
-def step_spraying(weather):
+def step_spraying(weather, example: bool):
     with st.container(border=True):
         st.markdown("#### Step 3 · Spraying")
         if weather is None:
@@ -143,33 +144,36 @@ def step_spraying(weather):
         dose = st.number_input("Dose (kg/ha)", min_value=0.05, max_value=5.0, value=2.4, step=0.05)
         st.caption(f"{1000 * dose:,.0f} g of pesticide per hectare.")
         first_ok, last_ok = weather.index[min(30, len(weather) - 2)].date(), weather.index[-2].date()
+        if example and pd.Timestamp(EXAMPLE_FIRST_DAY) in weather.index[:-1]:
+            first_ok = pd.Timestamp(EXAMPLE_FIRST_DAY).date()     # days before and after the storm in March
         start = st.date_input("First candidate day", value=first_ok, min_value=weather.index[0].date(),
                               max_value=last_ok)
-        n = st.slider("Number of candidate days", 1, 14, 7)
+        n = st.slider("Number of candidate days", 1, 14, 10)
         horizon = st.slider("Days to add up after spraying", 3, 30, 14,
                             help="The loss is summed over this many days, starting on the spray day.")
     candidates = [d for d in pd.date_range(start, periods=n) if d in weather.index[:-1]]
     return {"dose": dose, "candidates": candidates, "horizon": horizon}
 
 
-def loss_bar_chart(table: pd.DataFrame, best_date):
+def loss_bar_chart(table: pd.DataFrame):
+    """Predicted loss per candidate day as horizontal bars; the lowest day(s) highlighted."""
     c = colors()
     df = table.copy()
     df["day"] = df["spray_date"].map(lambda d: f"{pd.Timestamp(d):%a} {pd.Timestamp(d).day} {pd.Timestamp(d):%b}")
-    df["kind"] = ["Not ranked (window too short)" if pd.isna(r) else "Lowest" if d == best_date else "Other days"
-                  for r, d in zip(df["rank"], df["spray_date"])]
-    df["mark"] = df["kind"].map({"Lowest": "lowest"}).fillna("")
-    kinds = ["Lowest", "Other days", "Not ranked (window too short)"]
-    x = alt.X("day:N", sort=list(df["day"]), title="Spray day", axis=alt.Axis(labelAngle=-40))
-    bars = alt.Chart(df, height=280).mark_bar(cornerRadiusEnd=4).encode(
-        x=x, y=alt.Y("predicted_loss_gha:Q", title="Predicted loss (g/ha)"),
-        color=alt.Color("kind:N", title=None, scale=alt.Scale(domain=kinds, range=[c["cat"][1], c["cat"][0], c["muted"]]),
-                        legend=alt.Legend(orient="top")),
-        tooltip=[alt.Tooltip("day:N", title="Spray day"),
+    df["kind"] = ["Not ranked" if pd.isna(r) else "Lowest" if r == 1 else "Other days" for r in df["rank"]]
+    df["mark"] = df["kind"].map({"Lowest": "  lowest"}).fillna("")
+    df["rank_text"] = ad.rank_labels(df["rank"])
+    kinds = [k for k in ["Lowest", "Other days", "Not ranked"] if k in set(df["kind"])]
+    shades = {"Lowest": c["cat"][1], "Other days": c["cat"][0], "Not ranked": c["muted"]}
+    y = alt.Y("day:N", sort=list(df["day"]), title=None, axis=alt.Axis(labelLimit=200))
+    bars = alt.Chart(df, height=max(140, 30 * len(df))).mark_bar(cornerRadiusEnd=4, height=18).encode(
+        y=y, x=alt.X("predicted_loss_gha:Q", title="Predicted loss (g/ha)"),
+        color=alt.Color("kind:N", title=None, scale=alt.Scale(domain=kinds, range=[shades[k] for k in kinds]),
+                        legend=alt.Legend(orient="top", labelLimit=300)),
+        tooltip=[alt.Tooltip("day:N", title="Spray day"), alt.Tooltip("rank_text:N", title="Rank"),
                  alt.Tooltip("predicted_loss_gha:Q", title="Predicted loss (g/ha)", format=".3f"),
-                 alt.Tooltip("rain_in_window_mm:Q", title="Rain in window (mm)", format=".1f"),
-                 alt.Tooltip("loss_pct_of_dose:Q", title="Loss (% of dose)", format=".3f")])
-    text = alt.Chart(df).mark_text(dy=-8).encode(x=x, y="predicted_loss_gha:Q", text="mark:N")
+                 alt.Tooltip("rain_in_window_mm:Q", title="Rain in window (mm)", format=".1f")])
+    text = alt.Chart(df).mark_text(align="left", dx=4).encode(y=y, x="predicted_loss_gha:Q", text="mark:N")
     return bars + text
 
 
@@ -181,19 +185,17 @@ def day_by_day(weather, table, soil, models, dose, horizon, best_date):
         warnings.simplefilter("ignore")
         days = predict_days(weather, pd.Timestamp(pick), soil, models, rate_kgha=dose).iloc[:horizon]
     days = days.rename_axis("date").reset_index()
+    days["day"] = days["date"].map(lambda d: f"{d.day} {d:%b}")
     c = colors()
-    a, b = st.columns(2)
-    with a:
-        show(alt.Chart(days, height=180, title="Rain (mm per day)").mark_bar(color=c["cat"][0], cornerRadiusEnd=3)
-             .encode(x=alt.X("date:T", title=None), y=alt.Y("rain_mm:Q", title="mm"),
-                     tooltip=[alt.Tooltip("date:T", title="Day"), alt.Tooltip("rain_mm:Q", title="Rain (mm)")]))
-    with b:
-        show(alt.Chart(days, height=180, title="Predicted loss (g/ha per day)")
-             .mark_bar(color=c["cat"][1], cornerRadiusEnd=3)
-             .encode(x=alt.X("date:T", title=None), y=alt.Y("loss_gha:Q", title="g/ha"),
-                     tooltip=[alt.Tooltip("date:T", title="Day"),
-                              alt.Tooltip("runoff_mm:Q", title="Runoff (mm)", format=".2f"),
-                              alt.Tooltip("loss_gha:Q", title="Loss (g/ha)", format=".3f")]))
+    x = alt.X("day:N", sort=list(days["day"]), title=None, axis=alt.Axis(labelAngle=0, labelOverlap="greedy"))
+    tips = [alt.Tooltip("date:T", title="Day", format="%a %d %b"), alt.Tooltip("rain_mm:Q", title="Rain (mm)"),
+            alt.Tooltip("runoff_mm:Q", title="Runoff (mm)", format=".2f"),
+            alt.Tooltip("loss_gha:Q", title="Loss (g/ha)", format=".3f")]
+    for col, title, colour in [("rain_mm", "Rain (mm per day)", c["cat"][0]),
+                               ("loss_gha", "Predicted pesticide loss (g/ha per day)", c["cat"][1])]:
+        st.markdown(f"**{title}**")
+        show(alt.Chart(days, height=150).mark_bar(color=colour, cornerRadiusEnd=3).encode(
+            x=x, y=alt.Y(f"{col}:Q", title=None), tooltip=tips))
     st.caption(f"Over these {len(days)} days: {days['rain_mm'].sum():.0f} mm of rain, "
                f"{days['runoff_mm'].sum():.1f} mm of it runs off, carrying {ad.fmt_gha(days['loss_gha'].sum())}. "
                "Only rain days can lose pesticide.")
@@ -220,16 +222,19 @@ def show_result(weather, soil, plan, models):
     best = ranked.iloc[0]
     st.caption(f"g/ha = grams of pesticide washed off one hectare with runoff water. You spray "
                f"{1000 * dose:,.0f} g/ha, so the lowest result is {ad.fmt_pct_small(best.loss_pct_of_dose)} of the dose.")
-    show(loss_bar_chart(table, best.spray_date))
-    view = table.assign(spray_date=table["spray_date"].map(ad.fmt_day),
+    show(loss_bar_chart(table))
+    st.caption("Days with the same predicted loss share a rank (marked \"tie\"). Grey bars are not ranked: "
+               "the weather table ends before their window does.")
+    view = table.assign(spray_date=table["spray_date"].map(ad.fmt_day), rank=ad.rank_labels(table["rank"]),
+                        loss_pct_of_dose=table["loss_pct_of_dose"].map(ad.fmt_pct_small),
                         worst_day=table["worst_day"].map(lambda d: ad.fmt_day(d) if d else "none"))
     st.dataframe(view, hide_index=True, column_order=[
         "rank", "spray_date", "predicted_loss_gha", "loss_pct_of_dose", "rain_in_window_mm", "high_loss_days",
         "worst_day", "worst_day_loss_gha", "days_covered"], column_config={
-        "rank": st.column_config.NumberColumn("Rank (1 = best)"),
+        "rank": "Rank (1 = best)",
         "spray_date": "Spray day",
         "predicted_loss_gha": st.column_config.NumberColumn("Predicted loss (g/ha)", format="%.3f"),
-        "loss_pct_of_dose": st.column_config.NumberColumn("Loss (% of dose)", format="%.3f"),
+        "loss_pct_of_dose": "Loss (share of dose)",
         "rain_in_window_mm": st.column_config.NumberColumn("Rain (mm)", format="%.1f"),
         "high_loss_days": st.column_config.NumberColumn("Days with 1 g/ha or more"),
         "worst_day": "Worst day",
@@ -247,9 +252,9 @@ def tab_advisor(models, error):
         return
     left, right = st.columns([2, 3], gap="large")
     with left:
-        weather = step_weather()
+        weather, example = step_weather()
         soil = step_field()
-        plan = step_spraying(weather)
+        plan = step_spraying(weather, example)
     with right:
         show_result(weather, soil, plan, models)
     with st.expander("Limits: read before trusting a number"):
@@ -322,14 +327,21 @@ def tab_quality():
         long["value"] = pd.to_numeric(long["value"], errors="coerce")
         long["score"] = long["score"].map(SCORES)
         names = [SCORES[k] for k in score_cols]
-        show(alt.Chart(long.dropna(), height=280, title="Scores per held-out year").mark_line(point=True, strokeWidth=2)
-             .encode(x=alt.X("test_year:O", title="Held-out year"),
-                     y=alt.Y("value:Q", title="Score (1 = perfect)", scale=alt.Scale(zero=False)),
+        long = long.dropna()
+        low = ad.axis_floor(long["value"].min())
+        st.markdown("##### Scores per held-out year")
+        show(alt.Chart(long, height=300).mark_line(point=alt.OverlayMarkDef(size=50), strokeWidth=2)
+             .encode(x=alt.X("test_year:O", title="Held-out year", axis=alt.Axis(labelAngle=0)),
+                     y=alt.Y("value:Q", title="Score (1 = perfect)",
+                             scale=alt.Scale(domain=[low, 1], nice=False, zero=False)),
                      color=alt.Color("score:N", title=None, sort=names,
                                      scale=alt.Scale(domain=names, range=colors()["cat"][:len(names)]),
                                      legend=alt.Legend(orient="top")),
                      tooltip=[alt.Tooltip("test_year:O", title="Year"), alt.Tooltip("score:N", title="Score"),
                               alt.Tooltip("value:Q", title="Value", format=".3f")]))
+        if low > 0:
+            st.caption(f"The vertical axis runs from {low:g} to 1, not from 0, so small differences between "
+                       "years look larger than they are.")
     elif cv is not None:
         st.info(NOT_YET.format(what="`cv_by_year.csv`"))
 
@@ -347,7 +359,8 @@ def tab_quality():
                     label = name(k)
                 except ValueError:
                     label = k
-                rows.append({"Group": label, "Field-days": ad.dig(v, "rows"), "High-loss days": ad.dig(v, "high_loss_days"),
+                rows.append({"Group": label, "Field-days": ad.fmt_int(ad.dig(v, "rows")),
+                             "High-loss days": ad.fmt_int(ad.dig(v, "high_loss_days")),
                              "Loss R²": ad.fmt_r2(ad.dig(v, "loss_r2")),
                              "Alarms right": ad.fmt_pct(ad.dig(v, "alarm_precision"), 0, share=True),
                              "High-loss days found": ad.fmt_pct(ad.dig(v, "alarm_recall"), 0, share=True)})
@@ -412,17 +425,23 @@ def tab_spray_date():
     if first.empty:
         st.info(NOT_YET.format(what="the 0-30 day rows"))
         return
-    c = colors()
-    parts = [("rain_mm", "Rain (mm)", c["cat"][0]), ("runoff_mm", "Runoff (mm)", c["cat"][0]),
-             ("pct_of_dose_per_mm_runoff", "% of dose lost per mm of runoff", c["cat"][0])]
-    for col, (k, t, colour) in zip(st.columns(3), parts):    # three measures, three charts (no shared axis)
-        with col:
-            show(alt.Chart(first, height=230, title=t).mark_bar(color=colour, cornerRadiusEnd=3).encode(
-                x=alt.X("half:N", sort=list(first["half"]), title="Sprayed in"), y=alt.Y(f"{k}:Q", title=t),
-                tooltip=[alt.Tooltip("half:N", title="Sprayed"), alt.Tooltip(f"{k}:Q", title=t, format=".3f")]))
+    first["season"] = first["sprayed"].map(ad.season)
+    seasons = list(dict.fromkeys(first["season"]))
+    colour = alt.Color("season:N", title=None, legend=None,
+                       scale=alt.Scale(domain=seasons, range=colors()["cat"][:len(seasons)]))
+    parts = [("rain_mm", "1. Rain in the first 30 days (mm)", ".0f"),
+             ("runoff_mm", "2. Water that runs off in the first 30 days (mm)", ".1f"),
+             ("pct_of_dose_per_mm_runoff", "3. Share of the dose lost per mm of runoff (%)", ".3f")]
+    for k, title, fmt in parts:     # three measures with different units: three charts, one under the other
+        st.markdown(f"**{title}**")
+        show(alt.Chart(first, height=150).mark_bar(cornerRadiusEnd=3).encode(
+            x=alt.X("half:N", sort=list(first["half"]), title=None, axis=alt.Axis(labelAngle=0, labelLimit=120)),
+            y=alt.Y(f"{k}:Q", title=None, axis=alt.Axis(format=fmt, tickCount=4)), color=colour,
+            tooltip=[alt.Tooltip("half:N", title="Sprayed"), alt.Tooltip(f"{k}:Q", title=title, format=fmt)]))
+    st.caption("Blue: spring spraying, orange: autumn spraying (as in the chart above).")
     st.markdown(
-        "- **One millimetre of runoff carries about the same share of the dose whenever you spray** (right chart).\n"
-        "- **What differs is how much water runs off in the first month** (middle chart).\n"
+        "- **One millimetre of runoff carries about the same share of the dose whenever you spray** (chart 3).\n"
+        "- **What differs is how much water runs off in the first month** (chart 2).\n"
         "- That follows the crop calendar of the simulator: before the crop emerges on 12 Nov, the field counts "
         "as stubble and more of the rain runs off.\n"
         "- So the step in mid-November is a setting of the simulated scenario, not a law of nature.")
@@ -457,17 +476,18 @@ def tab_france():
     else:
         st.markdown("##### Pesticide loss per field and year")
         layers = []
+        years = alt.Scale(domain=[by_year["app_year"].min(), by_year["app_year"].max()], nice=False, zero=False)
         if {"loss_gha_p10", "loss_gha_p90"} <= set(by_year.columns):
             layers.append(alt.Chart(by_year).mark_area(opacity=0.2, color=c["cat"][0]).encode(
-                x="app_year:Q", y="loss_gha_p10:Q", y2="loss_gha_p90:Q"))
+                x=alt.X("app_year:Q", scale=years), y="loss_gha_p10:Q", y2="loss_gha_p90:Q"))
         lines = [k for k in ("loss_gha_mean", "loss_gha_median") if k in by_year.columns]
         names = {"loss_gha_mean": "Mean over fields", "loss_gha_median": "Median field"}
         long = by_year.melt(id_vars="app_year", value_vars=lines, var_name="series", value_name="gha")
         long["series"] = long["series"].map(names)
         long["gha"] = pd.to_numeric(long["gha"], errors="coerce")
         layers.append(alt.Chart(long.dropna()).mark_line(strokeWidth=2, point=alt.OverlayMarkDef(size=30)).encode(
-            x=alt.X("app_year:Q", title="Year of spraying", axis=alt.Axis(format="d")),
-            y=alt.Y("gha:Q", title="Pesticide loss in the year after spraying (g/ha)"),
+            x=alt.X("app_year:Q", title="Year of spraying", axis=alt.Axis(format="d"), scale=years),
+            y=alt.Y("gha:Q", title="Loss in the year after spraying (g/ha)"),
             color=alt.Color("series:N", title=None, scale=alt.Scale(domain=list(names.values()), range=c["cat"][:2]),
                             legend=alt.Legend(orient="top")),
             tooltip=[alt.Tooltip("app_year:Q", title="Year", format="d"), alt.Tooltip("series:N", title=""),
@@ -517,8 +537,9 @@ def tab_france():
             else:
                 both = pd.concat(rows)
                 names = list(dict.fromkeys(both["scenario"]))
+                span = alt.Scale(domain=[both["app_year"].min(), both["app_year"].max()], nice=False, zero=False)
                 show(alt.Chart(both, height=300).mark_line(strokeWidth=2, point=alt.OverlayMarkDef(size=30)).encode(
-                    x=alt.X("app_year:Q", title="Year of spraying", axis=alt.Axis(format="d")),
+                    x=alt.X("app_year:Q", title="Year of spraying", axis=alt.Axis(format="d"), scale=span),
                     y=alt.Y("loss_gha_mean:Q", title="Mean loss per field (g/ha)"),
                     color=alt.Color("scenario:N", title=None, scale=alt.Scale(domain=names, range=c["cat"][:len(names)]),
                                     legend=alt.Legend(orient="top", labelLimit=400, direction="vertical")),

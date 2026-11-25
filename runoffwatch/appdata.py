@@ -144,11 +144,37 @@ def fmt_pct(x, decimals: int = 1, share: bool = False) -> str:
 
 
 def fmt_pct_small(x) -> str:
-    """A small percentage of the dose: one decimal, or two significant digits below 0.1% (0.078 -> '0.078%')."""
+    """A small percentage of the dose: one decimal from 0.1%, two significant digits down to 0.001%
+    (0.078 -> '0.078%'), and 'less than 0.001%' below that."""
     x = number(x)
     if x is None:
         return "n/a"
-    return f"{x:.1f}%" if abs(x) >= 0.1 or x == 0 else f"{x:.2g}%"
+    if x == 0:
+        return "0%"
+    if abs(x) >= 0.1:
+        return f"{x:.1f}%"
+    return f"{x:.2g}%" if abs(x) >= 0.001 else "less than 0.001%"
+
+
+def fmt_int(x) -> str:
+    """A count with thousands separators (1553593 -> '1,553,593'); 'n/a' if it is not a number."""
+    x = number(x)
+    return "n/a" if x is None else f"{x:,.0f}"
+
+
+def rank_labels(ranks) -> list[str]:
+    """Ranks as text, ties marked: [1, 1, 3, NA] -> ['1 (tie)', '1 (tie)', '3', 'not ranked']."""
+    ranks = pd.Series(ranks)
+    counts = ranks.dropna().value_counts()
+    return ["not ranked" if pd.isna(r) else f"{int(r)} (tie)" if counts[r] > 1 else f"{int(r)}" for r in ranks]
+
+
+def axis_floor(lowest, step: float = 0.05) -> float:
+    """Lower end for a 0-1 score axis: the lowest value rounded down to `step`, at least 0."""
+    lowest = number(lowest)
+    if lowest is None:
+        return 0.0
+    return max(0.0, round(math.floor(round(lowest / step, 6)) * step, 10))
 
 
 def fmt_r2(x) -> str:
@@ -222,7 +248,9 @@ def headline(ranked: pd.DataFrame, horizon: int) -> str:
     """The advisor's result in one sentence. `ranked`: ranked rows of `compare_spray_days`."""
     r = ranked.sort_values("predicted_loss_gha")
     best, worst = r.iloc[0], r.iloc[-1]
-    text = (f"Lowest predicted loss: spraying on **{fmt_day(best.spray_date)}**: "
+    ties = int((r["predicted_loss_gha"] == best.predicted_loss_gha).sum()) - 1
+    also = f" (and {ties} other day{'s' if ties > 1 else ''} with the same loss)" if ties else ""
+    text = (f"Lowest predicted loss: spraying on **{fmt_day(best.spray_date)}**{also}: "
             f"**{fmt_gha(best.predicted_loss_gha)}** in the following {horizon} days.")
     if len(r) > 1:
         text += f" Highest: spraying on **{fmt_day(worst.spray_date)}**: **{fmt_gha(worst.predicted_loss_gha)}**."
