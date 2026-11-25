@@ -1,6 +1,5 @@
 {
   "held_out_years": [
-    1990,
     1991,
     1992,
     1993,
@@ -11,102 +10,102 @@
     1998,
     1999
   ],
-  "rows_scored": 5355895,
-  "high_loss_days": 21222,
-  "storm_dates_with_high_loss": 622,
+  "rows_scored": 4815867,
+  "high_loss_days": 19654,
+  "storm_dates_with_high_loss": 572,
   "pooled": {
-    "runoff_r2": 0.9799318819880706,
-    "runoff_r2_curve_number": 0.9381450414657593,
-    "loss_r2": 0.9172338233857303,
-    "loss_r2_baseline": 0.7888509957032079,
-    "loss_total_pred_over_true": 0.9820041372265335,
-    "pr_auc_surrogate": 0.9684570821966038,
-    "pr_auc_classifier": 0.9719428700024076,
-    "pr_auc_rain_rule": 0.10546767914133108,
+    "runoff_r2": 0.9857557797309499,
+    "runoff_r2_curve_number": 0.9401156902313232,
+    "loss_r2": 0.9646605388251732,
+    "loss_r2_baseline": 0.7824924351091211,
+    "loss_total_pred_over_true": 0.9850693498363601,
+    "pr_auc_surrogate": 0.9734810426663199,
+    "pr_auc_classifier": 0.9746087106767907,
+    "pr_auc_rain_rule": 0.1061773700201274,
     "alarm_at_1_gha": {
-      "alarms": 21263,
-      "precision": 0.9166627474956497,
-      "recall": 0.9184337008764489
+      "alarms": 19644,
+      "precision": 0.9259824882915904,
+      "recall": 0.9255113462908314
     }
   },
   "range_over_years": {
     "runoff_r2": [
-      0.9204084457350463,
-      0.9912314352328869
+      0.9539580370050331,
+      0.9931724792756318
     ],
     "runoff_r2_curve_number": [
       0.8292811512947083,
       0.967355489730835
     ],
     "loss_r2": [
-      0.77674491847447,
-      0.9707651830618342
+      0.9073298938028924,
+      0.9755683818154609
     ],
     "loss_total_pred_over_true": [
-      0.903065684792354,
-      1.1751922526929202
+      0.9504648431503739,
+      1.0822862154726227
     ],
     "pr_auc_surrogate": [
-      0.9463024984782143,
-      0.9849280659756231
+      0.9611429651212242,
+      0.986279824260417
     ],
     "pr_auc_classifier": [
-      0.9500593834901258,
-      0.9872707841355818
+      0.9621921578686945,
+      0.9870658616998877
     ],
     "alarm_recall": [
-      0.8767433094609876,
-      0.9601328903654485
+      0.89295137580098,
+      0.9558614143331752
     ]
   },
-  "years_surrogate_runoff_beats_formula": 10,
+  "years_surrogate_runoff_beats_formula": 9,
   "by_spray_window": {
     "autumn (Oct-Nov)": {
-      "rows": 1708197,
-      "high_loss_days": 11827,
-      "loss_r2": 0.9022441922693478,
-      "loss_total_pred_over_true": 0.9764760755125316,
-      "pr_auc_surrogate": 0.9677814357115432,
-      "alarm_precision": 0.9133567957097369,
-      "alarm_recall": 0.9216200219835968
+      "rows": 1553593,
+      "high_loss_days": 11503,
+      "loss_r2": 0.9618362994676577,
+      "loss_total_pred_over_true": 0.9877454671948137,
+      "pr_auc_surrogate": 0.9747960100295817,
+      "alarm_precision": 0.927539991353221,
+      "alarm_recall": 0.9325393375641137
     },
     "spring (Feb-Apr)": {
-      "rows": 3647698,
-      "high_loss_days": 9395,
-      "loss_r2": 0.9677677685795766,
-      "loss_total_pred_over_true": 0.9904920994136377,
-      "pr_auc_surrogate": 0.971983928584414,
-      "alarm_precision": 0.9208918426412263,
-      "alarm_recall": 0.9144225651942522
+      "rows": 3262274,
+      "high_loss_days": 8151,
+      "loss_r2": 0.9755464510887895,
+      "loss_total_pred_over_true": 0.9804973269352838,
+      "pr_auc_surrogate": 0.9737730581359553,
+      "alarm_precision": 0.9237529397202624,
+      "alarm_recall": 0.9155931787510735
     }
   },
   "by_dose_kgha": {
     "0.24": {
-      "rows": 1184774,
-      "high_loss_days": 1025,
-      "loss_r2": 0.9190325877598571,
-      "loss_total_pred_over_true": 0.9858808986588796,
-      "pr_auc_surrogate": 0.9495423797067831,
-      "alarm_precision": 0.8894373149062191,
-      "alarm_recall": 0.8790243902439024
+      "rows": 1070740,
+      "high_loss_days": 981,
+      "loss_r2": 0.9630546295458959,
+      "loss_total_pred_over_true": 0.9993356346190974,
+      "pr_auc_surrogate": 0.9603000795722294,
+      "alarm_precision": 0.8991853360488798,
+      "alarm_recall": 0.9001019367991845
     },
     "1.2": {
-      "rows": 1215953,
-      "high_loss_days": 5798,
-      "loss_r2": 0.9263718057509641,
-      "loss_total_pred_over_true": 0.9872902233253165,
-      "pr_auc_surrogate": 0.9660910268727467,
-      "alarm_precision": 0.9100375554796859,
-      "alarm_recall": 0.919454984477406
+      "rows": 1095118,
+      "high_loss_days": 5581,
+      "loss_r2": 0.9646872994781839,
+      "loss_total_pred_over_true": 0.9944764378407183,
+      "pr_auc_surrogate": 0.9742597455011338,
+      "alarm_precision": 0.9230769230769231,
+      "alarm_recall": 0.9310159469629099
     },
     "2.4": {
-      "rows": 2955168,
-      "high_loss_days": 14399,
-      "loss_r2": 0.9155512345132761,
-      "loss_total_pred_over_true": 0.9799574604598307,
-      "pr_auc_surrogate": 0.9707695118309412,
-      "alarm_precision": 0.9212757087270705,
-      "alarm_recall": 0.9208278352663379
+      "rows": 2650009,
+      "high_loss_days": 13092,
+      "loss_r2": 0.9646525438709517,
+      "loss_total_pred_over_true": 0.9807386166819675,
+      "pr_auc_surrogate": 0.9743463068490811,
+      "alarm_precision": 0.9292565027238548,
+      "alarm_recall": 0.9250687442713107
     }
   }
 }
