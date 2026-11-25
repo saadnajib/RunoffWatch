@@ -29,55 +29,55 @@
   "by_period": {
     "after (2016-2023)": {
       "years": 8,
-      "loss_gha_mean": 2.9089,
-      "loss_gha_median": 1.1528,
-      "runoff_mm_mean": 30.5693,
+      "loss_gha_mean": 2.8969,
+      "loss_gha_median": 1.1727,
+      "runoff_mm_mean": 31.1138,
       "rain_mm_mean": 708.0125732422,
-      "high_loss_days_per_field_year": 0.5848,
+      "high_loss_days_per_field_year": 0.5857,
       "max_rain_mm": 145.0
     },
     "before (1979-2005)": {
       "years": 27,
-      "loss_gha_mean": 1.8377,
-      "loss_gha_median": 0.6673,
-      "runoff_mm_mean": 23.3166,
+      "loss_gha_mean": 1.8565,
+      "loss_gha_median": 0.6872,
+      "runoff_mm_mean": 23.7741,
       "rain_mm_mean": 645.2362060547,
-      "high_loss_days_per_field_year": 0.4177,
+      "high_loss_days_per_field_year": 0.422,
       "max_rain_mm": 189.0
     },
     "training years (2006-2015)": {
       "years": 10,
-      "loss_gha_mean": 2.0711,
-      "loss_gha_median": 0.8182,
-      "runoff_mm_mean": 29.456,
+      "loss_gha_mean": 2.108,
+      "loss_gha_median": 0.8348,
+      "runoff_mm_mean": 30.0582,
       "rain_mm_mean": 709.084777832,
-      "high_loss_days_per_field_year": 0.4662,
+      "high_loss_days_per_field_year": 0.4691,
       "max_rain_mm": 158.0
     }
   },
   "worst_years_by_mean_loss": {
-    "2022": 4.708,
-    "2020": 4.545,
-    "2013": 4.243,
-    "1989": 3.953,
-    "2001": 3.882
+    "2022": 4.651,
+    "2020": 4.527,
+    "2013": 4.283,
+    "2001": 4.034,
+    "1989": 3.941
   },
   "best_years_by_mean_loss": {
-    "1997": 0.483,
-    "1994": 0.619,
-    "1990": 0.643,
-    "1992": 0.841,
-    "1987": 0.952
+    "1997": 0.497,
+    "1994": 0.643,
+    "1990": 0.655,
+    "1992": 0.86,
+    "1987": 0.944
   },
-  "ratio_worst_to_median_year": 2.950051653881916,
-  "share_of_all_loss_in_worst_5_years": 0.22789710768283408,
+  "ratio_worst_to_median_year": 2.8676446291614424,
+  "share_of_all_loss_in_worst_5_years": 0.2271271118050558,
   "field_years_with_a_rain_day_heavier_than_99.9pct_of_training_rain_days_pct": 10.425308531922902,
   "training_rain_99.9pct_mm": 48.0,
   "consistency_with_przm_2006_2015_not_a_test": {
-    "field_years": 56090,
-    "field_years_trusted_pesticide": 56090,
-    "runoff_r2_yearly": 0.9829328844004086,
-    "loss_r2_yearly": 0.9872406351533808,
-    "loss_sum_ratio": 0.9984241624356184
+    "field_years": 50481,
+    "field_years_trusted_pesticide": 50481,
+    "runoff_r2_yearly": 0.9859376639705123,
+    "loss_r2_yearly": 0.9871089135268971,
+    "loss_sum_ratio": 1.0055541321252264
   }
 }
