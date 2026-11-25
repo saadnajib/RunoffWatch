@@ -2,15 +2,16 @@
 
 Paste this whole file into a new chat with an AI assistant so it knows the
 project. It is written to be read without any other context. State as of
-25 November 2026 (first written 17 November 2026).
+25 November 2026, late evening (first written 17 November 2026).
 
 **How to use this with an assistant:** it cannot see the code or the data, only
 this text. When you ask for code changes, paste the relevant file from the
 repository as well. Numbers below marked "measured" come from running the code
 on the full data; do not let an assistant change them from memory.
 
-> **State on 25 Nov 2026, evening: cause of the weak year 1990 found, warm-up
-> rule added, rerun in progress.**
+> **State on 25 Nov 2026, late evening: cause of the weak year 1990 found,
+> warm-up rule added, rerun with the rule finished. All scores in this file
+> are new, except where marked "before the warm-up rule".**
 > - **Why 1990 was weak.** The first simulated year is a warm-up period. In
 >   the PRZM input file the first crop cycle starts before the simulation
 >   (emergence 12 Nov 1989; the simulation starts 1 Jan 1990). Until the
@@ -22,14 +23,25 @@ on the full data; do not let an assistant change them from memory.
 > - **New warm-up rule in the code** (section 5.2): rain days before
 >   12 Nov 1990 are left out, and so are pesticide results of sprayings made
 >   before that day. Application year 1990 then drops out of the
->   year-by-year test, which now has nine held-out years (1991–1999). 551
+>   year-by-year test, which now has nine held-out years (1991–1999). 565
 >   tests pass.
-> - **Rerun in progress** (started 25 Nov, evening; about three hours):
->   feature table, training, year-by-year test and 45-year run for 1 March
->   and for 15 October on the varied data set; then the same steps (without
->   the autumn run) on the corrected 1-March-only data set. **The new scores
->   are not known yet.** All score tables in this file are from before the
->   rule.
+> - **Rerun finished** (25 Nov, late evening): feature table, training,
+>   year-by-year test and 45-year run for 1 March and for 15 October on the
+>   varied data set; the same steps (without the autumn run) on the corrected
+>   1-March-only data set. The new scores are in the table below and in
+>   sections 6.4 to 6.8. Not rerun: the delivered data (archived) and the
+>   LSTM (6.5).
+> - **What the rule changed:** on the varied data daily loss R² rose from
+>   0.917 to 0.965, and autumn spraying from 0.90 to 0.962. 1998 rose from
+>   0.883 to 0.966, because part of its old weakness came from the warm-up
+>   rows (6.9).
+> - **New 45-year run with spraying on 15 October:** autumn spraying loses
+>   about 4 to 6 times more than 1 March spraying in the same weather, and
+>   the worst years are different years (6.6).
+> - **The 1 g/ha limit for a high-loss day will change:** the
+>   environmental-science side answered that a fixed g/ha limit cannot hold
+>   across compounds. Planned: a share of the dose, adjustable (section 13).
+> - **The app was rewritten** with five tabs (7.1).
 > - **Tried and rejected:** training the runoff model as a correction of the
 >   curve-number formula (section 6.9). Keep the current model.
 >
@@ -39,23 +51,25 @@ on the full data; do not let an assistant change them from memory.
 > spring copy (15 Feb to 30 Apr) and one autumn copy (1 Oct to 30 Nov), with
 > 0.24, 1.20 or 2.40 kg/ha. All analysis steps ran on it; results are in
 > `models/varied/`, `docs/results/varied/` and `docs/figures/varied/`
-> (section 6.7). Year-by-year test (each of ten years held out once):
+> (section 6.7). Year-by-year test with the warm-up rule (each of nine years,
+> 1991–1999, held out once; the delivered column is the archived result from
+> before the rule, nine years 1990–1998):
 >
-> *Being recomputed with the warm-up rule (started 25 Nov 2026, evening); the
-> numbers below are from before the rule.*
->
-> | Score | Delivered | Corrected, 1 March only | Varied dates and doses |
+> | Score | Delivered (before the warm-up rule) | Corrected, 1 March only | Varied dates and doses |
 > |---|---|---|---|
-> | Runoff R² (range over years) | 0.97 | 0.98 (0.92–0.99) | 0.98 (0.92–0.99) |
-> | Loss R² (range) | 0.91 (0.75–0.97) | 0.95 (0.89–0.99) | 0.92 (0.78–0.97) |
-> | Total loss, predicted / true (range) | 0.92 (0.70–1.16) | 0.99 (0.86–1.12) | 0.98 (0.90–1.18) |
-> | PR-AUC surrogate / classifier / rain rule | 0.92 / 0.81 / 0.06 | 0.97 / 0.94 / 0.10 | 0.97 / 0.97 / 0.11 |
-> | Alarm precision / recall (recall range) | 91 % / 76 % (36–92 %) | 92 % / 90 % (81–97 %) | 92 % / 92 % (88–96 %) |
+> | Runoff R² (range over years) | 0.97 | 0.986 (0.954–0.993) | 0.986 (0.954–0.993) |
+> | Loss R² (range) | 0.91 (0.75–0.97) | 0.948 (0.867–0.986) | 0.965 (0.907–0.976) |
+> | Total loss, predicted / true (range) | 0.92 (0.70–1.16) | 0.948 (0.831–1.086) | 0.985 (0.950–1.082) |
+> | PR-AUC surrogate / classifier / rain rule | 0.92 / 0.81 / 0.06 | 0.965 / 0.954 / 0.108 | 0.973 / 0.975 / 0.106 |
+> | Alarm precision / recall (recall range) | 91 % / 76 % (36–92 %) | 91.7 % / 88.0 % (80.1–97.7 %) | 92.6 % / 92.6 % (89.3–95.6 %) |
 >
-> The task got harder and the scores stayed about the same; only daily loss
-> R² fell (0.95 to 0.92). Weakest year was 1990, where a simple baseline beat
-> the surrogate; the cause is now known (box above). **Spray-date finding (straight from PRZM):** autumn spraying
-> loses 2 to 7 times more of the dose than spring spraying. The cause is the
+> The task with varied spray dates and doses is harder, yet with the rule it
+> scores at least as well as the 1 March data: daily loss R² 0.965 against
+> 0.948. Before the rule (ten years with 1990) the varied loss R² was 0.917
+> (0.78–0.97). The weakest years are now 1993 on the varied data (loss R²
+> 0.907) and 1991 on the 1 March data (0.867). **Spray-date finding
+> (straight from PRZM):** autumn spraying loses about 2 to 8 times more of
+> the dose than spring spraying (6.8). The cause is the
 > crop calendar of the PRZM scenario: until the fixed emergence date (12 Nov)
 > the field counts as stubble or fallow, with a high curve number, so far more rain runs
 > off. The chemistry is the same in every window; so the step in mid-November
@@ -171,7 +185,8 @@ how much pesticide is washed off a field after spraying, and a small
 11. **Warm-up year (25 Nov, evening):** the weak test year 1990 was traced
     to a warm-up period at the start of every run (the first crop cycle
     starts before the simulation). A warm-up rule now leaves that period
-    out; a full rerun of training and tests was started (section 6.9).
+    out; a full rerun of training and tests was run the same evening and
+    has finished (section 6.9). The app was rewritten (7.1).
 
 ---
 
@@ -262,23 +277,27 @@ each year, dose 0.24, 1.20 or 2.40 kg/ha; section 8.1). 11,218 runs arrived;
 (largest error 9.3e-7 kg/ha). 9 runs (5 fields, one batch) are unreadable
 and left out.
 
-*Being recomputed with the warm-up rule (started 25 Nov 2026, evening); the
-numbers below are from before the rule.* The counts will become smaller,
-because rain days before 12 Nov 1990 are dropped (the same holds for the
-8.20 million rows of the corrected data set, 6.1). The feature table holds
-the 5,609 corrected 1 March runs plus the 11,209 varied runs: 16,818 runs,
-24,589,483 rain days (23,654,303 with trusted pesticide values; the other
-935,180 lie before the first spraying), 92,768 high-loss days.
+The feature table holds the 5,609 corrected 1 March runs plus the 11,209
+varied runs: 16,818 runs. With the warm-up rule it has 22,580,508 rain days
+(`final_models` in `docs/results/varied/model_metrics.json`); before the rule
+it had 24,589,483, because rain days before 12 Nov 1990 are now dropped. The
+corrected data set alone has 7,530,883 rain days (6.1). Not refreshed (no
+result file gives them): 23,654,303 rain days with trusted pesticide values
+and 92,768 high-loss days (before the warm-up rule).
 
 **Key facts about the losses (measured on the corrected simulations):**
 - A "rain day" is a day with at least 1 mm of rain. About 13 % of rain days
   produce runoff.
 - A "high-loss day" is defined as a day with at least 1 g/ha pesticide lost
-  (0.04 % of the dose). Such days are 0.32 % of rain days (25,940 days; on the
-  delivered data 0.17 %). This definition is ours and should be confirmed by
-  the team's environmental scientist.
-- 58 % of the loss happens in March, i.e. in the first weeks after spraying,
-  and 23 % in April (delivered data: 61 % in March).
+  (0.04 % of the dose). With the warm-up rule such days are 0.30 % of the
+  rain days in the monthly table `docs/results/risk_calendar_month.csv`
+  (21,882 of 7,230,741; before the rule 0.32 %, 25,940 days; on the
+  delivered data 0.17 %). This definition is ours. The environmental-science
+  side answered that a fixed g/ha limit cannot hold across compounds; it
+  will become a share of the dose (section 13).
+- 52 % of the loss happens in March, i.e. in the first weeks after spraying,
+  and 27 % in April (before the rule 58 % and 23 %; delivered data: 61 % in
+  March).
 
 ---
 
@@ -340,7 +359,7 @@ Why: the first simulated year is a warm-up period with an irregular crop
 (section 4, crop cycles; evidence in 6.9). Its rows are not a fair test and
 disturb training.
 
-How it works in the code (merged on the branch; 551 tests pass):
+How it works in the code (merged on the branch; 565 tests pass):
 - `przm_io.read_crop_emergences(inp)` reads the emergence dates of the crop
   cycles from the `.inp` file.
 - `quality.warm_up_end(emergences, first_day)` gives the end of the warm-up:
@@ -454,6 +473,15 @@ sent; the contact goes through Sarah; updated 23 Nov; still unanswered on
    before the simulation (emergence 12 Nov 1989, start 1 Jan 1990). Is this
    intended, and is a warm-up year normally discarded (section 6.9)?
 
+**Question to the environmental-science side, answered (25 Nov):** is the
+1 g/ha limit for a "high-loss day" sensible? Answer: a fixed g/ha limit
+cannot hold across compounds, because doses differ by a factor of 100 or
+more. In our runs 1 g/ha is 0.42 %, 0.083 % and 0.042 % of the three doses
+(0.24, 1.2 and 2.4 kg/ha). Consequence: the limit will become a share of
+the dose and adjustable (section 13). Runoff and loss-amount scores do not
+depend on the limit; classifier and alarm scores do. Low-dose compounds (a
+few g/ha) are outside the dose range of our runs (0.24–2.4 kg/ha).
+
 ---
 
 ## 6. The models (Tasks 2 and 3)
@@ -464,13 +492,16 @@ kept for comparison). The delivered-data numbers are in
 `docs/results/delivered/`; the main ones are compared in 6.4. The method was
 then changed for varied spray dates and doses (6.7); the results on the
 varied data set (25 Nov) are in 6.7 and 6.8 and in `docs/results/varied/`.
-All these numbers are from before the warm-up rule (5.2); a rerun with the
-rule is in progress (25 Nov, evening). Section 6.9 explains why.
+**What changed:** all numbers in 6.1 to 6.8 were recomputed with the warm-up
+rule (5.2) on 25 Nov, late evening. Exceptions, marked where they appear:
+the delivered data and the LSTM (6.5). Section 6.9 explains why the rule was
+needed.
 
 ### 6.1 Feature table
-One row per rain day per run: 8.20 million rows (8,200,903), all with usable
-pesticide results (delivered data: 5.67 million rows, of which only part was
-trusted). All inputs come from weather, spray history and soil; nothing from
+One row per rain day per run: 7.53 million rows (7,530,883) with the warm-up
+rule (8,200,903 before it). Rain days before 12 Nov 1990 are dropped, and
+the rest of the 1990 spray season has no trusted pesticide value (5.2).
+Delivered data: 5.67 million rows, of which only part was trusted. All inputs come from weather, spray history and soil; nothing from
 PRZM's output.
 
 - **Weather inputs:** rain today, yesterday, 2–3 days ago, in the previous 7 /
@@ -521,58 +552,62 @@ pesticide loss = runoff x concentration
   With the warm-up rule (5.2, 25 Nov evening) application year 1990 drops
   out, so the corrected and varied data sets have nine held-out years
   (1991–1999).
-- Lesson: millions of rows, but only ten years of regional weather. All 6,066
-  high-loss days in the test data fall on 158 dates (delivered data: 1,619 on
-  86).
+- Lesson: millions of rows, but only ten years of regional weather. With the
+  warm-up rule all 5,155 high-loss days in the test data (nine years) fall on
+  143 dates (before the rule, ten years: 6,066 on 158; delivered data: 1,619
+  on 86).
 - Three sets of models are trained: per held-out year (the honest score), one
   without 1992/1994/1996 (figures), and the final set on all years and files
   (saved in `models/`, or `models/varied/` for the varied data set, which the
   advisor prefers; cannot be tested itself).
 
-### 6.4 Results (measured on the corrected data; ten held-out years pooled, range over the years in brackets)
+### 6.4 Results (measured on the corrected data with the warm-up rule; nine held-out years 1991–1999 pooled, range over the years in brackets)
 
-*Being recomputed with the warm-up rule (started 25 Nov 2026, evening); the
-numbers below are from before the rule.*
+Files: `docs/results/cv_summary.json` and `docs/results/cv_by_year.csv`.
+1,637,018 rain days scored; 5,155 high-loss days on 143 dates.
 
 | | Surrogate | Baseline |
 |---|---|---|
-| Water runoff, daily R² | 0.98 (0.92–0.99) | 0.94 (0.83–0.97), curve-number formula; beaten in all 10 years |
-| Pesticide loss, daily R² | 0.95 (0.89–0.99) | 0.12 (−8.3 to 0.83) |
-| Sum of all loss, surrogate / PRZM | 0.99 (0.86–1.12) | – |
-| High-loss days, PR-AUC | 0.97 (0.93–0.99) | rain today 0.10; classifier 0.94 (0.87–0.98) |
-| Alarm "predicted loss ≥ 1 g/ha" | 5,937 alarms, 92 % real, 90 % of high-loss days found (81–97 % by year) | – |
-| Speed | about 0.03 s per 10-year run | PRZM: about 3.4 s (measured in the re-run) |
+| Water runoff, daily R² | 0.986 (0.954–0.993) | 0.940 (0.829–0.967), curve-number formula; beaten in all 9 years |
+| Pesticide loss, daily R² | 0.948 (0.867–0.986) | −0.24 (−13.6 to 0.85) |
+| Sum of all loss, surrogate / PRZM | 0.948 (0.831–1.086) | – |
+| High-loss days, PR-AUC | 0.965 (0.920–0.992) | rain today 0.108; classifier 0.954 (0.924–0.987) |
+| Alarm "predicted loss ≥ 1 g/ha" | 4,948 alarms, 91.7 % real, 88.0 % of high-loss days found (80.1–97.7 % by year) | – |
+| Speed | about 0.01 s per 10-year run | PRZM: about 3.4 s (measured in the re-run) |
 
 Delivered data vs corrected data (same test, headline numbers):
 
-| | Delivered (9 years) | Corrected (10 years) |
-|---|---|---|
-| Fields used | 3,958 | 5,609 |
-| Pesticide loss, daily R² | 0.91 (0.75–0.97) | 0.95 (0.89–0.99) |
-| Sum of all loss, surrogate / PRZM | 0.92 (0.70–1.16) | 0.99 (0.86–1.12) |
-| PR-AUC surrogate / classifier / rain rule | 0.92 / 0.81 / 0.06 | 0.97 / 0.94 / 0.10 |
-| Alarm: real / high-loss days found | 91 % / 76 % (36–92 %) | 92 % / 90 % (81–97 %) |
+| | Delivered (9 years, before the warm-up rule) | Corrected (9 years, with the rule) | Corrected (10 years, before the rule) |
+|---|---|---|---|
+| Fields used | 3,958 | 5,609 | 5,609 |
+| Pesticide loss, daily R² | 0.91 (0.75–0.97) | 0.948 (0.867–0.986) | 0.95 (0.89–0.99) |
+| Sum of all loss, surrogate / PRZM | 0.92 (0.70–1.16) | 0.948 (0.831–1.086) | 0.99 (0.86–1.12) |
+| PR-AUC surrogate / classifier / rain rule | 0.92 / 0.81 / 0.06 | 0.965 / 0.954 / 0.108 | 0.97 / 0.94 / 0.10 |
+| Alarm: real / high-loss days found | 91 % / 76 % (36–92 %) | 91.7 % / 88.0 % (80.1–97.7 %) | 92 % / 90 % (81–97 %) |
 
 Reading:
 - Runoff is reproduced almost perfectly (and did not change with the correction).
-- Pesticide loss depends less on the year than before, but a year's score is
-  still decided by a handful of storms (worst year 1991, R² 0.89).
-- Over all years the total loss is almost exact (0.99); single years range
-  from 14 % too low (1997) to 12 % too high (1990). On the delivered data it
-  was 8 % too low overall and 30 % too low in the worst year.
-- An alarm can be trusted, and about nine in ten high-loss days are found.
-- The surrogate still beats the classifier on PR-AUC, but only in eight of the
-  ten years (not in 1996 and 1997).
+- Pesticide loss depends less on the year than on the delivered data, but a
+  year's score is still decided by a handful of storms (worst year 1991,
+  R² 0.867).
+- Over all nine years the total loss is 5 % too low (0.948); single years
+  range from 17 % too low (1997) to 9 % too high (1995). Before the rule it
+  was 0.99 over ten years. On the delivered data it was 8 % too low overall
+  and 30 % too low in the worst year.
+- An alarm can be trusted, and close to nine in ten high-loss days are found.
+- The surrogate beats the classifier on PR-AUC in seven of the nine years
+  (not in 1996 and 1997).
 
-**Risk table:** chance that a rain day is a high-loss day. First week after
-spraying: 22 % at 10–20 mm rain, 92 % at 20–30 mm, 100 % at 30–50 mm. Weeks
-5–8: 52 % at 20–30 mm (delivered data: 13 %). Weeks 9–16: 12 %. Later: almost 0.
+**Risk table** (`risk_by_rain_and_weeks_since_spraying.csv`): chance that a
+rain day is a high-loss day. First week after spraying: 14 % at 10–20 mm
+rain, 92 % at 20–30 mm, almost 100 % at 30–50 mm. Weeks 5–8: 54 % at
+20–30 mm (delivered data: 13 %). Weeks 9–16: 12 %. Later: almost 0.
 
 **Drivers (SHAP on the classifier, test years 1992 and 1996):** rain since
-spraying, days since spraying, curve-number runoff of today's rain,
-evaporation in the previous week, rain today, heavy-rain days since spraying,
-topsoil organic carbon. SHAP shows what the model uses, and the model copies
-PRZM. "Temperature yesterday", second on the delivered data, is no longer in
+spraying, curve-number runoff of today's rain, days since spraying,
+heavy-rain days since spraying, rain yesterday, rain today, temperature
+today, topsoil organic carbon. SHAP shows what the model uses, and the model
+copies PRZM. "Temperature yesterday", second on the delivered data, is not in
 the top twelve.
 
 ### 6.5 Second surrogate: LSTM
@@ -606,25 +641,46 @@ the top twelve.
 ### 6.6 The surrogate on 45 years of real weather
 - `python -m runoffwatch france`: all 5,609 fields (740 grid cells) × application years
   1979–2023 (252,405 field-years) with the Agri4Cast weather of each field's grid cell, spraying
-  on 1 March.
-- Mean predicted loss per field and year: 1.84 g/ha (1979–2005), 2.07 (2006–2015), 2.80
-  (2016–2023). Worst year 2022 (4.56 g/ha, 2.8× the median year), best 1997 (0.51 g/ha). The
-  five worst years carry 23 % of all loss. Do not read a climate trend into this.
-- For 2006–2015 it matches PRZM's yearly totals (R² 0.98 runoff, 0.99 loss, sum 1.00), which is
-  not a test because the models were trained on those years. For the other 35 years no PRZM
-  result exists. 10 % of field-years contain a rain day above 48 mm, beyond 99.9 % of the
-  training rain days.
-- *Being recomputed with the warm-up rule (started 25 Nov 2026, evening); the numbers below
-  are from before the rule.* With the rule, the comparison with PRZM leaves out field-years
-  that start before the warm-up end (5.2).
-- **With the varied models (25 Nov; still 1 March and 2.4 kg/ha):** 1.84 / 2.07 / 2.91 g/ha
-  for the same three periods. Worst years 2022 (4.7), 2020 (4.5), 2013 (4.2), 1989 (4.0),
-  2001 (3.9), the same five as before. Agreement with PRZM in 2006–2015 (not a test): yearly
-  loss R² 0.99, sum 1.00. Results in `docs/results/varied/france_summary.json`.
-- **Autumn run (RUNNING, started 25 Nov, evening; no numbers yet):** spraying on 15 October
-  with 2.4 kg/ha, varied models, warm-up rule:
-  `python -m runoffwatch --dataset varied france --spray 15.10 --scenario autumn`.
-  Results will be in `docs/results/varied/autumn/` (option `--scenario`, section 10).
+  on 1 March. All numbers below are from the models trained with the warm-up rule (5.2). The
+  comparison with PRZM leaves out field-years that start before the warm-up end.
+- **1 March models (corrected data, `docs/results/france_summary.json`):** mean predicted loss
+  per field and year 1.84 g/ha (1979–2005), 2.12 (2006–2015), 2.86 (2016–2023). Worst years
+  2022, 2020, 2013, 2001, 2006; worst year 2022 (4.91 g/ha, 3.0× the median year), best 1997
+  (0.51 g/ha). The five worst years carry 22.8 % of all loss. Do not read a climate trend into
+  this. Before the rule: 1.84 / 2.07 / 2.80.
+- For 2006–2015 it matches PRZM's yearly totals (R² 0.986 runoff, 0.987 loss, sum 1.005),
+  which is not a test because the models were trained on those years. For the other 35 years no
+  PRZM result exists.
+- **With the varied models (`docs/results/varied/france_summary.json`; still 1 March and
+  2.4 kg/ha):** 1.86 / 2.11 / 2.90 g/ha for the same three periods (medians 0.69 / 0.83 /
+  1.17). Worst years 2022 (4.65), 2020 (4.53), 2013 (4.28), 2001 (4.03), 1989 (3.94); worst
+  year 2.87× the median year; the worst five hold 22.7 % of all loss. Agreement with PRZM in
+  2006–2015 (not a test): 50,481 field-years, yearly runoff R² 0.986, loss R² 0.987, sum 1.006.
+- **Autumn run (done 25 Nov, late evening):** the same varied models and 2.4 kg/ha, but
+  spraying on 15 October every year:
+  `python -m runoffwatch --dataset varied france --spray 15.10 --scenario autumn`. Results are
+  in `docs/results/varied/autumn/` (`france_summary.json`, `france_by_year.csv`), figures in
+  `docs/figures/varied/autumn/` (option `--scenario`, section 10). Comparison (varied models,
+  mean loss in g/ha per field and year, median in brackets):
+
+  | | Spraying 1 March | Spraying 15 October |
+  |---|---|---|
+  | 1979–2005 | 1.86 (0.69) | 9.70 (5.81) |
+  | 2006–2015 | 2.11 (0.83) | 12.34 (8.06) |
+  | 2016–2023 | 2.90 (1.17) | 12.76 (6.98) |
+  | High-loss days per field-year (same periods) | 0.42 / 0.47 / 0.59 | 1.73 / 2.15 / 2.04 |
+  | Five worst years | 2022, 2020, 2013, 2001, 1989 | 2019 (28.5), 2014 (22.1), 2023 (18.1), 1999 (18.0), 2000 (15.9) |
+  | Worst year / median year | 2.87 | 2.83 |
+  | Share of all loss in the worst five years | 22.7 % | 21.0 % |
+  | Check against PRZM, 2006–2015 | yes (above) | none |
+
+  Spraying on 15 October loses about 4 to 6 times more than spraying on 1 March in the same
+  weather. The worst years are different years, most likely because other storms fall in the
+  weeks after each spray date. The best autumn years are 1988 (2.8) and 1995 (3.3). No PRZM check exists
+  for 15 October, because PRZM was never run with that fixed date.
+- **Limit that stays:** 10.4 % of field-years (1 March run; 10.7 % in the 15 October run)
+  contain a rain day heavier than 99.9 % of the training rain days (48 mm). The copy is
+  weakest on such days (6.9).
 
 ### 6.7 Varied spray dates and doses: method (23 Nov) and results (25 Nov 2026)
 
@@ -661,77 +717,91 @@ Data set: section 4. Results: `docs/results/varied/`, figures
 - **LSTM not adapted:** it refuses runs that are not sprayed on 1 March. Its
   numbers (6.5) are from the 1 March data; `models/lstm.pt` is unchanged.
 
-**Results, year-by-year test** (`cv_summary.json`, `cv_by_year.csv`).
-*Being recomputed with the warm-up rule (started 25 Nov 2026, evening); the
-numbers below are from before the rule.* With the rule the test has nine
-held-out years (1991–1999). Before the rule: 5,355,895 rain days scored, 21,222 high-loss days on 622 storm dates. Main
-scores are in the box at the top. In short:
-- The task is harder (any spray day, three doses), and the scores stayed
-  about the same. Only daily loss R² fell: 0.95 to 0.92.
-- **Weakest year 1990:** loss R² 0.78, total over-predicted by 18 %. The
-  simple baseline (decay × curve-number formula, now fitted per kg applied)
-  scores 0.85 there, so it beats the surrogate in that one year. 1990 is also
-  the weakest year for runoff (0.92). In the other nine years the surrogate
-  wins (pooled 0.92 against 0.79). Next weakest: 1998 (0.88), 1993 (0.89).
-  **Cause found (25 Nov, evening):** 1990 is a warm-up year with an
-  irregular crop, so it was not a fair test (6.9). 1998 is decided by one
-  extreme storm (6.9).
-- **By spray window:** spring loss R² 0.97, total ratio 0.99, alarm
-  precision 92 %, recall 91 %. Autumn 0.90, 0.98, 91 %, 92 %. Autumn is
-  harder.
-- **By dose:** 0.24 kg/ha 0.92, 0.99, 89 %, 88 % (only 1,025 high-loss days);
-  1.2 kg/ha 0.93, 0.99, 91 %, 92 %; 2.4 kg/ha 0.92, 0.98, 92 %, 92 %.
-- The classifier now ranks high-loss days as well as the surrogate (PR-AUC
-  0.972 against 0.968); on the 1 March data it was behind (0.94 against 0.97).
+**Results, year-by-year test** (`cv_summary.json`, `cv_by_year.csv`), with
+the warm-up rule: nine held-out years (1991–1999), 4,815,867 rain days
+scored, 19,654 high-loss days on 572 storm dates (before the rule, ten
+years: 5,355,895 rain days, 21,222 high-loss days on 622 dates). Main scores
+are in the box at the top. In short:
+- The task is harder (any spray day, three doses), yet the scores are at
+  least as good as on the 1 March data: daily loss R² 0.965 (simple baseline
+  0.782), runoff 0.986 (formula 0.940), total ratio 0.985 (0.950–1.082).
+  Before the rule daily loss R² was 0.917 (0.78–0.97).
+- **Loss R² per year:**
+
+  | Year | 1991 | 1992 | 1993 | 1994 | 1995 | 1996 | 1997 | 1998 | 1999 |
+  |---|---|---|---|---|---|---|---|---|---|
+  | With the rule | 0.973 | 0.955 | 0.907 | 0.954 | 0.974 | 0.972 | 0.972 | 0.966 | 0.976 |
+  | Before the rule | 0.921 | 0.956 | 0.887 | 0.927 | 0.967 | 0.967 | 0.963 | 0.883 | 0.971 |
+
+  Before the rule 1990 was also in the test, with 0.777; the simple
+  baseline beat the surrogate there. That year was a warm-up year with an
+  irregular crop, so it was not a fair test (6.9). Now the weakest year is
+  1993 (loss R² 0.907, total over-predicted by 8 %; also the weakest year for
+  runoff, 0.954). The surrogate beats the simple baseline in all nine years.
+  1998 rose from 0.883 to 0.966 (6.9).
+- **By spray window:** autumn loss R² 0.962, total ratio 0.988, alarm
+  precision 92.8 %, recall 93.3 % (11,503 high-loss days). Spring 0.976,
+  0.980, 92.4 %, 91.6 % (8,151). Before the rule autumn was clearly harder
+  (0.90 against 0.97); now the gap is small.
+- **By dose:** 0.24 kg/ha 0.963, 0.999, 89.9 %, 90.0 % (only 981 high-loss
+  days); 1.2 kg/ha 0.965, 0.994, 92.3 %, 93.1 %; 2.4 kg/ha 0.965, 0.981,
+  92.9 %, 92.5 %.
+- The classifier ranks high-loss days as well as the surrogate (PR-AUC 0.975
+  against 0.973; rain rule 0.106). On the 1 March data it is behind (0.954
+  against 0.965).
 
 **Results, single split** (test years 1992 and 1996, unseen weather files;
-`model_metrics.json`; *being recomputed with the warm-up rule (started 25 Nov
-2026, evening); the numbers below are from before the rule*): runoff R² 0.982 (formula 0.928); loss R² 0.963, total
-ratio 0.965; with PRZM's true runoff the chemistry stage alone has R² 0.989.
-PR-AUC: surrogate 0.970, classifier 0.972, logistic regression 0.766, rain
-rule 0.081. Alarm at 1 g/ha: 3,759 alarms, 94 % precision, 90 % recall.
-SHAP ranking of the classifier: rain since spraying, curve-number runoff,
-dose, days since spraying, heavy-rain days since spraying, rain today,
-evaporation in the previous week, topsoil organic carbon. The final models
-are trained on all 24.6 million rows. Speed: 0.05 s per ten-year run against
-about 3.4 s for PRZM (about 70 times faster).
+`model_metrics.json`; with the warm-up rule): runoff R² 0.981 (formula
+0.928); loss R² 0.966, total ratio 0.989; with PRZM's true runoff the
+chemistry stage alone has R² 0.991. PR-AUC: surrogate 0.971, classifier
+0.970, logistic regression 0.799, rain rule 0.081. Alarm at 1 g/ha: 3,819
+alarms, 93.4 % precision, 91.0 % recall. SHAP ranking of the classifier:
+rain since spraying, curve-number runoff, dose, days since spraying, rain
+today, evaporation in the previous week, heavy-rain days since spraying,
+topsoil organic carbon. Training uses 10,202,039 rain-day rows; the final
+models are trained on all 22,580,508 rows (24.6 million before the rule).
+Speed: about 0.06 s per ten-year run against about 3.4 s for PRZM (about 60
+times faster).
 
 ### 6.8 What PRZM says about the spray date, and why (25 Nov 2026)
 
 This is read directly from the simulations, not from a model. Mean share of
-the dose lost in the season after spraying (`loss_by_spray_date.csv`).
-*Being recomputed with the warm-up rule (started 25 Nov 2026, evening); the
-numbers below are from before the rule.* The table is built from trusted
-rows, so sprayings in the warm-up year will drop out of it.
+the dose lost in the season after spraying
+(`docs/results/varied/loss_by_spray_date.csv`). The table is built from
+trusted rows, so with the warm-up rule the sprayings before 12 Nov 1990 are
+left out.
 
-| Sprayed | Mean % of dose lost | 90th percentile |
-|---|---|---|
-| Feb 16–end | 0.09 | 0.21 |
-| Mar 1–15 | 0.08 | 0.19 |
-| Mar 16–end | 0.07 | 0.19 |
-| Apr 1–15 | 0.08 | 0.21 |
-| Apr 16–end | 0.10 | 0.27 |
-| Oct 1–15 | 0.47 | 1.07 |
-| Oct 16–end | 0.60 | 1.42 |
-| Nov 1–15 | 0.39 | 1.02 |
-| Nov 16–end | 0.19 | 0.41 |
+| Sprayed | Mean % of dose lost | 90th percentile | Before the rule: mean % |
+|---|---|---|---|
+| Feb 16–end | 0.080 | 0.19 | 0.09 |
+| Mar 1–15 | 0.078 | 0.17 | 0.08 |
+| Mar 16–end | 0.077 | 0.20 | 0.07 |
+| Apr 1–15 | 0.086 | 0.22 | 0.08 |
+| Apr 16–end | 0.104 | 0.28 | 0.10 |
+| Oct 1–15 | 0.518 | 1.13 | 0.47 |
+| Oct 16–end | 0.657 | 1.51 | 0.60 |
+| Nov 1–15 | 0.409 | 1.07 | 0.39 |
+| Nov 16–end | 0.191 | 0.41 | 0.19 |
 
-Autumn spraying loses 2 to 7 times more of the dose than spring spraying.
+Autumn spraying loses about 2 to 8 times more of the dose than spring
+spraying (0.19–0.66 % against 0.08–0.10 %; before the rule "2 to 7 times").
 
 **Why** (first 30 days after spraying, mean per season;
 [`loss_after_spraying.csv`](results/varied/loss_after_spraying.csv)):
 - One mm of runoff carries about the same share of the dose in every window
-  (0.05–0.06 %). The chemistry does not differ.
-- What differs is how much water runs off in the first month: 0.7–1.5 mm in
-  spring, 8–9 mm in October, 2.9 mm in late November. Rain differs far less
-  (49–66 mm in spring, 74–78 mm in autumn).
+  (0.045–0.065 %). The chemistry does not differ.
+- What differs is how much water runs off in the first month: 0.7–1.6 mm in
+  spring, 9–10 mm in October, 2.9 mm in late November. Rain differs far less
+  (47–66 mm in spring, 75–81 mm in autumn).
 - The cause is the crop calendar of the PRZM scenario (section 4). Between
   harvest (31 Jul) and emergence (12 Nov) the field counts as stubble or
   fallow with a high curve number, so more rain becomes runoff. From 12 Nov,
   in every field and year, the curve number drops by 5 to 10 points and runoff
   falls by more than half with the same rain.
-- So the result is: "spraying before the crop has emerged loses about 5 times
-  more than spraying after". The sharp step in mid-November is the fixed
+- So the result is: "spraying before the crop has emerged loses more than
+  spraying after": about 2 to 3.4 times more than spraying in late November,
+  just after emergence, and about 4 to 8 times more than spraying in spring
+  (from the table above). The sharp step in mid-November is the fixed
   emergence date of the scenario, not a law of nature. In reality emergence
   differs by field and year. The surrogate copies this property of the
   scenario.
@@ -744,7 +814,11 @@ Autumn spraying loses 2 to 7 times more of the dose than spring spraying.
 
 ### 6.9 The weak test years 1990 and 1998, and a rejected experiment (25 Nov 2026, evening)
 
-**1990 (weakest year: daily loss R² 0.78, the simple baseline 0.85).**
+This section explains why the warm-up rule was added. Its 1990 and 1998
+scores are from before the rule; the new scores are in 6.4 and 6.7.
+
+**1990 (weakest year before the rule: daily loss R² 0.78, the simple
+baseline 0.85).**
 - 81 % of the squared error of 1990 is on two storm days, 17 and 21 Nov
   1990, in fields sprayed that autumn.
 - Cause: 1990 is a warm-up year (section 4, crop cycles). The first crop
@@ -779,10 +853,13 @@ Autumn spraying loses 2 to 7 times more of the dose than spring spraying.
   whether a warm-up year is normally discarded, is a question for the model
   owner in Landau (section 13).
 
-**1998 (second weakest: daily loss R² 0.88).** 75 % of its squared error is
-one day, 3 Nov 1998, with up to 153 mm of rain in one weather cell. The
-surrogate predicted 87 mm runoff where PRZM gives 136 mm. Tree models cannot
-predict beyond the largest values they were trained on.
+**1998 (second weakest before the rule: daily loss R² 0.883).** 75 % of its
+squared error is one day, 3 Nov 1998, with up to 153 mm of rain in one
+weather cell. The surrogate predicted 87 mm runoff where PRZM gives 136 mm.
+Tree models cannot predict beyond the largest values they were trained on.
+After the warm-up rows left training, 1998 loss R² rose from 0.883 to 0.966
+(varied data). So part of the old weakness came from the warm-up rows. The
+limit on extreme rain (80 mm and more) still stands (below).
 
 **Experiment that did NOT help (do not repeat it):** train the runoff model
 as a correction of the curve-number formula (LightGBM tweedie with
@@ -820,6 +897,25 @@ as a correction of the curve-number formula (LightGBM tweedie with
   The autumn effect comes from the fixed emergence date of the PRZM scenario
   (6.8). It cannot compare products. It has not been evaluated as a decision
   tool.
+
+### 7.1 The app (rewritten 25 Nov 2026)
+
+- **Five tabs:** Compare spray days (the advisor above); How good is the
+  copy?; Spray date; 45 years of French weather (choose 1 March or
+  15 October, or compare both); About and limits.
+- **Files:** `app.py` (the Streamlit page), `runoffwatch/appdata.py` (finds
+  and reads the result files, formats numbers; plain Python, so it can be
+  tested), `tests/test_app.py` (tests, also with missing or broken result
+  files and without models).
+- **Needs Python 3.10 or newer.** Start from the repository root:
+  `pip install -e ".[app]"`, then `streamlit run app.py`.
+- It reads the models and the result tables in the repository at run time
+  (`models/`, `docs/results/`, `docs/figures/`). No simulation data is
+  needed. When a result file is missing or half-written, the tab shows
+  "Not available yet" instead of failing; reload the page later.
+- **Not verified:** the page layout in a narrow browser window (for example
+  on a phone). `docs/figures/app_screenshot.png` still shows the old app; do
+  not use it for the new one.
 
 ---
 
@@ -923,7 +1019,7 @@ cd RunoffWatch
 python -m venv .venv
 .venv\Scripts\activate          # Windows; on Mac/Linux: source .venv/bin/activate
 pip install -e ".[dev,app]"
-python -m pytest -q             # 551 passed (25 Nov, with PyTorch installed)
+python -m pytest -q             # 565 passed (25 Nov, with PyTorch installed)
 python -m runoffwatch whatif
 streamlit run app.py
 ```
@@ -1003,7 +1099,10 @@ that uses memory at the same time got it killed. Run the heavy steps alone,
 one after the other.
 
 **Applying the warm-up rule (5.2) to a data set** (this is what the rerun of
-25 Nov, evening, does; first the varied, then the corrected data set):
+25 Nov, evening, did; first the varied, then the corrected data set; it has
+finished). The last line is the 45-year run with spraying on 15 October; its
+results go to `docs/results/varied/autumn/` and its figures to
+`docs/figures/varied/autumn/` (6.6):
 ```bash
 python -m runoffwatch --dataset varied audit      # writes clean_from into run_quality.csv
 python -m runoffwatch --dataset varied features
@@ -1034,7 +1133,8 @@ Modules (`runoffwatch/`):
 | `features.py` | Feature table; `weather_features` is shared by training and the advisor; `run_feature_rows(..., clean_from)` drops the warm-up period |
 | `models.py` | Surrogate, classifier, baselines, split, leave-one-year-out evaluation; `load_features()` reads the feature table without a second copy |
 | `lstm.py` | LSTM surrogate and comparison (not adapted to varied spray dates or the warm-up rule) |
-| `whatif.py`, `../app.py` | Advisor library, command line, Streamlit app |
+| `whatif.py`, `../app.py` | Advisor library, command line, Streamlit app (five tabs, 7.1) |
+| `appdata.py` | Helpers for the app: finds and reads result files safely, formats numbers (tested in `tests/test_app.py`) |
 | `design.py` | Generator for new simulation runs |
 | `rerun.py` | Runs PRZM again on Windows with the two corrected settings (`rerun` command) |
 | `longrun.py` | Surrogate on 45 years of Agri4Cast weather for France (`france` command); the comparison with PRZM leaves out field-years that start before `clean_from` |
@@ -1082,12 +1182,12 @@ Reports in `docs/`: `DATA_REPORT.md`, `MODEL_REPORT.md`, `RELATED_WORK.md`,
    erodibility or the slope), which looks like missing soil or terrain data;
    no field without such a zero fails. So the sample is no longer a clean
    random sample of the real fields.
-5. The total loss is right over all years (0.99 times PRZM's on the 1 March
-   data, 0.98 on the varied data), but single unseen years are up to 18 % off
-   (1990, varied data); about one high-loss day in ten is missed. (These are
-   numbers from before the warm-up rule; 1990 was a warm-up year and drops
-   out of the test with the rule, 6.9.) Autumn spraying is harder to predict
-   than spring spraying.
+5. The total loss is close over all years (0.985 times PRZM's on the varied
+   data, 0.948 on the 1 March data), but single unseen years are up to 17 %
+   off (1997, 1 March data); about one high-loss day in ten is missed
+   (recall 92.6 % on the varied data, 88.0 % on the 1 March data). Autumn
+   spraying is slightly harder to predict than spring spraying (loss R²
+   0.962 against 0.976).
 6. Small effective sample: ten years of weather from one region, and with
    the warm-up rule only nine of them in the year-by-year test.
 7. The LSTM result rests on one test on two years, and the LSTM is not
@@ -1107,13 +1207,19 @@ Reports in `docs/`: `DATA_REPORT.md`, `MODEL_REPORT.md`, `RELATED_WORK.md`,
 11. The Flufenacet Henry value was taken from search-result snippets of the
    PPDB and PubChem entries; the pages themselves could not be opened from our
    environment, so the value should be checked once more.
-12. The 1 g/ha limit for a "high-loss day" is our own choice.
+12. The 1 g/ha limit for a "high-loss day" is our own choice. The
+   environmental-science side answered that a fixed g/ha limit cannot hold
+   across compounds (section 5). It will become a share of the dose. The
+   classifier and alarm scores depend on the limit; runoff and loss-amount
+   scores do not.
+13. Low-dose compounds (a few g/ha) are outside the dose range of the runs
+   (0.24–2.4 kg/ha).
 
 ---
 
 ## 13. Status and next steps
 
-State on 25 Nov 2026.
+State on 25 Nov 2026, late evening (rerun with the warm-up rule finished).
 
 Done: data audit; surrogate with honest evaluation; classifier, SHAP ranking,
 risk table; advisor prototype; LSTM comparison; surrogate on 45 years of
@@ -1150,45 +1256,56 @@ decks. New since 17 Nov:
   first simulated year is a warm-up with an irregular crop (the first crop
   cycle starts before the simulation), so 1990 was not a fair test (6.9).
   1998 is decided by one extreme storm (6.9). The warm-up rule is in the code
-  (5.2; 551 tests pass). Option `france --scenario` added. The runoff model
-  as a correction of the curve-number formula was tried and rejected (6.9).
-- **Running (started 25 Nov, evening; about three hours):** feature table,
-  training, year-by-year test, 45-year run for 1 March and for 15 October
-  with the varied data set; then the same steps (without the autumn run) for
-  the corrected 1-March-only data set, so both follow the warm-up rule.
+  (5.2; 565 tests pass now). Option `france --scenario` added. The runoff
+  model as a correction of the curve-number formula was tried and rejected
+  (6.9).
+- **Done (25 Nov, late evening): rerun with the warm-up rule.** Feature
+  table, training, year-by-year test and 45-year run for 1 March and for
+  15 October on the varied data set; the same steps (without the autumn run)
+  on the corrected 1-March-only data set. The year-by-year test has nine
+  years (1991–1999). All scores in this file are updated (top box, 4, 6.4,
+  6.6, 6.7, 6.8); the 15 October results are in
+  `docs/results/varied/autumn/` (6.6).
+- **App rewritten** with five tabs (7.1).
+- **Answered by the environmental-science side:** a fixed g/ha limit for a
+  high-loss day cannot hold across compounds (section 5).
 
 Next, in this order:
-1. When the rerun has finished: fill in the new scores everywhere this file
-   says "Being recomputed with the warm-up rule" (top box, 4, 6.4, 6.6, 6.7,
-   6.8), and the autumn 45-year results (`docs/results/varied/autumn/`).
-   Check that the year-by-year test really has nine years (1991–1999).
-2. Ask the model owner in Landau (through the team member in Landau) whether
+1. Change the high-loss limit from a fixed 1 g/ha to a share of the dose,
+   and make it adjustable. Reason: doses of different compounds differ by a
+   factor of 100 or more, so a fixed g/ha limit cannot hold across compounds.
+   In our runs 1 g/ha is 0.42 %, 0.083 % and 0.042 % of the three doses.
+   Runoff and loss-amount scores do not change; classifier and alarm scores
+   do.
+2. Score the alarm (precision, recall) at several share-of-dose limits, on
+   the varied data set, overall and per dose.
+3. Check that the loss scales with the dose: the surrogate assumes loss per
+   kg sprayed (6.7). Compare the three doses in PRZM's own results.
+4. Ask the model owner in Landau (through the team member in Landau) whether
    the first crop cycle starting before the simulation is intended, and
    whether a warm-up year is normally discarded (6.9).
-3. Ask the team's environmental scientist whether the fixed emergence date
+5. Ask the environmental-science side whether the fixed emergence date
    (12 Nov) and autumn spraying before emergence are realistic use. The
-   spray-date result depends on it (6.8).
-4. Extreme rain days: on the 127 days with at least 80 mm the plain formula
+   spray-date result and the 15 October run depend on it (6.6, 6.8).
+6. Extreme rain days: on the 127 days with at least 80 mm the plain formula
    beats the surrogate (6.9). The "correction of the formula" idea did not
    help; another approach is still open.
-5. LSTM: adapt it to varied spray dates and doses and to the warm-up rule,
+7. LSTM: adapt it to varied spray dates and doses and to the warm-up rule,
    or drop it. Until then its numbers (6.5) are from the 1 March data and
    include the warm-up period.
-6. Other questions for the model owner in Landau (section 5): the Henry
+8. Other questions for the model owner in Landau (section 5): the Henry
    constant, the reference soil moisture, whether 2.4 kg/ha is the intended
    dose (it looks about ten times higher than usual field rates,
    unconfirmed, section 8.1), and where the zeros in the inputs of the 1,335
    failing fields come from (and whether they can be filled).
-7. Confirm the 1 g/ha limit for a "high-loss day" (our own choice) with the
-   team's environmental scientist.
-8. Rewrite the reports with the spray-date and dose results and the warm-up
+9. Rewrite the reports with the spray-date and dose results and the warm-up
    rule.
-9. Presentation 2, with the corrected and the varied numbers (after the
-   rerun). It should also
+10. Presentation 2, with the corrected and the varied numbers (with the
+   warm-up rule). It should also
    correct the statement from the first progress presentation that 73 % of
    the data can be trusted: the plausibility check kept 73 % of the
    run-years, but those were wrong too.
-10. Before any submission of new runs to Landau: confirm the corrected settings
+11. Before any submission of new runs to Landau: confirm the corrected settings
    that `design.py` now writes (Henry 0.37E-06, reference soil moisture 1; 8.2).
 
 Still open from before:
@@ -1208,7 +1325,7 @@ Still open from before:
 | Runoff | Water flowing off the soil surface after rain |
 | Pesticide loss | Pesticide leaving the field with runoff water, in g/ha per day |
 | Rain day | Day with at least 1 mm rain |
-| High-loss day | Day with at least 1 g/ha pesticide loss |
+| High-loss day | Day with at least 1 g/ha pesticide loss (to become a share of the dose, section 13) |
 | Application year | 1 March to end of February (in the delivered and corrected data spraying is on 1 March; the year-by-year test uses these years for every data set) |
 | Emergence date | Day the crop comes up in the PRZM scenario; fixed at 12 Nov for every field and year. Before it the curve number is higher (more runoff) |
 | Warm-up period / `clean_from` | Start of every run until the first crop emergence inside the simulation (1 Jan to 12 Nov 1990), because the first crop cycle starts before the simulation. Left out by the warm-up rule (5.2); `clean_from` is its end date in `run_quality.csv` |
