@@ -8,9 +8,9 @@
       1994
     ],
     "rows": {
-      "train": 3859082,
-      "unused": 2067727,
-      "test_seen_years": 1284489,
+      "train": 3403359,
+      "unused": 2004530,
+      "test_seen_years": 1133389,
       "val": 587556,
       "test": 402049
     },
@@ -31,21 +31,21 @@
   },
   "high_loss_threshold_gha": 1.0,
   "trees": {
-    "runoff": 215,
-    "conc": 528,
-    "high_loss": 1132
+    "runoff": 170,
+    "conc": 462,
+    "high_loss": 1105
   },
   "loss_baseline_fit": {
-    "a_g_per_ha_per_mm": 4.847199491744365,
-    "k_per_day": 0.04850452466865857,
-    "half_life_days": 14.290361266189782
+    "a_g_per_ha_per_mm_per_kg_applied": 2.4210856074882816,
+    "k_per_day": 0.04917747990551448,
+    "half_life_days": 14.094808881864232
   },
   "runoff": {
     "surrogate": {
-      "r2_daily": 0.9821151249984589,
-      "rmse_mm": 0.15525539147679485,
-      "r2_run_totals": 0.9914822821937382,
-      "median_abs_error_of_run_total_pct": 5.937821749808318
+      "r2_daily": 0.9808229315772724,
+      "rmse_mm": 0.16076623642287352,
+      "r2_run_totals": 0.9945442348783129,
+      "median_abs_error_of_run_total_pct": 3.8377743130885453
     },
     "curve_number_baseline": {
       "r2_daily": 0.9284356127455701,
@@ -56,28 +56,28 @@
   },
   "loss": {
     "surrogate": {
-      "r2_daily": 0.9586498981016965,
-      "r2_log10_on_runoff_days": 0.9601600436199457,
-      "r2_run_totals": 0.9657872224936374,
-      "median_abs_error_of_run_total_pct": 9.134261550595053,
-      "total_loss_ratio_pred_over_true": 1.0281655190183028,
-      "ratio_on_top_0p1pct_days": 1.0354169126652328
+      "r2_daily": 0.9573005736324922,
+      "r2_log10_on_runoff_days": 0.9574370787883992,
+      "r2_run_totals": 0.9413418010468831,
+      "median_abs_error_of_run_total_pct": 11.704100125832518,
+      "total_loss_ratio_pred_over_true": 1.0455561167315852,
+      "ratio_on_top_0p1pct_days": 1.017307975888145
     },
     "chemistry_stage_alone": {
-      "r2_daily": 0.9896466394459718,
-      "r2_log10_on_runoff_days": 0.9794699334400397,
-      "r2_run_totals": 0.9860856858959458,
-      "median_abs_error_of_run_total_pct": 5.325853341610249,
-      "total_loss_ratio_pred_over_true": 1.048736517632504,
-      "ratio_on_top_0p1pct_days": 1.0387738502426573
+      "r2_daily": 0.9880278992216276,
+      "r2_log10_on_runoff_days": 0.9783677449940577,
+      "r2_run_totals": 0.9767631209595881,
+      "median_abs_error_of_run_total_pct": 8.053762967218447,
+      "total_loss_ratio_pred_over_true": 1.0536877976239474,
+      "ratio_on_top_0p1pct_days": 1.0214693044693801
     },
     "decay_x_curve_number_baseline": {
-      "r2_daily": 0.7919791870476406,
-      "r2_log10_on_runoff_days": 0.1608142689492139,
-      "r2_run_totals": 0.6260707378387451,
-      "median_abs_error_of_run_total_pct": 47.21004867553711,
-      "total_loss_ratio_pred_over_true": 0.7600707068551594,
-      "ratio_on_top_0p1pct_days": 0.8288014433721299
+      "r2_daily": 0.7701743450825846,
+      "r2_log10_on_runoff_days": 0.16134583658325952,
+      "r2_run_totals": 0.6010903543638808,
+      "median_abs_error_of_run_total_pct": 44.23073536257762,
+      "total_loss_ratio_pred_over_true": 0.8883189012420014,
+      "ratio_on_top_0p1pct_days": 0.9819798398890046
     }
   },
   "high_loss": {
@@ -89,40 +89,40 @@
       "precision_at_80pct_recall": 0.049105691056910566
     },
     "logistic_regression": {
-      "pr_auc": 0.7811928698872582,
-      "best_f1": 0.7809254013220018,
-      "precision_at_best_f1": 0.6863070539419087,
-      "recall_at_best_f1": 0.9058050383351588,
-      "precision_at_80pct_recall": 0.7192982456140351
+      "pr_auc": 0.7915230788343204,
+      "best_f1": 0.7855072463768116,
+      "precision_at_best_f1": 0.7026793431287813,
+      "recall_at_best_f1": 0.8904709748083242,
+      "precision_at_80pct_recall": 0.7260406582768635
     },
     "gradient_boosting": {
-      "pr_auc": 0.9388704600474135,
-      "best_f1": 0.8701442841287458,
-      "precision_at_best_f1": 0.8818897637795275,
-      "recall_at_best_f1": 0.8587075575027382,
-      "precision_at_80pct_recall": 0.908433734939759
+      "pr_auc": 0.9537533381610347,
+      "best_f1": 0.9029490616621983,
+      "precision_at_best_f1": 0.884453781512605,
+      "recall_at_best_f1": 0.9222343921139102,
+      "precision_at_80pct_recall": 0.9173967459324155
     },
     "surrogate_predicted_loss": {
-      "pr_auc": 0.9464405121669675,
-      "best_f1": 0.900831024930748,
-      "precision_at_best_f1": 0.9114349775784754,
-      "recall_at_best_f1": 0.8904709748083242,
-      "precision_at_80pct_recall": 0.9569190600522193
+      "pr_auc": 0.942659563569724,
+      "best_f1": 0.8907193849533224,
+      "precision_at_best_f1": 0.8931718061674009,
+      "recall_at_best_f1": 0.8882803943044907,
+      "precision_at_80pct_recall": 0.9581151832460733
     },
     "positives": 913,
     "positive_rate": 0.002270867481326903,
     "alarms_gradient_boosting": {
-      "threshold": 0.04496295601142781,
-      "alarms": 1162,
-      "precision": 0.7418244406196214,
-      "recall": 0.9441401971522454,
-      "share_of_loss_on_alarm_days": 0.6110944151878357
+      "threshold": 0.05325676859763509,
+      "alarms": 1170,
+      "precision": 0.7615384615384615,
+      "recall": 0.9759036144578314,
+      "share_of_loss_on_alarm_days": 0.6176393032073975
     },
     "alarms_surrogate_at_1_gha": {
-      "alarms": 893,
-      "precision": 0.910414333706607,
-      "recall": 0.8904709748083242,
-      "share_of_loss_on_alarm_days": 0.5408868193626404
+      "alarms": 867,
+      "precision": 0.9042675893886967,
+      "recall": 0.8587075575027382,
+      "share_of_loss_on_alarm_days": 0.5319603681564331
     }
   },
   "strict_test_rows": {
@@ -131,139 +131,140 @@
   },
   "by_test_year": {
     "1992": {
-      "runoff_r2_daily": 0.9823581575555002,
+      "runoff_r2_daily": 0.9788238874270253,
       "runoff_r2_daily_curve_number": 0.9384436805128012,
-      "loss_r2_daily": 0.9734611664376853,
-      "loss_total_ratio": 1.0359454707896552,
+      "loss_r2_daily": 0.9654119054647254,
+      "loss_total_ratio": 1.1057595364237933,
       "high_loss_days": 374,
-      "high_loss_pr_auc_surrogate": 0.9798551442204835,
-      "high_loss_pr_auc_gradient_boosting": 0.9639698482362998
+      "high_loss_pr_auc_surrogate": 0.9817156470571815,
+      "high_loss_pr_auc_gradient_boosting": 0.9750831424830878
     },
     "1996": {
-      "runoff_r2_daily": 0.9817661663128442,
+      "runoff_r2_daily": 0.9836925197028416,
       "runoff_r2_daily_curve_number": 0.914068482127726,
-      "loss_r2_daily": 0.9520426533478421,
-      "loss_total_ratio": 1.022132582277949,
+      "loss_r2_daily": 0.9536803669726427,
+      "loss_total_ratio": 0.9988715827871093,
       "high_loss_days": 539,
-      "high_loss_pr_auc_surrogate": 0.9290760006016445,
-      "high_loss_pr_auc_gradient_boosting": 0.9193745481753033
+      "high_loss_pr_auc_surrogate": 0.9233314453232905,
+      "high_loss_pr_auc_gradient_boosting": 0.9390879486519355
     }
   },
   "seen_years": {
-    "rows": 1284489,
-    "rows_with_trusted_pesticide": 1260228,
+    "rows": 1133389,
+    "rows_with_trusted_pesticide": 1065402,
     "runoff": {
       "surrogate": {
-        "r2_daily": 0.9814330224839241,
-        "rmse_mm": 0.19571991673538405,
-        "r2_run_totals": 0.9977934611135305,
-        "median_abs_error_of_run_total_pct": 1.8652045515184994
+        "r2_daily": 0.9855423940534543,
+        "rmse_mm": 0.17707425375889382,
+        "r2_run_totals": 0.997710651896512,
+        "median_abs_error_of_run_total_pct": 1.9165378828757642
       },
       "curve_number_baseline": {
-        "r2_daily": 0.9319482850788305,
-        "rmse_mm": 0.3747002247458333,
-        "r2_run_totals": 0.961242900667761,
-        "median_abs_error_of_run_total_pct": 11.629837978526407
+        "r2_daily": 0.9423748152603219,
+        "rmse_mm": 0.35351951587779973,
+        "r2_run_totals": 0.9539311672092073,
+        "median_abs_error_of_run_total_pct": 14.374370932011669
       }
     },
     "loss": {
       "surrogate": {
-        "r2_daily": 0.9833123130348566,
-        "r2_log10_on_runoff_days": 0.9588626470390723,
-        "r2_run_totals": 0.991702364881755,
-        "median_abs_error_of_run_total_pct": 5.713313264705667,
-        "total_loss_ratio_pred_over_true": 0.9783901047352979,
-        "ratio_on_top_0p1pct_days": 0.9456637053235981
+        "r2_daily": 0.9829105764889496,
+        "r2_log10_on_runoff_days": 0.9596488291253252,
+        "r2_run_totals": 0.994009629854863,
+        "median_abs_error_of_run_total_pct": 5.993648256715047,
+        "total_loss_ratio_pred_over_true": 0.9882583821255986,
+        "ratio_on_top_0p1pct_days": 0.949600540522324
       },
       "chemistry_stage_alone": {
-        "r2_daily": 0.9959967029220573,
-        "r2_log10_on_runoff_days": 0.9807324607656901,
-        "r2_run_totals": 0.9985238235079508,
-        "median_abs_error_of_run_total_pct": 2.142093671774134,
-        "total_loss_ratio_pred_over_true": 0.9944912713501667,
-        "ratio_on_top_0p1pct_days": 0.9893909838047179
+        "r2_daily": 0.9945045041919678,
+        "r2_log10_on_runoff_days": 0.9800019718602275,
+        "r2_run_totals": 0.9989293925539948,
+        "median_abs_error_of_run_total_pct": 2.441418523004252,
+        "total_loss_ratio_pred_over_true": 0.9969854884482837,
+        "ratio_on_top_0p1pct_days": 0.9946685276442608
       },
       "decay_x_curve_number_baseline": {
-        "r2_daily": -0.09681666091863428,
-        "r2_log10_on_runoff_days": 0.22873937528336807,
-        "r2_run_totals": 0.26283884048461914,
-        "median_abs_error_of_run_total_pct": 59.338409423828125,
-        "total_loss_ratio_pred_over_true": 1.3829022315965198,
-        "ratio_on_top_0p1pct_days": 1.6247465409400608
+        "r2_daily": -0.9896023923611443,
+        "r2_log10_on_runoff_days": 0.22230885414575674,
+        "r2_run_totals": -0.44533621338454,
+        "median_abs_error_of_run_total_pct": 67.21978901584504,
+        "total_loss_ratio_pred_over_true": 1.6787009120616387,
+        "ratio_on_top_0p1pct_days": 1.9848828550857274
       }
     },
     "high_loss": {
       "rain_today_rule": {
-        "pr_auc": 0.11336125031972602,
-        "best_f1": 0.20801276571493701,
-        "precision_at_best_f1": 0.1407635942923255,
-        "recall_at_best_f1": 0.39829768659973813,
-        "precision_at_80pct_recall": 0.08045952375849283
+        "pr_auc": 0.12389538292133272,
+        "best_f1": 0.22067754445013535,
+        "precision_at_best_f1": 0.15086034413765506,
+        "recall_at_best_f1": 0.410787251430128,
+        "precision_at_80pct_recall": 0.09520153550863723
       },
       "logistic_regression": {
-        "pr_auc": 0.8451763154963965,
-        "best_f1": 0.7860270700636942,
-        "precision_at_best_f1": 0.7224661544090742,
-        "recall_at_best_f1": 0.8618507202095155,
-        "precision_at_80pct_recall": 0.753126922288292
+        "pr_auc": 0.868506141315226,
+        "best_f1": 0.7884590833652495,
+        "precision_at_best_f1": 0.7419509851033157,
+        "recall_at_best_f1": 0.8411876872786707,
+        "precision_at_80pct_recall": 0.7605888429752066
       },
       "gradient_boosting": {
-        "pr_auc": 0.9827799890314161,
-        "best_f1": 0.9253379103196738,
-        "precision_at_best_f1": 0.909915611814346,
-        "recall_at_best_f1": 0.9412920122217372,
-        "precision_at_80pct_recall": 0.9876077586206896
+        "pr_auc": 0.9728069453422974,
+        "best_f1": 0.9162561576354681,
+        "precision_at_best_f1": 0.89609375,
+        "recall_at_best_f1": 0.9373467719967311,
+        "precision_at_80pct_recall": 0.9548554725560247
       },
       "surrogate_predicted_loss": {
-        "pr_auc": 0.9765947078653292,
-        "best_f1": 0.9254419677171407,
-        "precision_at_best_f1": 0.9312707182320442,
-        "recall_at_best_f1": 0.9196857267568748,
-        "precision_at_80pct_recall": 0.9711563905795184
+        "pr_auc": 0.9785468889073211,
+        "best_f1": 0.9307095343680708,
+        "precision_at_best_f1": 0.9472496473906911,
+        "recall_at_best_f1": 0.9147371288477254,
+        "precision_at_80pct_recall": 0.9709475074281941
       },
-      "positives": 4582,
-      "positive_rate": 0.003635850020789889,
+      "positives": 3671,
+      "positive_rate": 0.0034456477461089806,
       "alarms_gradient_boosting": {
-        "threshold": 0.04496295601142781,
-        "alarms": 5863,
-        "precision": 0.7746887259082381,
-        "recall": 0.9912701876909646,
-        "share_of_loss_on_alarm_days": 0.8211561441421509
+        "threshold": 0.05325676859763509,
+        "alarms": 4746,
+        "precision": 0.7680151706700379,
+        "recall": 0.9929174611822392,
+        "share_of_loss_on_alarm_days": 0.8074709177017212
       },
       "alarms_surrogate_at_1_gha": {
-        "alarms": 4607,
-        "precision": 0.9209897981332754,
-        "recall": 0.9260148406809253,
-        "share_of_loss_on_alarm_days": 0.774198591709137
+        "alarms": 3748,
+        "precision": 0.916221985058698,
+        "recall": 0.9354399346227186,
+        "share_of_loss_on_alarm_days": 0.7630755305290222
       }
     }
   },
   "shap_mean_abs": {
-    "rain_since_app_mm": 1.3743,
-    "days_since_app": 0.9015,
-    "cn_runoff_mm": 0.6815,
-    "evap_7d_mm": 0.4141,
-    "rain_mm": 0.4018,
-    "heavy_rain_days_since_app": 0.3971,
-    "h1_oc": 0.3348,
-    "rain_prev1_mm": 0.2923,
-    "rain_7d_mm": 0.2674,
-    "rain_14d_mm": 0.2432,
-    "temp_c": 0.2396,
-    "rain_first3d_after_app_mm": 0.1993
+    "rain_since_app_mm": 1.5685,
+    "cn_runoff_mm": 1.0611,
+    "days_since_app": 0.6159,
+    "heavy_rain_days_since_app": 0.3307,
+    "rain_prev1_mm": 0.3164,
+    "rain_mm": 0.283,
+    "temp_c": 0.2576,
+    "h1_oc": 0.2286,
+    "rain_7d_mm": 0.2147,
+    "rain_14d_mm": 0.1938,
+    "h1_fc": 0.1839,
+    "temp_since_app_c": 0.1782
   },
   "speed": {
-    "surrogate_seconds_per_10_year_run": 0.027314699399994424,
+    "surrogate_seconds_per_10_year_run": 0.012419210000007296,
     "przm_seconds_per_run_from_logs": "about 2-4"
   },
   "final_models": {
     "trained_on": "all weather files, all years",
-    "rain_day_rows": 8200903,
-    "runoff_days_with_trusted_pesticide": 1042104,
+    "rain_day_rows": 7530883,
+    "rain_day_rows_one_run_per_field": 7530883,
+    "runoff_days_with_trusted_pesticide": 953795,
     "trees": {
-      "runoff": 237,
-      "conc": 581,
-      "high_loss": 1245
+      "runoff": 187,
+      "conc": 508,
+      "high_loss": 1216
     }
   }
 }
