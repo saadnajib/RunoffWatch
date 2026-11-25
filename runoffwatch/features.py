@@ -148,8 +148,15 @@ def weather_features(daily: pd.DataFrame, app_dates, cn: tuple[float, float, flo
     return f
 
 
-def run_feature_rows(daily: pd.DataFrame, params: dict, clean_until: pd.Timestamp | None) -> pd.DataFrame:
-    """Rain-day rows of one run: features + targets + the 'pesticide results trusted' flag."""
+def run_feature_rows(daily: pd.DataFrame, params: dict, clean_until: pd.Timestamp | None,
+                     clean_from: pd.Timestamp | None = None) -> pd.DataFrame:
+    """Rain-day rows of one run: features + targets + the 'pesticide results trusted' flag.
+
+    clean_until: pesticide results are trusted before this date (None: never).
+    clean_from: end of the warm-up period at the start of the run (None or NaT: no warm-up). Rows
+        before it are left out, and so are the pesticide results of sprayings made before it
+        (`pest_clean` False). The rain history of the kept rows still counts the left-out days.
+    """
     cn = tuple(params[f"cn_{i}"] for i in range(1, 5))
     applied = daily.loc[daily["applied_gha"] > 0, "applied_gha"]
     f = weather_features(daily, applied.index, cn, (applied / 1000.0).to_numpy())
@@ -162,6 +169,10 @@ def run_feature_rows(daily: pd.DataFrame, params: dict, clean_until: pd.Timestam
     f["loss_gha"] = daily["pest_runoff_gha"]
     f["pest_clean"] = (f["days_since_app"].notna() & (daily.index < clean_until)) if clean_until is not None else False
     f = f[f.index >= daily.index[0] + pd.Timedelta(days=3)]     # the first 3 days have no rain history
+    if clean_from is not None and pd.notna(clean_from):
+        # warm-up: drop its days, and the results of sprayings made in it (after all history is computed)
+        f["pest_clean"] = f["pest_clean"] & (last_app.reindex(f.index) >= clean_from)
+        f = f[f.index >= clean_from]
     return f[f["rain_mm"] >= MIN_RAIN_MM]
 
 
@@ -177,6 +188,9 @@ def build_feature_table(interim: str | Path | list = "data/interim", out: str | 
     interim: one folder, or a list of folders whose runs go into one table (for example the
         runs sprayed on 1 March and the copies with varied spray dates). `limit` is per folder.
 
+    When run_quality.csv has a `clean_from` column, the warm-up period of each run is left out
+    (see run_feature_rows).
+
     Besides features and targets every row gets: `field` (several runs can be copies of one
     field) and `water_row`, which is true for exactly one run per field. Rain and runoff are the
     same in all copies of a field, so everything about water uses only the `water_row` rows.
@@ -186,14 +200,18 @@ def build_feature_table(interim: str | Path | list = "data/interim", out: str | 
     for folder in folders:
         rq = pd.read_csv(folder / "run_quality.csv", index_col="run", parse_dates=["clean_until"], low_memory=False)
         rq = rq[rq["clean_until"].notna() & rq["usle_k"].notna()]
+        # older files have no clean_from column: no warm-up period anywhere
+        clean_from = pd.to_datetime(rq["clean_from"]) if "clean_from" in rq else pd.Series(pd.NaT, index=rq.index)
         runs = sorted(rq.index)[:limit]
+        log.info("features: %s: %d of %d runs have a warm-up period", folder,
+                 int(clean_from.reindex(runs).notna().sum()), len(runs))
         first_run_of = {}
         for run in runs:
             first_run_of.setdefault(field_of(run), run)
         for i, run in enumerate(runs, start=1):
             daily = pd.read_parquet(folder / "daily" / f"{run}.parquet",
                                     columns=["rain_mm", "temp_c", "pan_evap_mm", "runoff_mm", "pest_runoff_gha", "applied_gha"])
-            rows = run_feature_rows(daily, rq.loc[run].to_dict(), rq.at[run, "clean_until"])
+            rows = run_feature_rows(daily, rq.loc[run].to_dict(), rq.at[run, "clean_until"], clean_from[run])
             num = rows.select_dtypes("number").columns
             rows[num] = rows[num].astype("float32")
             field = field_of(run)

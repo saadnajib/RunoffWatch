@@ -34,6 +34,8 @@
     "heavy_rain_days_since_app",
     "temp_since_app_c",
     "rain_first3d_after_app_mm",
+    "app_doy",
+    "app_rate_kgha",
     "rain_mm",
     "rain_prev1_mm",
     "rain_prev2_3_mm",
@@ -67,6 +69,8 @@
     "heavy_rain_days_since_app",
     "temp_since_app_c",
     "rain_first3d_after_app_mm",
+    "app_doy",
+    "app_rate_kgha",
     "rain_mm",
     "rain_prev1_mm",
     "rain_prev2_3_mm",
@@ -97,9 +101,20 @@
   ],
   "high_loss_threshold_gha": 1.0,
   "conc_floor": 1e-07,
-  "conc_output": "g_per_ha_per_mm",
+  "conc_output": "g_per_ha_per_mm_per_kg_applied",
   "trained_on": {
-    "application": "2400 g/ha Flufenacet on 1 March, winter cereals, FOCUS R1",
+    "application": "Flufenacet on winter cereals, FOCUS R1",
+    "doses_kgha": [
+      2.4
+    ],
+    "spray_day_of_year": [
+      60,
+      61
+    ],
+    "spray_days_seen": [
+      60,
+      61
+    ],
     "feature_ranges": {
       "days_since_app": [
         0.0,
@@ -107,19 +122,27 @@
       ],
       "rain_since_app_mm": [
         0.0,
-        1207.0
+        1216.0
       ],
       "heavy_rain_days_since_app": [
         0.0,
-        44.0
+        45.0
       ],
       "temp_since_app_c": [
-        0.800000011920929,
-        19.758468627929688
+        3.5,
+        19.69871711730957
       ],
       "rain_first3d_after_app_mm": [
         0.0,
-        50.0
+        51.0
+      ],
+      "app_doy": [
+        60.0,
+        61.0
+      ],
+      "app_rate_kgha": [
+        2.4000000953674316,
+        2.4000000953674316
       ],
       "rain_mm": [
         1.0,
@@ -135,35 +158,35 @@
       ],
       "rain_7d_mm": [
         0.0,
-        112.0
+        114.0
       ],
       "rain_14d_mm": [
         0.0,
-        163.0
+        165.0
       ],
       "rain_30d_mm": [
-        1.0,
-        252.0
+        2.0,
+        254.0
       ],
       "temp_c": [
-        -5.099999904632568,
-        27.799999237060547
+        -5.300000190734863,
+        27.5
       ],
       "temp_prev1_c": [
-        -6.0,
-        28.100000381469727
+        -6.099999904632568,
+        27.700000762939453
       ],
       "temp_7d_c": [
-        -4.5428571701049805,
-        26.899999618530273
+        -4.742856979370117,
+        26.314285278320312
       ],
       "evap_mm": [
         0.0,
-        7.300000190734863
+        7.210000038146973
       ],
       "evap_7d_mm": [
         1.350000023841858,
-        49.939998626708984
+        48.99118148040556
       ],
       "frozen_precip_30d_mm": [
         0.0,
@@ -175,7 +198,7 @@
       ],
       "cn_runoff_mm": [
         0.0,
-        17.948733020796077
+        18.001861572265625
       ],
       "usle_k": [
         0.1599999964237213,

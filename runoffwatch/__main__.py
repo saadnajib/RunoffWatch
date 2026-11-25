@@ -30,6 +30,7 @@ Commands (run in this order):
 """
 
 import argparse
+import re
 import logging
 from pathlib import Path
 
@@ -117,6 +118,9 @@ def build_parser() -> argparse.ArgumentParser:
     fr.add_argument("--limit", type=int, help="only the first N fields (quick test)")
     fr.add_argument("--spray", default="01.03", help="spray day of every year, day.month (default: 01.03)")
     fr.add_argument("--dose", type=float, default=None, help="dose in kg/ha (default: 2.4)")
+    fr.add_argument("--scenario", default=None, metavar="NAME",
+                    help="keep this run apart from the standard one: results and figures go to a sub-folder NAME, "
+                         "the field-year table gets _NAME in its file name (for example: --spray 15.10 --scenario autumn)")
 
     wi = sub.add_parser("whatif", help="compare spray days for a weather table")
     wi.add_argument("--weather", help="CSV with date, rain_mm, temp_c[, pan_evap_mm]; omit for a made-up example")
@@ -167,6 +171,12 @@ def resolve_paths(a: argparse.Namespace) -> argparse.Namespace:
     for arg, key in DATASET_ARGS.get(a.cmd, {}).items():
         if getattr(a, arg, None) is None:
             setattr(a, arg, paths[key])
+    if a.cmd == "france" and a.scenario:      # a second spraying must not overwrite the standard run
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", a.scenario):
+            raise SystemExit("--scenario: use only letters, digits, - and _")
+        a.results, a.figures = str(Path(a.results) / a.scenario), str(Path(a.figures) / a.scenario)
+        out = Path(a.out)
+        a.out = str(out.with_name(f"{out.stem}_{a.scenario}{out.suffix}"))
     if a.cmd == "rerun":           # always starts from the delivered folder; the target depends on the kind of re-run
         if a.out is None:
             a.out = RERUN_VARIED_OUT if a.variants else RERUN_OUT

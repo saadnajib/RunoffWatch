@@ -18,7 +18,15 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
 
 ## Main results so far
 
-> **Current state, 25 Nov 2026:** the models are now trained on simulations with **varied spray
+> **Current state, 25 Nov 2026, evening:** all models and tests were run again with a new
+> **warm-up rule**. In every run the first crop cycle starts before the simulation, so until
+> 12 Nov 1990 PRZM carries an irregular crop. Rain days before that date are now left out, and
+> pesticide results of sprayings made before it are not trusted. The year-by-year test therefore
+> has nine held-out years (1991-1999) instead of ten. All numbers below were recomputed with this
+> rule ([docs/DATA_REPORT.md, section 6](docs/DATA_REPORT.md#the-warm-up-period-25-nov-2026-evening)).
+> A new five-tab app was written, and a second 45-year run with spraying on 15 October was added.
+>
+> **25 Nov 2026:** the models are now trained on simulations with **varied spray
 > dates and doses**. Every field with a corrected result got two more PRZM runs, one sprayed in
 > spring (15 Feb - 30 Apr) and one in autumn (1 Oct - 30 Nov), with 0.24, 1.20 or 2.40 kg/ha. The
 > earlier models, trained on the corrected runs that are all sprayed on 1 March with 2.4 kg/ha,
@@ -41,33 +49,41 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
 - In the delivered simulations the pesticide numbers were broken (losses up to 1e34 g/ha) and,
   as the re-runs showed, wrong in all runs. In the corrected runs PRZM's own pesticide balance is
   exact, so all runs are used. The water part did not change.
-- Tested by leaving out one year at a time (ten years, and weather files never used in training):
+- Tested by leaving out one year at a time (nine years, 1991-1999, and weather files never used
+  in training):
 
   | | **Varied dates and doses** | Corrected, 1 March only |
   |---|---|---|
-  | Runoff, daily R² (curve-number formula alone: 0.94) | **0.98** | 0.98 |
-  | Pesticide loss, daily R² (range over years) | **0.92** (0.78-0.97) | 0.95 (0.89-0.99) |
-  | Sum of all loss, surrogate / PRZM (range over years) | **0.98** (0.90-1.18) | 0.99 (0.86-1.12) |
-  | High-loss days, PR-AUC | **0.97** | 0.97 |
-  | Alarms that are real / high-loss days found | **92 % / 92 %** | 92 % / 90 % |
+  | Runoff, daily R² (curve-number formula alone: 0.940) | **0.986** (0.954-0.993) | 0.986 (0.954-0.993) |
+  | Pesticide loss, daily R² (range over years) | **0.965** (0.907-0.976) | 0.948 (0.867-0.986) |
+  | Sum of all loss, surrogate / PRZM (range over years) | **0.985** (0.950-1.082) | 0.948 (0.831-1.086) |
+  | High-loss days, PR-AUC | **0.973** | 0.965 |
+  | Alarms that are real / high-loss days found | **92.6 % / 92.6 %** | 91.7 % / 88.0 % |
 
-  The harder task costs a little accuracy on daily loss. In one year (1990) a simple formula
-  beats the surrogate; we do not know why yet.
-- **Spray date (read straight from PRZM).** Spraying in autumn loses 2 to 7 times more of the dose
-  than spraying in spring. The chemistry per millimetre of runoff is the same; the difference is how
+  With the varied data, 4,815,867 rain days were scored, 19,654 of them high-loss days. The old
+  weak year 1990 turned out to be the warm-up year: its rows were not a fair test and also
+  disturbed training. Without them, daily loss R² rose from 0.917 to 0.965 (varied data). The
+  copy is still weakest on the most extreme rain days (80 mm and more).
+- **Spray date (read straight from PRZM).** Sprayed in autumn (1 Oct - 30 Nov), the mean share of
+  the dose lost per season is 0.19 to 0.66 %; sprayed in spring (15 Feb - 30 Apr) it is 0.08 to
+  0.10 % (warm-up left out). The chemistry per millimetre of runoff is the same; the difference is how
   much water runs off in the first month. That comes from PRZM's fixed crop calendar: until the
   crop emerges on 12 Nov (the same date in every field and year) much more rain becomes runoff.
   So the sharp step in mid-November is a property of the PRZM scenario, not of nature
   ([docs/MODEL_REPORT.md](docs/MODEL_REPORT.md#what-przm-says-about-the-spray-date-and-why)).
 - It is about 70 times faster than PRZM (0.05 s against 3.4 s for ten years of one field; the
   1-March models: 0.03 s).
-- Run on 45 years of real weather (1979-2023) for all fields, sprayed on 1 March, the surrogate
-  shows that the worst year has 2.8 times the loss of the median year, and that five years carry
-  23 % of all loss (1-March models; the new models give the same five worst years).
+- Run on 45 years of real weather (1979-2023) for all 5,609 fields with 2.4 kg/ha, sprayed on
+  1 March, the surrogate (varied models) shows that the worst year has 2.87 times the loss of the
+  median year, and that the five worst years carry 22.7 % of all loss. Mean loss rises from
+  1.86 g/ha (1979-2005) to 2.90 g/ha (2016-2023).
+- **Sprayed on 15 October instead**, in the same weather, the mean loss is 9.70 g/ha (1979-2005)
+  to 12.76 g/ha (2016-2023), about 4 to 6 times more, and the worst years are different years
+  (2019, 2014, 2023, 1999, 2000).
 - A second surrogate, a small LSTM, beats the trees on daily pesticide loss and on finding
   high-loss days in a first test on two years (1-March data), but is much less exact on small
-  losses and puts the total 8 % too low; it still needs the year-by-year test and does not handle
-  varied spray dates yet.
+  losses and puts the total 8 % too low; it still needs the year-by-year test, does not handle
+  varied spray dates yet and still uses the warm-up period.
 
 Everything describes the PRZM model for Flufenacet on winter cereals, sprayed between 15 Feb and
 30 Apr or between 1 Oct and 30 Nov with 0.24 to 2.4 kg/ha. It is not validated against
@@ -129,7 +145,8 @@ pip install -e ".[dev,app]"
 python -m pytest -q
 ```
 
-You should see `526 passed, 1 skipped` (the skipped one needs PyTorch; with PyTorch installed it is `527 passed`).
+With PyTorch installed you should see `567 passed`. Without PyTorch the LSTM tests are skipped
+and show as `skipped`; that is fine.
 
 **Step 5. Ask the model a question.** This compares 7 possible spray days for a made-up weather example.
 
@@ -140,13 +157,28 @@ python -m runoffwatch whatif
 You get a table with one row per spray day and the predicted pesticide loss
 in the 14 days after it. Lower is better.
 
-**Step 6. Open the app** (same thing, with sliders).
+**Step 6. Open the app.** It needs Python 3.10 or newer. From the repository root:
 
+```bash
+pip install -e ".[app]"
+```
 ```bash
 streamlit run app.py
 ```
 
-Your browser opens the spray-day advisor. Stop it with `Ctrl+C` in the terminal.
+(If you did step 3, the first command is already done.) Your browser opens the app. It has
+five tabs:
+
+| Tab | What it does |
+|---|---|
+| Compare spray days | The spray-day advisor: predicted pesticide loss for several candidate spray days, for a weather table, a soil and a dose |
+| How good is the copy? | The scores of the year-by-year test: runoff, pesticide loss and alarms for high-loss days |
+| Spray date | What the simulations say about the spray date: the share of the dose lost by half-month of spraying |
+| 45 years of French weather | The surrogate on 1979-2023 weather for all fields; choose spraying on 1 March or 15 October, or compare both |
+| About and limits | What the project is, the four tasks, the limits, and which models are loaded |
+
+The app reads only the models and result tables that are in the repository. No simulation data
+is needed. Stop it with `Ctrl+C` in the terminal.
 
 **Optional: use your own weather.** Make a CSV file with the columns
 `date, rain_mm, temp_c` (and `pan_evap_mm` if you have it), one row per day,
@@ -276,6 +308,15 @@ Optional, the 45-year run with the new models:
 python -m runoffwatch --dataset varied france
 ```
 
+And a second 45-year run with spraying on 15 October, kept apart from the first:
+
+```bash
+python -m runoffwatch --dataset varied france --spray 15.10 --scenario autumn
+```
+
+`--scenario autumn` writes the results to `docs/results/varied/autumn/` and the figures to
+`docs/figures/varied/autumn/`, so the 1 March run is not overwritten. The app shows both.
+
 Run `train`, `train --cv` and `france` as **separate commands**, one after the other, not in one
 go: this data set is large, and each step needs about 12 GB of memory. `train` takes about
 22 minutes, `train --cv` about 70 minutes (measured on the project PC).
@@ -337,7 +378,7 @@ set needs about 5 GB of free disk space (measured on the delivered data); both n
 | Command | What it does | Time |
 |---|---|---|
 | `pip install -e ".[lstm]"` then `python -m runoffwatch lstm` | Trains a second surrogate, an LSTM neural network, and compares it with the tree surrogate on the same test data | about 10-20 min |
-| `python -m runoffwatch france` | Runs the surrogate on the 1979-2024 Agri4Cast weather for France (needs `france_weather_1979_2024.csv` in `data/raw/france_weather/`; pass it with `--weather`). `--spray DD.MM` and `--dose` set the spray day and dose of every year (default 01.03 and 2.4 kg/ha) | about 8 min |
+| `python -m runoffwatch france` | Runs the surrogate on the 1979-2024 Agri4Cast weather for France (needs `france_weather_1979_2024.csv` in `data/raw/france_weather/`; pass it with `--weather`). `--spray DD.MM` and `--dose` set the spray day and dose of every year (default 01.03 and 2.4 kg/ha). Add `--scenario NAME` to keep a second spraying apart, for example `france --spray 15.10 --scenario autumn` (results go to `docs/results/autumn/`) | about 8 min |
 | `python -m runoffwatch design` | Writes run files for NEW simulations (varied spray date, dose, substance) into `data/design/`. Nothing is uploaded; see [docs/NEW_RUNS_PLAN.md](docs/NEW_RUNS_PLAN.md) | about 1 min |
 
 **Step 4. Look at the results.**
@@ -409,14 +450,14 @@ report for one single run.
 | `runoffwatch/quality.py` | Task 1: which results can be trusted (envelope rule, Isolation Forest, causes) |
 | `runoffwatch/features.py` | One row per rain day: weather, spray history and soil inputs |
 | `runoffwatch/models.py` | Surrogate (runoff x concentration), high-loss classifier, baselines, evaluation |
-| `runoffwatch/whatif.py`, `app.py` | Spray-day advisor: library, command line and Streamlit app |
+| `runoffwatch/whatif.py`, `app.py` | Spray-day advisor (library and command line) and the five-tab Streamlit app |
 | `runoffwatch/figures.py`, `report.py` | Figures and single-run report |
 | `models/` | Trained models (LightGBM text files, 2 MB) |
 | `docs/figures/`, `docs/results/` | Figures and result tables used in the reports |
 | `runoffwatch/lstm.py` | Second surrogate: an LSTM, compared with the trees |
 | `runoffwatch/longrun.py` | Surrogate on 45 years of Agri4Cast weather for France |
 | `runoffwatch/design.py` | Generator for new simulation runs (run files and task archives) |
-| `tests/` | 527 tests on synthetic run folders (no project data in git) |
+| `tests/` | 567 tests on synthetic run folders (no project data in git) |
 | `runoffwatch/pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code, kept for reference |
 
 Code and documents were written with the help of an AI assistant (Claude).

@@ -209,3 +209,19 @@ def test_cli_add_weather_defaults(dataset):
     assert (a.runs, a.source) == ("data/raw/runs_varied", "data/raw/runs")
     a = parse_args(["add-weather", "--runs", "R", "--source", "S"])
     assert (a.runs, a.source) == ("R", "S")
+
+
+def test_france_scenario_gets_its_own_folders():
+    p = DATASETS["varied"]
+    a = parse_args(["--dataset", "varied", "france", "--spray", "15.10", "--scenario", "autumn"])
+    assert Path(a.results) == Path(p["results"]) / "autumn"
+    assert Path(a.figures) == Path(p["figures"]) / "autumn"
+    assert Path(a.out).name == Path(p["france_out"]).stem + "_autumn.parquet"
+    plain = parse_args(["--dataset", "varied", "france"])
+    assert (plain.results, plain.figures, plain.out) == (p["results"], p["figures"], p["france_out"])
+
+
+def test_france_scenario_name_is_checked():
+    import pytest
+    with pytest.raises(SystemExit):
+        parse_args(["france", "--scenario", "../elsewhere"])

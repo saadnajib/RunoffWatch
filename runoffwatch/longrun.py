@@ -32,7 +32,7 @@ import pandas as pd
 from .features import DEFAULT_RATE_KGHA, HIGH_LOSS_GHA, MIN_RAIN_MM, field_of, weather_features
 from .models import conc_per_mm, load_models
 from .przm_inp import SOIL_FEATURES
-from .quality import app_year
+from .quality import APP_MONTH, app_year
 
 log = logging.getLogger("runoffwatch")
 
@@ -193,6 +193,11 @@ def run_france(weather_path: str | Path = "data/raw/france_weather/france_weathe
     consistency = None
     if delivered_spraying:
         pz = przm_field_years(features_path).merge(fy, on=["run", "app_year"], how="inner")
+        if "clean_from" in rq:
+            # leave out field-years that start in a run's warm-up period (their PRZM rows are not in the table)
+            starts = pd.to_datetime(dict(year=pz["app_year"] - YEAR_SHIFT, month=APP_MONTH, day=1))
+            warm = pd.to_datetime(pz["run"].map(rq["clean_from"]))
+            pz = pz[warm.isna() | (starts >= warm)]
         clean = pz[pz["clean"]]
         consistency = {"field_years": int(len(pz)), "field_years_trusted_pesticide": int(len(clean)),
                        "runoff_r2_yearly": float(r2_score(pz["runoff_przm"], pz["runoff_mm"])),

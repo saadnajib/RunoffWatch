@@ -2,7 +2,8 @@
 
 Updated after the project presentation (4 Nov 2026), the first full run on
 the real data (12 Nov 2026), the second round of work (16 Nov 2026) and the corrected re-run with
-retrained models (23 Nov 2026). Results so far: [DATA_REPORT.md](DATA_REPORT.md),
+retrained models (23 Nov 2026), and the rerun of all models and tests with the warm-up rule
+(25 Nov 2026, evening). Results so far: [DATA_REPORT.md](DATA_REPORT.md),
 [MODEL_REPORT.md](MODEL_REPORT.md).
 
 **What the supervisor asked for, and where it stands**
@@ -30,6 +31,10 @@ Still to do:
 - [ ] Send the questions in DATA_REPORT.md §4 to the Landau group (Sarah)
 - [ ] Sarah reviews about 20 flagged and 20 unflagged runs by eye
 - [x] Simulations re-run locally with corrected settings (23 Nov 2026) and everything redone on them
+- [x] Warm-up period investigated (25 Nov 2026): the first crop cycle starts before the simulation,
+      so rain days before 12 Nov 1990 are left out; all models and tests rerun (DATA_REPORT.md section 6)
+- [ ] Ask the model owner in Landau whether the crop cycle starting before the simulation is
+      intended, and whether a warm-up year is normally discarded
 
 ## Phase 3 – Feature table ✅
 `python -m runoffwatch features`. One row per rain day, 33 inputs, all from
@@ -41,11 +46,12 @@ high-loss classifier, baselines, SHAP ranking, risk calendar. Tested by leaving
 out one year at a time, on weather files never used in training.
 
 Still to do:
-- [x] Leave-one-year-out evaluation (`train --cv`): scores now come with a range over ten years (corrected data)
+- [x] Leave-one-year-out evaluation (`train --cv`): scores now come with a range over nine years, 1991-1999 (1990 is the warm-up year)
 - [x] Final models trained on all years
 - [x] Underestimation of large losses reduced (concentration model now trained on amounts, not logarithms); not removed
 - [x] Sequence model (LSTM) as a second surrogate, compared on the same test rows (`python -m runoffwatch lstm`)
 - [ ] Year-by-year test for the LSTM (about 2 hours); if its lead holds, make it the main surrogate
+- [ ] Adapt the LSTM to varied spray dates and to the warm-up rule (it still uses the warm-up period)
 - [ ] Look at the days where the surrogate is most wrong; are they special (snow, very long dry spells)?
 - [ ] SHAP for the surrogate itself, not only for the classifier
 - [ ] Sarah: do the driver ranking and the risk calendar make physical sense?
@@ -53,6 +59,8 @@ Still to do:
 ## Phase 5 – Farmer tool ✅ (prototype)
 `streamlit run app.py` or `python -m runoffwatch whatif`. Compares candidate
 spray days for a weather table and a soil.
+- [x] New five-tab app (25 Nov 2026): compare spray days, how good the copy is, spray date,
+      45 years of French weather (1 March or 15 October), about and limits
 
 Still to do:
 - [ ] Feed real forecast weather (and Agri4Cast history for the 30 days before)
@@ -73,6 +81,7 @@ section 4. Half-life (DT50) and sorption (Koc) are still not varied.
 `python -m runoffwatch france`.
 - [x] The 695 weather files are Agri4Cast grid cells; the runs' "1990-1999" is really 2006-2015
 - [x] Surrogate run on the 1979-2024 Agri4Cast weather for France: 5,609 fields x 45 years (corrected data)
+- [x] Second 45-year run with spraying on 15 October (`france --spray 15.10 --scenario autumn`, 25 Nov 2026)
 - [ ] Check a sample of those predictions against PRZM itself (`WINPRZM.exe` is available)
 
 ## Phase 6c – Things the project cloud folder made possible
@@ -90,5 +99,7 @@ section 4. Half-life (DT50) and sorption (Koc) are still not varied.
 ## Open questions
 - [ ] Answers from Landau (DATA_REPORT.md §4)
 - [ ] Is "1 g/ha in one day" a sensible definition of a high-loss day? (Sarah)
+- [ ] Limit for a high-loss day as a share of the dose, adjustable, instead of a fixed 1 g/ha
+      (a fixed g/ha limit cannot hold across compounds whose doses differ by a factor of 100 or more)
 - [ ] Course deadline
 - [ ] New team member on the Kaiserslautern side?

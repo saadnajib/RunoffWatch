@@ -184,6 +184,34 @@ def rq_balance(balance_data):
     return quality.build_run_quality(*balance_data, trust="balance")[0]
 
 
+# --------------------------------------------------------------------------- #
+# Warm-up period: the first crop cycle starts before the simulation
+# --------------------------------------------------------------------------- #
+T = pd.Timestamp
+
+
+@pytest.mark.parametrize("emergences, first_day, expected", [
+    ([T("1989-11-12"), T("1990-11-12"), T("1991-11-12")], T("1990-01-01"), T("1990-11-12")),
+    ([T("1990-11-12"), T("1991-11-12")], T("1990-01-01"), pd.NaT),      # all inside the simulation
+    ([T("1990-01-01"), T("1991-01-01")], T("1990-01-01"), pd.NaT),      # starts on the first day
+    ([], T("1990-01-01"), pd.NaT),
+    ([T("1989-11-12")], T("1990-01-01"), pd.NaT),                       # before, but none after
+    ([T("1989-11-12"), T("1990-11-12")], pd.NaT, pd.NaT),
+])
+def test_warm_up_end(emergences, first_day, expected):
+    got = quality.warm_up_end(emergences, first_day)
+    assert (pd.isna(got) and pd.isna(expected)) or got == expected
+
+
+def test_clean_from_balance_mode(rq_balance):
+    # every synthetic run starts on 1 Jan 1990 with crop lines from 12 Nov 1989 on
+    assert (rq_balance["clean_from"] == T("1990-11-12")).all()
+
+
+def test_clean_from_envelope_mode_is_nat(rq_envelope):
+    assert "clean_from" in rq_envelope and rq_envelope["clean_from"].isna().all()
+
+
 def test_balance_error_table(balance_data):
     from runoffwatch.batch import find_runs
 
@@ -268,9 +296,24 @@ def test_audit_balance_summary(audit_balance, balance_data):
     rq = pd.read_csv(balance_data[1] / "run_quality.csv", index_col="run")
     assert {"max_balance_error", "above_envelope_app_year"} <= set(rq.columns)
     assert set(rq.index[rq["clean_until"].notna()]) == TRUSTED
+    assert s["runs_with_warm_up"] == len(BALANCE_RUNS)
+    assert s["warm_up_until"] == "1990-11-12"
+    assert (pd.to_datetime(rq["clean_from"]) == T("1990-11-12")).all()
 
 
 def test_audit_balance_quantiles_keep_the_largest_error(audit_balance):
     s, _ = audit_balance
     # one run reports NaN, which counts as infinitely large: the maximum must say so
     assert s["balance_error_quantiles_kgha"]["1.0"] == np.inf
+
+
+def test_audit_envelope_summary_has_no_warm_up(balance_data, tmp_path):
+    import shutil
+    import warnings
+
+    root, interim = balance_data
+    shutil.copytree(interim, tmp_path / "interim")          # audit writes run_quality.csv: keep the shared one
+    with warnings.catch_warnings(), np.errstate(all="ignore"):
+        warnings.simplefilter("ignore")
+        s = quality.audit(root, tmp_path / "interim", tmp_path / "results", tmp_path / "figures", trust="envelope")
+    assert s["runs_with_warm_up"] == 0 and s["warm_up_until"] is None

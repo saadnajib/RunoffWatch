@@ -4,6 +4,11 @@ All numbers come from `python -m runoffwatch inventory | qc | audit` on the 10
 archives from the project Drive (run on 12 Nov 2026). Machine-readable version:
 [`results/delivered/quality_summary.json`](results/delivered/quality_summary.json).
 
+> **What changed, 25 Nov 2026, evening:** a warm-up rule now leaves out the start of every run,
+> until 12 Nov 1990. The counts for the corrected and varied runs in section 6 were recomputed
+> with it where a result file gives them; older counts are marked "before the warm-up rule". See
+> [section 6, "The warm-up period"](#the-warm-up-period-25-nov-2026-evening).
+
 ## 1. What the data set contains
 
 | | |
@@ -208,6 +213,9 @@ The technical notes of the modelling group answered some of our questions:
    (`..._runoff_grd.tif`). Is the step after PRZM needed for anything we use?
 6. Why were the real substances and doses of the sampled fields not used, and is the 16-year
    shift of the weather labels intended?
+7. In every run the first crop cycle starts before the simulation (emergence 12 Nov 1989,
+   simulation start 1 Jan 1990). Is that intended, and is a warm-up year normally discarded?
+   (Section 6, "The warm-up period".)
 
 ## 6. Local re-runs: two settings are wrong (23 Nov 2026)
 
@@ -344,11 +352,14 @@ Checked with `inventory`, `qc` and `audit` on the 5,610 new result folders.
   field is too strict (a model predicts the flag from rain per year and topsoil carbon with AUC
   0.99). So for the corrected data the rule that decides what is used is PRZM's own balance check:
   a run is used completely when its yearly balance error stays below 0.001 kg/ha. All 5,609 full
-  runs pass. (`audit --trust balance`; the old rule is `--trust envelope`.)
-- **What the models now learn from:** 8.2 million rain days, all usable (before: 5.7 million, of
-  which 4.2 million were trusted). 25,940 of them are high-loss days (at least 1 g/ha): 0.32 % of
-  the rain days, carrying 73 % of all loss. In the delivered data it was 0.17 % carrying 55 %.
-  13 % of rain days produce runoff, as before.
+  runs pass. (`audit --trust balance`; the old rule is `--trust envelope`.) Since 25 Nov 2026 the
+  warm-up period at the start of every run is left out as well (see "The warm-up period" below).
+- **What the models now learn from (before the warm-up rule):** 8.2 million rain days, all usable
+  (before: 5.7 million, of which 4.2 million were trusted). 25,940 of them are high-loss days (at
+  least 1 g/ha): 0.32 % of the rain days, carrying 73 % of all loss. In the delivered data it was
+  0.17 % carrying 55 %. 13 % of rain days produce runoff, as before. With the warm-up rule the
+  table holds 7,530,883 rain days (all rows of the split in
+  [`results/model_metrics.json`](results/model_metrics.json)).
 
 ### Runs with varied spray dates and doses (25 Nov 2026)
 
@@ -370,10 +381,12 @@ days and doses, more runs were made on the project PC with
   size; this is being fixed. The nine runs are left out (under 0.1 %); those five fields still have
   their 1 March run.
 - **Feature table** (one row per rain day; the table the models learn from): the 5,609 corrected
-  runs sprayed on 1 March plus the 11,209 new runs, so 16,818 runs. It has 24,589,483 rain days;
-  23,654,303 of them have trusted pesticide values, and 92,768 are high-loss days (at least
-  1 g/ha). The other 935,180 rain days lie in the first simulated year before the first
-  spraying, where there is no pesticide to predict.
+  runs sprayed on 1 March plus the 11,209 new runs, so 16,818 runs. Before the warm-up rule it had
+  24,589,483 rain days; 23,654,303 of them had trusted pesticide values, and 92,768 were high-loss
+  days (at least 1 g/ha). The other 935,180 rain days lay in the first simulated year before the
+  first spraying, where there is no pesticide to predict. With the warm-up rule the rain days
+  before 12 Nov 1990 are left out, and the table holds 22,580,508 rain days (all rows of the split
+  in [`results/varied/model_metrics.json`](results/varied/model_metrics.json)).
 - Numbers in [`results/varied/quality_summary.json`](results/varied/quality_summary.json).
 
 **The crop calendar is the same everywhere.** Every field is winter cereals with the same dates
@@ -384,3 +397,44 @@ field runs off much more easily than after emergence. This explains why autumn s
 much more than spring spraying in these runs, and why the loss drops sharply on 12 Nov
 ([MODEL_REPORT.md, section 4](MODEL_REPORT.md#what-przm-says-about-the-spray-date-and-why)). The
 step is a property of the scenario: in reality emergence dates differ by field and year.
+
+### The warm-up period (25 Nov 2026, evening)
+
+**The first crop cycle starts before the simulation.** In every run the first crop emerges on
+12 Nov 1989, but the simulation only starts on 1 Jan 1990. The first emergence inside the
+simulation is 12 Nov 1990. Until that day PRZM carries an irregular crop, so the first simulated
+year behaves differently from all later years. This is the same in the delivered, the corrected
+and the varied runs, because all of them share the same crop lines.
+
+**What PRZM does until 12 Nov 1990.** PRZM's own yearly balance (the "FOLIAR APPLICATION" line of
+the `.OUT` file) gives the share of the dose that lands on the crop canopy. In a sample of 1,200
+varied runs:
+
+| Sprayed | Year 1 | Years 2-10 |
+|---|---|---|
+| Autumn, before 12 Nov | 90 % (every run) | 0 % |
+| Autumn, from 12 Nov | 5 % | 4 % |
+| Spring (15 Feb - 30 Apr) | 35 % | 57 % |
+
+For the 1 March runs it is 26 % in year 1 and 47 % in years 2-10 (150 runs). 47 % is exactly
+what the crop calendar gives. On the canopy the pesticide decays with a half-life of about
+10 days and is washed to the soil by rain. So in year 1 an October spray behaves very
+differently: much higher loss if it rains on the spray day, lower loss afterwards. Runoff is
+affected too: in Aug - Oct 1990 PRZM gives only about 55-65 % of the runoff that the
+curve-number formula with the regular crop calendar expects (other years mostly 80-130 %). The
+harvest switch of the curve number does not happen in year 1.
+
+**The rule.** Rain days before 12 Nov 1990 are left out. Pesticide results of sprayings made
+before that date are not trusted, for their whole season. `audit` writes the end of the warm-up
+as column `clean_from` into `run_quality.csv` (only with `--trust balance`).
+
+**How many runs.** The rule applies to all 5,609 corrected 1-March runs and all 11,209 varied
+runs; in all of them the warm-up lasts until 1990-11-12 (`runs_with_warm_up` and `warm_up_until`
+in [`results/quality_summary.json`](results/quality_summary.json) and
+[`results/varied/quality_summary.json`](results/varied/quality_summary.json); the first file
+counts 5,610, because it also counts the one almost empty result). All runs stay trusted after
+the warm-up. Application year 1990 drops out of the year-by-year test, so nine held-out years
+remain (1991-1999).
+
+Whether the first crop cycle is meant to start before the simulation, and whether a warm-up year
+is normally discarded, is a question for the model owner in Landau (section 5).

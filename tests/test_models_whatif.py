@@ -656,6 +656,9 @@ def test_yearly_cv_scores_by_spray_window_and_dose(trained, tmp_path):
     assert out["by_dose_kgha"]["2.4"]["rows"] == out["rows_scored"]
     saved = json.loads((tmp_path / "cv_summary.json").read_text())
     assert saved["by_spray_window"] == out["by_spray_window"]
+    assert set(saved["alarm_by_share_of_dose"]) == {f"{p:g}" for p in models.SHARE_OF_DOSE_LIMITS_PCT}
+    kept = pd.read_parquet(trained["root"] / "features_cv_predictions.parquet")     # for scoring other limits later
+    assert len(kept) == out["rows_scored"] and {"loss_gha", "loss_pred", "app_rate_kgha"} <= set(kept.columns)
 
 
 # --------------------------------------------------------------------------- #
@@ -831,3 +834,23 @@ def test_varied_models_in_whatif(trained_varied):
     assert any("guess" in n for n in far)
     out = _predict(w, WEATHER_SPRAY, m, rate_kgha=5.0).attrs["notes"]
     assert any("outside the doses" in n for n in out)
+
+
+def test_alarm_by_share_of_dose_uses_the_dose_of_each_row():
+    """0.1 % of the dose is 2.4 g/ha at 2.4 kg/ha and 0.24 g/ha at 0.24 kg/ha."""
+    P = pd.DataFrame({"app_rate_kgha": [2.4, 2.4, 2.4, 0.24, 0.24, 0.24],
+                      "loss_gha":      [3.0, 1.0, 3.0, 0.30, 0.10, 0.10],
+                      "loss_pred":     [2.5, 2.5, 0.0, 0.25, 0.00, 0.30]})
+    out = models.alarm_by_share_of_dose(P, limits_pct=(0.1,))["0.1"]
+    assert out["high_loss_days"] == 3 and out["alarms"] == 4
+    assert out["precision"] == pytest.approx(2 / 4) and out["recall"] == pytest.approx(2 / 3)
+    low = out["by_dose_kgha"]["0.24"]
+    assert low == {"high_loss_days": 1, "alarms": 2, "precision": 0.5, "recall": 1.0}
+    json.dumps(out)
+
+
+def test_alarm_by_share_of_dose_without_any_high_loss_day():
+    P = pd.DataFrame({"app_rate_kgha": [2.4, 2.4], "loss_gha": [0.0, 0.1], "loss_pred": [0.0, 0.2]})
+    out = models.alarm_by_share_of_dose(P, limits_pct=(0.5,))["0.5"]
+    assert out == {"high_loss_days": 0, "alarms": 0, "precision": None, "recall": None,
+                   "by_dose_kgha": {"2.4": {"high_loss_days": 0, "alarms": 0, "precision": None, "recall": None}}}

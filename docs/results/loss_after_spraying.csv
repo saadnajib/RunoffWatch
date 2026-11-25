@@ -1,0 +1,4 @@
+sprayed,days_after_spraying,seasons,rain_mm,runoff_mm,pct_of_dose_lost,curve_number,pct_of_dose_per_mm_runoff
+03 Mar 1-15,0-30,50255,47.6933,0.7205,0.0403,80.485,0.0559
+03 Mar 1-15,31-120,50255,168.3852,3.8146,0.0351,80.4866,0.0092
+03 Mar 1-15,121+,50255,471.851,25.7035,0.0036,82.8469,0.0001

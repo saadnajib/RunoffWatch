@@ -9,6 +9,8 @@
     "1.0": 9.342e-07
   },
   "trusted_runs": 11209,
+  "runs_with_warm_up": 11209,
+  "warm_up_until": "1990-11-12",
   "folders": 11218,
   "status_counts": {
     "has_output": 11218

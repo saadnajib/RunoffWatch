@@ -14,6 +14,12 @@ run with the real program yet. The plan below stays as it was written.
 usable, and the models were retrained on them. See MODEL_REPORT.md, section 4, and DATA_REPORT.md,
 section 6. Half-life, sorption and the control group are still not done.
 
+**Note 25 Nov 2026, evening: warm-up year.** In every run the first crop cycle starts before the
+simulation, so PRZM carries an irregular crop until 12 Nov 1990, and that period is now left out
+(DATA_REPORT.md, section 6, "The warm-up period"). Future runs should either start one year
+earlier or accept losing year one. Whether this is intended is still to be asked of the model
+owner in Landau.
+
 **Status: prepared, not submitted.** The run files can be generated on your
 own computer. Uploading them to the modelling workstation needs the agreement
 of the model owners in Landau first.
@@ -59,7 +65,8 @@ independently of the others, so that their effects can be separated:
 | Sorption (Koc) | 30, 100, 377.5, 1,000 or 3,000 |
 | Soil and slope | copied from a randomly chosen existing run |
 | Weather | one of 40 existing weather files |
-| Henry constant | one realistic low value for all runs (default 2.4e-7, **an estimate that must be confirmed**) |
+| Henry constant | one realistic low value for all runs (default 0.37E-06, the corrected value `rerun` uses; **to be confirmed**) |
+| Reference soil moisture | 1 for all runs (the corrected value `rerun` uses; the delivered runs had 100) |
 
 Substances are described by their two key properties (DT50 and Koc), not by
 product names. 41.68 days and 377.5 are the values of the existing runs.
