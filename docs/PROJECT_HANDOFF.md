@@ -2,13 +2,41 @@
 
 Paste this whole file into a new chat with an AI assistant so it knows the
 project. It is written to be read without any other context. State as of
-24 November 2026 (first written 17 November 2026).
+25 November 2026 (first written 17 November 2026).
 
 **How to use this with an assistant:** it cannot see the code or the data, only
 this text. When you ask for code changes, paste the relevant file from the
 repository as well. Numbers below marked "measured" come from running the code
 on the full data; do not let an assistant change them from memory.
 
+> **State on 25 Nov 2026: other spray dates and doses are analysed.** The
+> full run with varied spray dates and doses finished on the owner's PC
+> (11,218 simulations; 11,209 usable, section 8.1). Every field got one
+> spring copy (15 Feb to 30 Apr) and one autumn copy (1 Oct to 30 Nov), with
+> 0.24, 1.20 or 2.40 kg/ha. All analysis steps ran on it; results are in
+> `models/varied/`, `docs/results/varied/` and `docs/figures/varied/`
+> (section 6.7). Year-by-year test (each of ten years held out once):
+>
+> | Score | Delivered | Corrected, 1 March only | Varied dates and doses |
+> |---|---|---|---|
+> | Runoff R² (range over years) | 0.97 | 0.98 (0.92–0.99) | 0.98 (0.92–0.99) |
+> | Loss R² (range) | 0.91 (0.75–0.97) | 0.95 (0.89–0.99) | 0.92 (0.78–0.97) |
+> | Total loss, predicted / true (range) | 0.92 (0.70–1.16) | 0.99 (0.86–1.12) | 0.98 (0.90–1.18) |
+> | PR-AUC surrogate / classifier / rain rule | 0.92 / 0.81 / 0.06 | 0.97 / 0.94 / 0.10 | 0.97 / 0.97 / 0.11 |
+> | Alarm precision / recall (recall range) | 91 % / 76 % (36–92 %) | 92 % / 90 % (81–97 %) | 92 % / 92 % (88–96 %) |
+>
+> The task got harder and the scores stayed about the same; only daily loss
+> R² fell (0.95 to 0.92). Weakest year is 1990, where a simple baseline beats
+> the surrogate. **Spray-date finding (straight from PRZM):** autumn spraying
+> loses 2 to 7 times more of the dose than spring spraying. The cause is the
+> crop calendar of the PRZM scenario: until the fixed emergence date (12 Nov)
+> the field counts as stubble or fallow, with a high curve number, so far more rain runs
+> off. The chemistry is the same in every window; so the step in mid-November
+> is a scenario setting, not a law of nature (section 6.8). Next steps:
+> section 13.
+>
+> *History (kept for context):*
+>
 > **What changed on 23 Nov 2026.** We ran the PRZM program (`WINPRZM.exe`) on
 > the owner's own Windows PC (30 small test runs). It reproduces the delivered
 > numbers exactly, and it showed that **two input settings in the delivered
@@ -23,16 +51,14 @@ on the full data; do not let an assistant change them from memory.
 > The water results (rain, runoff) and the methods did not change. Details:
 > section 5.
 >
-> **Also new on 23 Nov 2026: other spray dates and doses.** Until now every
+> **Also new on 23 Nov 2026: other spray dates and doses.** Until then every
 > simulation was sprayed on 1 March with 2.4 kg/ha, so nothing could be said
 > about another spray day or dose. The re-run tool can now make copies of
 > every field with varied spray dates (spring and autumn) and three doses
 > (section 8.1), and the feature table, the tree models and the advisor were
 > adapted to use them (section 6.7). A trial of 20 runs worked. The full run
-> (11,218 simulations) was started on the owner's PC on 23 Nov. **Its results
-> are not analysed yet, so no number in this document is about other spray
-> dates or doses**, except the small trial in 6.7. What to do when the
-> results arrive is in section 13.
+> (11,218 simulations) was started on the owner's PC on 23 Nov; it finished
+> and was analysed on 25 Nov (box above).
 
 ---
 
@@ -45,7 +71,7 @@ on the full data; do not let an assistant change them from memory.
 | Team | Saad Najib (Computer Science, Kaiserslautern): code, models, evaluation. Sarah (Environmental Science, Landau): model settings, interpretation, contact to the modelling group. A third member left in week 1; the supervisor allows recruiting a replacement. |
 | Repository | https://github.com/saadnajib/RunoffWatch (Python package `runoffwatch`) |
 | Slides | First pitch: https://claude.ai/artifact/Y82phRAgCapMtktvPri94c · Full progress update: https://claude.ai/artifact/VzutykKbE1M1tja2ZrZHcj · First progress presentation (13 slides, by task): https://claude.ai/artifact/QgnfhTxpd8avuscgakiGwz (all private until shared by the owner) |
-| Written with | An AI coding assistant (Claude). Disclose this if asked who wrote the code. |
+| Written with | An AI coding assistant. Disclose this if asked who wrote the code. |
 
 **One-sentence summary:** we build a fast machine-learning *surrogate* (a
 copy) of the PRZM pesticide model that predicts, from daily weather and soil,
@@ -111,6 +137,10 @@ how much pesticide is washed off a field after spraying, and a small
 9. **Corrected data (23 Nov):** all folders with inputs re-run, quality
    check, retraining and both evaluations redone, reports rewritten with the
    corrected numbers.
+10. **Varied spray dates and doses (23–25 Nov):** two extra copies of every
+    corrected field were simulated on the owner's PC (11,218 runs) and
+    analysed. The spray-date effect was traced to the crop calendar of the
+    PRZM scenario (section 6.8).
 
 ---
 
@@ -163,11 +193,26 @@ the first simulated month).
 **Consequence:** a model can learn about weather and soil from this data. It
 cannot learn anything about which pesticide, which dose or which spray date.
 Also, "days since spraying" and "day of the year" are the same thing in this
-data, so their effects cannot be separated.
+data, so their effects cannot be separated. (The varied data set below fixes
+this for spray date and dose, not for the pesticide.)
+
+**Crop calendar (same in every field and year):** winter cereals, emergence
+12 Nov, maturity 10 Jun, harvest 31 Jul. PRZM's curve number follows this
+calendar. Most common set: 81 from 12 Nov, 86 from 31 Jul, 91 from 1 Nov to
+11 Nov. This matters for the spray-date result (section 6.8).
 
 **After the corrected re-run (23 Nov):** 5,609 fields have a full ten-year
 result (on 740 weather files); 1,335 fields stop with a PRZM calculation error
 and are missing; 13 input files are damaged.
+
+**The varied data set (25 Nov):** each of the 5,609 corrected fields got two
+more runs (one spring, one autumn spray window, a different random day in
+each year, dose 0.24, 1.20 or 2.40 kg/ha; section 8.1). 11,218 runs arrived;
+11,209 are readable with all ten years and all pass PRZM's balance check
+(largest error 9.3e-7 kg/ha). 9 runs (5 fields, one batch) are unreadable
+and left out. The feature table holds the 5,609 corrected 1 March runs plus
+the 11,209 varied runs: 16,818 runs, 24,589,483 rain days (23,654,303 with
+trusted pesticide values), 92,768 high-loss days.
 
 **Key facts about the losses (measured on the corrected simulations):**
 - A "rain day" is a day with at least 1 mm of rain. About 13 % of rain days
@@ -296,7 +341,8 @@ times more slowly.)
   input editor works on 6,945 of them (13 input files are damaged).
 
 **Open questions for the model owner in Landau** (an email is drafted, not
-sent; the contact goes through Sarah; updated 23 Nov):
+sent; the contact goes through Sarah; updated 23 Nov; still unanswered on
+25 Nov; the four most important are 1, 1b, 7 and 8):
 1. Is Henry 0.03 intended for Flufenacet, or is it the template default? Our
    test runs show that it causes the broken numbers and that a realistic value
    removes them.
@@ -311,16 +357,21 @@ sent; the contact goes through Sarah; updated 23 Nov):
    `mc.log` be ignored?
 6. Why were the real substances and doses of the sampled fields not used, and
    is the 16-year shift of the weather labels intended?
+7. Is 2.4 kg/ha the intended dose? It looks about ten times higher than
+   usual field rates (unconfirmed, section 8.1).
+8. Where do the zeros in the inputs of the 1,335 failing fields come from,
+   and can they be filled?
 
 ---
 
 ## 6. The models (Tasks 2 and 3)
 
-All numbers in this section are from the corrected simulations (23 Nov 2026),
-which are all sprayed on 1 March with 2.4 kg/ha. The delivered-data numbers are
-in `docs/results/delivered/`; the main ones are compared in 6.4. The method
-was changed afterwards for varied spray dates and doses (6.7); no result of
-the changed method on such runs exists yet.
+The numbers in 6.1 to 6.6 are from the corrected simulations (23 Nov 2026),
+which are all sprayed on 1 March with 2.4 kg/ha (results in `docs/results/`,
+kept for comparison). The delivered-data numbers are in
+`docs/results/delivered/`; the main ones are compared in 6.4. The method was
+then changed for varied spray dates and doses (6.7); the results on the
+varied data set (25 Nov) are in 6.7 and 6.8 and in `docs/results/varied/`.
 
 ### 6.1 Feature table
 One row per rain day per run: 8.20 million rows (8,200,903), all with usable
@@ -378,7 +429,8 @@ pesticide loss = runoff x concentration
   86).
 - Three sets of models are trained: per held-out year (the honest score), one
   without 1992/1994/1996 (figures), and the final set on all years and files
-  (saved in `models/`, used by the advisor; cannot be tested itself).
+  (saved in `models/`, or `models/varied/` for the varied data set, which the
+  advisor prefers; cannot be tested itself).
 
 ### 6.4 Results (measured on the corrected data; ten held-out years pooled, range over the years in brackets)
 
@@ -460,12 +512,19 @@ the top twelve.
   not a test because the models were trained on those years. For the other 35 years no PRZM
   result exists. 10 % of field-years contain a rain day above 48 mm, beyond 99.9 % of the
   training rain days.
+- **With the varied models (25 Nov; still 1 March and 2.4 kg/ha):** 1.84 / 2.07 / 2.91 g/ha
+  for the same three periods. Worst years 2022 (4.7), 2020 (4.5), 2013 (4.2), 1989 (4.0),
+  2001 (3.9), the same five as before. Agreement with PRZM in 2006–2015 (not a test): yearly
+  loss R² 0.99, sum 1.00. Results in `docs/results/varied/france_summary.json`. **No 45-year
+  run with an autumn spray date has been made.**
 
-### 6.7 Method change for varied spray dates and doses (23 Nov 2026)
+### 6.7 Varied spray dates and doses: method (23 Nov) and results (25 Nov 2026)
 
-The code now works for runs with varied spray dates and doses (section 8.1).
-**All result numbers in 6.1 to 6.6 are still from the runs sprayed on 1
-March.** No model result for varied spray dates exists yet.
+The code works for runs with varied spray dates and doses (section 8.1).
+Data set: section 4. Results: `docs/results/varied/`, figures
+`docs/figures/varied/`, models `models/varied/`.
+
+**Method changes:**
 
 - **Two new inputs:** the day of the year of the last spraying and its dose
   (kg/ha). They go into the concentration model and the classifier. The
@@ -483,13 +542,89 @@ March.** No model result for varied spray dates exists yet.
   test, even when spray dates differ.
 - **New outputs of `train`:** `loss_by_spray_date.csv` and the figure
   `m9_loss_by_spray_date.png`: the share of the dose lost in the year after
-  spraying, by half-month of spraying, straight from PRZM. `train --cv` adds
-  scores per spray window and per dose.
-- **LSTM not adapted:** it refuses runs that are not sprayed on 1 March.
-- **First sign from the trial (not a result):** in the 18 finished trial
-  runs, the autumn copies lost roughly five times the share of the dose that
-  the spring copies lost (median 0.28 % against 0.05 %). There are only nine
-  fields per group.
+  spraying, by half-month of spraying, straight from PRZM; and
+  `loss_after_spraying.csv` (first 30 days after spraying: rain, runoff,
+  curve number, loss; section 6.8). `train --cv` adds scores per spray window
+  and per dose.
+- **Large table (25 Nov):** training and the year-by-year test were rewritten
+  for 24.6 million rows. They no longer copy the table: they use row masks,
+  each model gets only its own rows and columns, and `load_features()` reads
+  the table without a second copy.
+- **LSTM not adapted:** it refuses runs that are not sprayed on 1 March. Its
+  numbers (6.5) are from the 1 March data; `models/lstm.pt` is unchanged.
+
+**Results, year-by-year test** (`cv_summary.json`, `cv_by_year.csv`):
+5,355,895 rain days scored, 21,222 high-loss days on 622 storm dates. Main
+scores are in the box at the top. In short:
+- The task is harder (any spray day, three doses), and the scores stayed
+  about the same. Only daily loss R² fell: 0.95 to 0.92.
+- **Weakest year 1990:** loss R² 0.78, total over-predicted by 18 %. The
+  simple baseline (decay × curve-number formula, now fitted per kg applied)
+  scores 0.85 there, so it beats the surrogate in that one year. 1990 is also
+  the weakest year for runoff (0.92). In the other nine years the surrogate
+  wins (pooled 0.92 against 0.79). Next weakest: 1998 (0.88), 1993 (0.89).
+  Why is not yet investigated.
+- **By spray window:** spring loss R² 0.97, total ratio 0.99, alarm
+  precision 92 %, recall 91 %. Autumn 0.90, 0.98, 91 %, 92 %. Autumn is
+  harder.
+- **By dose:** 0.24 kg/ha 0.92, 0.99, 89 %, 88 % (only 1,025 high-loss days);
+  1.2 kg/ha 0.93, 0.99, 91 %, 92 %; 2.4 kg/ha 0.92, 0.98, 92 %, 92 %.
+- The classifier now ranks high-loss days as well as the surrogate (PR-AUC
+  0.972 against 0.968); on the 1 March data it was behind (0.94 against 0.97).
+
+**Results, single split** (test years 1992 and 1996, unseen weather files;
+`model_metrics.json`): runoff R² 0.982 (formula 0.928); loss R² 0.963, total
+ratio 0.965; with PRZM's true runoff the chemistry stage alone has R² 0.989.
+PR-AUC: surrogate 0.970, classifier 0.972, logistic regression 0.766, rain
+rule 0.081. Alarm at 1 g/ha: 3,759 alarms, 94 % precision, 90 % recall.
+SHAP ranking of the classifier: rain since spraying, curve-number runoff,
+dose, days since spraying, heavy-rain days since spraying, rain today,
+evaporation in the previous week, topsoil organic carbon. The final models
+are trained on all 24.6 million rows. Speed: 0.05 s per ten-year run against
+about 3.4 s for PRZM (about 70 times faster).
+
+### 6.8 What PRZM says about the spray date, and why (25 Nov 2026)
+
+This is read directly from the simulations, not from a model. Mean share of
+the dose lost in the season after spraying (`loss_by_spray_date.csv`):
+
+| Sprayed | Mean % of dose lost | 90th percentile |
+|---|---|---|
+| Feb 16–end | 0.09 | 0.21 |
+| Mar 1–15 | 0.08 | 0.19 |
+| Mar 16–end | 0.07 | 0.19 |
+| Apr 1–15 | 0.08 | 0.21 |
+| Apr 16–end | 0.10 | 0.27 |
+| Oct 1–15 | 0.47 | 1.07 |
+| Oct 16–end | 0.60 | 1.42 |
+| Nov 1–15 | 0.39 | 1.02 |
+| Nov 16–end | 0.19 | 0.41 |
+
+Autumn spraying loses 2 to 7 times more of the dose than spring spraying.
+
+**Why** (first 30 days after spraying, mean per season;
+[`loss_after_spraying.csv`](results/varied/loss_after_spraying.csv)):
+- One mm of runoff carries about the same share of the dose in every window
+  (0.04–0.07 %). The chemistry does not differ.
+- What differs is how much water runs off in the first month: 0.7–1.7 mm in
+  spring, 7–9 mm in October, 2.7 mm in late November. Rain differs far less
+  (48–66 mm in spring, 70–76 mm in autumn).
+- The cause is the crop calendar of the PRZM scenario (section 4). Between
+  harvest (31 Jul) and emergence (12 Nov) the field counts as stubble or
+  fallow with a high curve number, so more rain becomes runoff. From 12 Nov,
+  in every field and year, the curve number drops by 5 to 10 points and runoff
+  falls by more than half with the same rain.
+- So the result is: "spraying before the crop has emerged loses about 5 times
+  more than spraying after". The sharp step in mid-November is the fixed
+  emergence date of the scenario, not a law of nature. In reality emergence
+  differs by field and year. The surrogate copies this property of the
+  scenario.
+- An autumn herbicide in winter cereals is usually sprayed around sowing or
+  emergence (general knowledge, to be confirmed by the team's environmental
+  scientist), that is in the high-loss window. The 1 March date of the
+  delivered data is in the low-loss window.
+- After day 120 the loss is negligible in every window (under 0.005 % of the
+  dose).
 
 ---
 
@@ -501,13 +636,15 @@ March.** No model result for varied spray dates exists yet.
 - Output: for each candidate spray day, the predicted pesticide loss in the
   following 14 days, and the number of predicted high-loss days. Only
   candidates with a full window are ranked.
-- A dose can be given (`whatif --dose`, a field in the app). The stored models
-  were trained on runs sprayed on 1 March with 2.4 kg/ha only: another dose is
-  scaled in proportion, and a note says so.
-- **Limits:** valid only for Flufenacet on winter cereals. With the stored
-  models, moving the spray day is itself an extrapolation; this is what the
-  runs with varied spray dates are for (section 8.1, section 13). It cannot
-  compare products. It has not been evaluated as a decision tool.
+- A dose can be given (`whatif --dose`, a field in the app). The app uses the
+  models in `models/varied` when that folder exists (trained on varied spray
+  dates and doses, 6.7); otherwise the 1 March models in `models/`, which scale
+  another dose in proportion, and a note says so.
+- **Limits:** valid only for Flufenacet on winter cereals, inside the two
+  spray windows the models were trained on (15 Feb–30 Apr, 1 Oct–30 Nov).
+  The autumn effect comes from the fixed emergence date of the PRZM scenario
+  (6.8). It cannot compare products. It has not been evaluated as a decision
+  tool.
 
 ---
 
@@ -533,7 +670,8 @@ March.** No model result for varied spray dates exists yet.
   `.inp` file of a run before starting PRZM (the `.inp` file holds the
   application dates and the pesticide settings).
 - **Varied spray dates and doses (tool written 23 Nov 2026; a trial of 20 runs
-  worked, the full run was started the same day):** `rerun --variants 2` makes two extra copies of every
+  worked; the full run finished and was analysed by 25 Nov, see below):**
+  `rerun --variants 2` makes two extra copies of every
   field. By default each copy gets one of two spray windows (15 Feb to 30 Apr,
   or 1 Oct to 30 Nov), one of three doses (0.24 / 1.20 / 2.40 kg/ha) and,
   inside its window, a different random spray day in each of the ten years.
@@ -548,6 +686,14 @@ March.** No model result for varied spray dates exists yet.
   Half-life, sorption and other substance settings are not varied by this
   tool. The feature table, the tree models and the advisor were adapted to
   varied spray dates and doses on 23 Nov 2026 (section 6.7); the LSTM was not.
+- **The full varied run (done):** 11,218 simulations received, 11,209
+  readable and clean (section 4). 9 runs (5 fields, all in one batch) have a
+  result file of full size (about 460 KB) that holds only zero bytes: the run
+  on the PC was interrupted while they were written. They are left out (under
+  0.1 %); those fields still have their 1 March run. **Lesson:** the re-run
+  tool treated them as finished, because it only checked the file size.
+  `rerun.is_done` now also rejects result files filled with zero bytes. When
+  a run is interrupted, check the last files written, not only their size.
 - **Unconfirmed:** the delivered dose of 2.4 kg/ha looks about ten times
   higher than usual field rates of flufenacet products (a few hundred grams
   per hectare). This is from general knowledge, not checked against a label
@@ -571,8 +717,10 @@ March.** No model result for varied spray dates exists yet.
 - **Before submitting:** permission from the model owner; the spray date must
   be read from the run file on their side; the Henry value (default 2.4e-7) is
   an estimate to confirm; our weather CSVs are rebuilt from PRZM weather files
-  and may differ from the originals. The design does not yet change the
-  reference soil moisture (second wrong setting, 5.1).
+  and may differ from the originals. `design.py` still writes the reference
+  soil moisture 100 (second wrong setting, 5.1) and its own Henry default
+  (2.4e-7), not the 0.37E-06 that `rerun` uses. Both must be fixed before
+  any submission.
 - With such runs (from Landau or made locally), dose, DT50 and Koc become
   model inputs and the advisor could compare days, doses and substances.
 
@@ -615,10 +763,10 @@ Full pipeline from the raw data (put the ten archives in `data/raw/archives/`):
 | 3 | `python -m runoffwatch qc` | Reads and checks every run | 1 min |
 | 4 | `python -m runoffwatch audit` | Task 1: which results are trusted | 30 s |
 | 5 | `python -m runoffwatch features` | Builds the feature table | 2 min |
-| 6 | `python -m runoffwatch train` | Trains surrogate and classifier, saves final models | 3 min |
-| 7 | `python -m runoffwatch train --cv` | Leave-one-year-out evaluation | 25–30 min |
+| 6 | `python -m runoffwatch train` | Trains surrogate and classifier, saves final models | 3 min (`varied`: 22 min, about 12 GB memory) |
+| 7 | `python -m runoffwatch train --cv` | Leave-one-year-out evaluation | 25–30 min (`varied`: 70 min) |
 | – | `python -m runoffwatch lstm` (needs `pip install -e ".[lstm]"`) | LSTM vs trees | 12–20 min |
-| – | `python -m runoffwatch france` | Surrogate on 45 years of France weather | 8 min |
+| – | `python -m runoffwatch france` | Surrogate on 45 years of France weather | 8 min (`varied`: 22 min) |
 | – | `python -m runoffwatch design` | Run files for new simulations | 1 min |
 | – | `python -m runoffwatch rerun --exe ...` (Windows only) | Runs PRZM again on every folder with inputs, with the two corrected settings; with `--variants N`, N extra copies per field with varied spray dates and dose (`--spray-windows`, `--doses`, `--seed`) | about 1.5 h for 6,958 folders, four at a time; `--variants 2`: about 2.6 h for 11,218 runs |
 
@@ -638,8 +786,8 @@ in `data/raw/runs_fixed/` in the same layout as the originals, with a log in
 delivered. Afterwards the other commands are pointed at the new folder, for
 example `python -m runoffwatch qc --runs data/raw/runs_fixed --out data/interim_fixed`.
 
-For extra copies with varied spray dates and dose (section 8.1; a 20-run
-trial has worked with the real program), again first a test on 10 fields (20 runs):
+For extra copies with varied spray dates and dose (section 8.1; done on
+25 Nov for all fields), again first a test on 10 fields (20 runs):
 ```bash
 python -m runoffwatch rerun --exe C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe --variants 2 --limit 10
 python -m runoffwatch rerun --exe C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe --variants 2
@@ -649,7 +797,8 @@ Results go to `data/raw/runs_varied/`, the plan to `rerun_plan.csv`. Options:
 `15.02-30.04,01.10-30.11`), `--doses` (default `0.24,1.20,2.40` kg/ha),
 `--seed` (fixes the random spray dates), `--limit` (only the first N fields).
 
-Analysing these runs (method in 6.7). There is a third data set, `varied`
+Analysing these runs (method in 6.7; all steps below ran on 25 Nov; see
+also the README, Part B). There is a third data set, `varied`
 (`python -m runoffwatch --dataset varied ...`). Its feature table is built
 from the corrected runs (sprayed on 1 March) plus the copies with varied
 spray dates and doses, so the corrected data set must be done first. Its
@@ -666,7 +815,16 @@ python -m runoffwatch --dataset varied audit
 python -m runoffwatch --dataset varied features
 python -m runoffwatch --dataset varied train
 python -m runoffwatch --dataset varied train --cv
+python -m runoffwatch --dataset varied france
 ```
+**Memory (learned on 25 Nov):** the varied feature table has 24.6 million
+rows. Training needs about 12 GB and must start in a fresh process: running
+the feature build and the training in one process ran out of memory on a
+15 GB machine. Run `features`, `train`, `train --cv` and `france` as separate
+commands (22 min, 70 min and 22 min for the last three). The run tables are
+read in one piece (`low_memory=False`), because pandas failed on about 10,000
+runs with a column of mixed types.
+
 New options: `whatif --dose` (kg/ha, default 2.4), `france --spray DD.MM
 --dose` (spray day and dose of every year, default 01.03 and 2.4 kg/ha), and a
 dose field in the app. `lstm` refuses the `varied` data set (not adapted).
@@ -680,7 +838,7 @@ Modules (`runoffwatch/`):
 | `batch.py` | Unpack, inventory, quality-check all runs in parallel |
 | `quality.py` | Envelope rule, Isolation Forest, causes of the breakdown |
 | `features.py` | Feature table; `weather_features` is shared by training and the advisor |
-| `models.py` | Surrogate, classifier, baselines, split, leave-one-year-out evaluation |
+| `models.py` | Surrogate, classifier, baselines, split, leave-one-year-out evaluation; `load_features()` reads the feature table without a second copy |
 | `lstm.py` | LSTM surrogate and comparison |
 | `whatif.py`, `../app.py` | Advisor library, command line, Streamlit app |
 | `design.py` | Generator for new simulation runs |
@@ -689,9 +847,12 @@ Modules (`runoffwatch/`):
 | `figures.py`, `report.py` | Figures; single-run report |
 | `pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code |
 
-Other folders: `models/` (trained LightGBM models, about 2 MB), `docs/`
-(reports, figures, result tables), `tests/` (synthetic run folders only),
-`data/` (local, never committed).
+Other folders: `models/` (trained LightGBM models, about 2 MB; corrected
+1 March data), `models/varied/` (models of the varied data set, used by the
+app when present), `docs/` (reports, figures, result tables; the subfolders
+`delivered/` and `varied/` of `docs/results/` and `docs/figures/` hold the
+other two data sets), `tests/` (synthetic run folders only), `data/` (local,
+never committed).
 
 Reports in `docs/`: `DATA_REPORT.md`, `MODEL_REPORT.md`, `RELATED_WORK.md`,
 `PROJECT_SCOPE.md`, `ROADMAP.md`, `NEW_RUNS_PLAN.md`.
@@ -715,7 +876,10 @@ Reports in `docs/`: `DATA_REPORT.md`, `MODEL_REPORT.md`, `RELATED_WORK.md`,
 ## 12. Limits to state openly
 
 1. The surrogate copies a model. Nothing was compared with measurements.
-2. One pesticide, one dose, one crop, one spray date.
+2. One pesticide, one crop, one crop calendar (emergence always 12 Nov).
+   Spray date and dose vary only in the varied data set: two windows
+   (15 Feb–30 Apr, 1 Oct–30 Nov) and three doses. The spray-date effect
+   follows the fixed emergence date of the scenario (6.8).
 3. Field edge only; daily resolution.
 4. The delivered pesticide results were wrong in all runs (two wrong input
    settings, section 5.1); all results are now from the corrected re-run.
@@ -724,23 +888,27 @@ Reports in `docs/`: `DATA_REPORT.md`, `MODEL_REPORT.md`, `RELATED_WORK.md`,
    erodibility or the slope), which looks like missing soil or terrain data;
    no field without such a zero fails. So the sample is no longer a clean
    random sample of the real fields.
-5. The total loss is right over all years (0.99 times PRZM's), but single
-   unseen years are 14 % too low to 12 % too high; about one high-loss day in
-   ten is missed (19 % in the worst year).
+5. The total loss is right over all years (0.99 times PRZM's on the 1 March
+   data, 0.98 on the varied data), but single unseen years are up to 18 % off
+   (1990, varied data); about one high-loss day in ten is missed. In 1990 a
+   simple baseline beats the surrogate (6.7). Autumn spraying is harder to
+   predict than spring spraying.
 6. Small effective sample: ten years of weather from one region.
-7. The LSTM result rests on one test on two years.
+7. The LSTM result rests on one test on two years, and the LSTM is not
+   adapted to varied spray dates.
 8. Both corrections (Henry constant 0.37E-06, reference soil moisture 1) are
-   the team's reading of the evidence from 30 test runs. The model owners in
-   Landau have not confirmed them yet.
+   the team's reading of the evidence from 30 test runs. The model owner in
+   Landau has not confirmed them yet.
 9. The Flufenacet Henry value was taken from search-result snippets of the
    PPDB and PubChem entries; the pages themselves could not be opened from our
    environment, so the value should be checked once more.
+10. The 1 g/ha limit for a "high-loss day" is our own choice.
 
 ---
 
 ## 13. Status and next steps
 
-State on 23 Nov 2026.
+State on 25 Nov 2026.
 
 Done: data audit; surrogate with honest evaluation; classifier, SHAP ranking,
 risk table; advisor prototype; LSTM comparison; surrogate on 45 years of
@@ -764,41 +932,48 @@ decks. New since 17 Nov:
   run on a 20-run trial with the real program. 18 runs finished and were
   checked: spray days and dose as planned, balance clean.
 - Analysis side adapted to varied spray dates and doses (6.7, section 10)
-  and smoke-tested end to end on those 18 runs plus base fields. This was a
-  test of the code only; no model result for varied spray dates exists yet.
-
-Running: the full varied re-run (5,609 fields × 2 copies, 11,218 runs) on
-the owner's PC. It was started on 23 Nov 2026. As of 24 Nov its results had
-not been uploaded or analysed.
+  and smoke-tested end to end on those 18 runs plus base fields (23 Nov).
+- **The full varied run is done and analysed (25 Nov):** 11,218 runs from
+  the owner's PC transferred (one zip per batch folder, unpacked to
+  `data/raw/runs_varied/<batch>/<field>__vN/`); 11,209 usable, 9 zero-filled
+  files left out (8.1). Unpacking, checks, feature table, training,
+  year-by-year test and 45-year run all ran (6.6, 6.7). The spray-date
+  pattern is explained by the crop calendar of the scenario (6.8).
+- Code made to handle the 24.6-million-row table, and `rerun.is_done` now
+  rejects zero-filled result files (section 10, 8.1).
 
 Next, in this order:
-1. Upload the results (`data/raw/runs_varied/`): one zip per batch folder,
-   plus `rerun_plan.csv` and `rerun_log.csv`. On the analysis machine each
-   run folder goes to `data/raw/runs_varied/<batch>/<field>__vN/`, with the
-   batch folder named like the original one (`run_000000_to_000999`, without
-   the long code that follows it in the uploaded names).
-2. Run the `varied` pipeline (section 10: `add-weather`, then `inventory`
-   to `train --cv` with `--dataset varied`). The year-by-year test
-   (`train --cv`) is the one that counts.
-3. Rewrite the reports with the spray-date and dose results.
-4. Questions for the modelling group in Landau: the Henry constant, the
-   reference soil moisture (questions in section 5), whether 2.4 kg/ha is the
-   intended dose (it looks about ten times higher than usual field rates,
-   unconfirmed, section 8.1), and where the zeros in the input of the 1,335
-   failing fields come from (and whether they can be filled). The contact
-   goes through the team member in Landau.
-5. Presentation 2, with the corrected numbers. It should also correct the
-   statement from the first progress presentation that 73 % of the data can
-   be trusted: the plausibility check kept 73 % of the run-years, but those
-   were wrong too.
+1. Investigate held-out year 1990: the simple baseline beats the surrogate
+   there (loss R² 0.85 against 0.78) and the total is 18 % too high. Also
+   look at 1998 and 1993.
+2. Ask the team's environmental scientist whether the fixed emergence date
+   (12 Nov) and autumn spraying before emergence are realistic use. The
+   spray-date result depends on it (6.8).
+3. Make a 45-year run with an autumn spray date
+   (`--dataset varied france --spray DD.MM`; only 1 March has been run).
+4. LSTM: adapt it to varied spray dates and doses, or drop it. Until then its
+   numbers (6.5) are from the 1 March data only.
+5. Questions for the model owner in Landau (section 5; the contact goes
+   through the team member in Landau): the Henry constant, the reference soil
+   moisture, whether 2.4 kg/ha is the intended dose (it looks about ten times
+   higher than usual field rates, unconfirmed, section 8.1), and where the
+   zeros in the inputs of the 1,335 failing fields come from (and whether
+   they can be filled).
+6. Confirm the 1 g/ha limit for a "high-loss day" (our own choice) with the
+   team's environmental scientist.
+7. Rewrite the reports with the spray-date and dose results.
+8. Presentation 2, with the corrected and the varied numbers. It should also
+   correct the statement from the first progress presentation that 73 % of
+   the data can be trusted: the plausibility check kept 73 % of the
+   run-years, but those were wrong too.
+9. Before any submission of new runs to Landau: `design.py` still writes the
+   reference soil moisture 100 and its own Henry default (8.2).
 
 Still open from before:
-- Year-by-year test for the LSTM; if its lead holds, make it the main
-  surrogate.
 - Check a sample of the 45-year predictions against PRZM runs on the same
   weather.
-- Team member in Landau: confirm the high-loss definition; check whether the
-  new driver ranking makes physical sense.
+- Team member in Landau: check whether the new driver ranking (now with dose
+  in third place, 6.7) makes physical sense.
 - Verify the related-work entries; write the report; final slides.
 - Unknown: the course deadline.
 
@@ -812,7 +987,8 @@ Still open from before:
 | Pesticide loss | Pesticide leaving the field with runoff water, in g/ha per day |
 | Rain day | Day with at least 1 mm rain |
 | High-loss day | Day with at least 1 g/ha pesticide loss |
-| Application year | 1 March to end of February (spraying is on 1 March) |
+| Application year | 1 March to end of February (in the delivered and corrected data spraying is on 1 March; the year-by-year test uses these years for every data set) |
+| Emergence date | Day the crop comes up in the PRZM scenario; fixed at 12 Nov for every field and year. Before it the curve number is higher (more runoff) |
 | Run | One PRZM simulation: one field, ten years |
 | Surrogate / emulator | ML model that imitates the simulator |
 | R² | 1 = perfect copy, 0 = no better than predicting the average |
