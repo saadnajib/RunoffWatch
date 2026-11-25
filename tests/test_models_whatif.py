@@ -542,6 +542,92 @@ def test_loss_by_spray_date_empty_cases():
     assert models.loss_by_spray_date(short).empty
 
 
+def _after_rows(run, season, doy, rate, days, loss, runoff, rain, cn):
+    """Rain-day rows of one season for loss_after_spraying; the lists hold one value per row."""
+    return pd.DataFrame({"run": run, "app_season": float(season), "app_doy": float(doy), "app_rate_kgha": rate,
+                         "days_since_app": [float(d) for d in days], "loss_gha": loss, "runoff_mm": runoff,
+                         "rain_mm": rain, "cn_today": cn, "high_loss": [x >= HIGH_LOSS_GHA for x in loss]})
+
+
+def _after_example():
+    return pd.concat([
+        # 1 March, 2400 g/ha: 24 g = 1 % in days 0-30, 2.4 g = 0.1 % in days 31-120, nothing later
+        _after_rows("r1", 1990, 60, 2.4, [2, 20, 50, 200, 330], [12.0, 12.0, 2.4, 0.0, 0.0],
+                    [5.0, 3.0, 2.0, 0.0, 0.0], [30.0, 20.0, 15.0, 10.0, 5.0], [80, 90, 70, 60, 60]),
+        # 11 March, 1200 g/ha: 6 g = 0.5 % in days 0-30; no rain day at all in days 31-120
+        _after_rows("r2", 1990, 70, 1.2, [10, 125, 320], [6.0, 0.0, 0.0],
+                    [4.0, 0.0, 0.0], [25.0, 8.0, 4.0], [85, 65, 65]),
+        # 15 October, 2400 g/ha: a separate half-month
+        _after_rows("r1", 1991, 288, 2.4, [5, 40, 330], [2.4, 0.0, 0.0],
+                    [1.0, 0.0, 0.0], [12.0, 6.0, 3.0], [75, 70, 70]),
+        # 1 March but cut off by the end of the run (299 days): left out
+        _after_rows("r3", 1990, 60, 2.4, [3, 299], [500.0, 0.0], [50.0, 0.0], [90.0, 1.0], [99, 99]),
+    ], ignore_index=True)
+
+
+def test_loss_after_spraying():
+    out = models.loss_after_spraying(_after_example())
+    assert out.index.names == ["sprayed", "days_after_spraying"]
+    assert list(out.index) == [(s, p) for s in ("03 Mar 1-15", "10 Oct 1-15") for p in ("0-30", "31-120", "121+")]
+    assert list(out.columns) == ["seasons", "rain_mm", "runoff_mm", "pct_of_dose_lost", "curve_number",
+                                 "pct_of_dose_per_mm_runoff"]
+    mar = out.loc["03 Mar 1-15"]
+    assert (mar["seasons"] == 2).all()                       # r3 is too short, the same count in each period
+    assert mar.loc["0-30", "rain_mm"] == pytest.approx((30 + 20 + 25) / 2)
+    assert mar.loc["0-30", "runoff_mm"] == pytest.approx((5 + 3 + 4) / 2)
+    assert mar.loc["0-30", "pct_of_dose_lost"] == pytest.approx((1.0 + 0.5) / 2)
+    assert mar.loc["0-30", "curve_number"] == pytest.approx((80 + 90 + 85) / 3)
+    assert mar.loc["0-30", "pct_of_dose_per_mm_runoff"] == pytest.approx(0.75 / 6, abs=1e-4)
+    assert mar.loc["31-120", "rain_mm"] == pytest.approx(15 / 2)   # r2 had no rain day here: counts as 0
+    assert mar.loc["31-120", "pct_of_dose_lost"] == pytest.approx(0.05)
+    assert mar.loc["31-120", "curve_number"] == pytest.approx(70)
+    assert mar.loc["121+", "rain_mm"] == pytest.approx((10 + 5 + 8 + 4) / 2)
+    assert mar.loc["121+", "runoff_mm"] == 0 and np.isnan(mar.loc["121+", "pct_of_dose_per_mm_runoff"])
+    octo = out.loc["10 Oct 1-15"]
+    assert (octo["seasons"] == 1).all()
+    assert octo.loc["0-30", "pct_of_dose_lost"] == pytest.approx(0.1)
+    assert octo.loc["0-30", "pct_of_dose_per_mm_runoff"] == pytest.approx(0.1)
+    # the periods add up to the whole season, as in loss_by_spray_date
+    by_date = models.loss_by_spray_date(_after_example())
+    assert out.groupby(level="sprayed")["pct_of_dose_lost"].sum().to_dict() == \
+        pytest.approx(by_date["mean_pct_of_dose_lost"].to_dict())
+
+
+def test_loss_after_spraying_other_periods_and_empty_cases():
+    out = models.loss_after_spraying(_after_example(), periods=((0, 14), (15, None)))
+    assert list(out.index.get_level_values("days_after_spraying").unique()) == ["0-14", "15+"]
+    assert out.loc[("03 Mar 1-15", "0-14"), "pct_of_dose_lost"] == pytest.approx((0.5 + 0.5) / 2)   # day 20 is later
+    clean = _after_example()
+    for col in ("run", "app_season", "app_doy", "app_rate_kgha", "days_since_app", "loss_gha", "runoff_mm",
+                "rain_mm", "cn_today"):
+        assert models.loss_after_spraying(clean.drop(columns=col)).empty
+    assert models.loss_after_spraying(clean[clean["run"] == "r3"]).empty
+
+
+def test_loss_by_spray_date_unchanged_by_shared_season_helper():
+    """loss_by_spray_date gives the same table as the code it had before the season helper was split off."""
+    def old(clean):
+        g = clean.groupby(["run", "app_season"], observed=True)
+        s = g.agg(loss_gha=("loss_gha", "sum"), app_doy=("app_doy", "first"), rate=("app_rate_kgha", "first"),
+                  last_day=("days_since_app", "max"), high_loss_days=("high_loss", "sum"))
+        s = s[s["last_day"] >= 300].copy()
+        s["pct_of_dose_lost"] = 100 * s["loss_gha"] / (1000 * s["rate"])
+        year = s.index.get_level_values("app_season").astype(int)
+        when = pd.Series(pd.to_datetime({"year": year, "month": 1, "day": 1}).to_numpy(), index=s.index) \
+            + pd.to_timedelta(s["app_doy"] - 1, unit="D")
+        s["sprayed"] = when.dt.strftime("%m %b ") + np.where(when.dt.day <= 15, "1-15", "16-end")
+        return s.groupby("sprayed").agg(seasons=("loss_gha", "size"),
+                                        mean_pct_of_dose_lost=("pct_of_dose_lost", "mean"),
+                                        median_pct_of_dose_lost=("pct_of_dose_lost", "median"),
+                                        p90_pct_of_dose_lost=("pct_of_dose_lost", lambda x: x.quantile(0.9)),
+                                        mean_loss_gha=("loss_gha", "mean")).round(4)
+
+    other = _seasons([("r1", 1990, 60, 2.4, 350, [12.0, 12.0]), ("r2", 1992, 75, 1.2, 320, [6.0]),
+                      ("r1", 1991, 289, 0.6, 330, [3.0])])
+    for clean in (_after_example(), other):
+        pd.testing.assert_frame_equal(models.loss_by_spray_date(clean), old(clean))
+
+
 def test_train_all_writes_spray_outputs_and_meta(trained):
     root = trained["root"]
     meta = json.loads((root / "models" / "meta.json").read_text())
@@ -553,6 +639,9 @@ def test_train_all_writes_spray_outputs_and_meta(trained):
     assert on["spray_day_of_year"] == [60, 61]
     by_spray = pd.read_csv(root / "results" / "loss_by_spray_date.csv", index_col=0)
     assert list(by_spray.index) == ["03 Mar 1-15"] and by_spray["seasons"].iloc[0] > 0
+    after = pd.read_csv(root / "results" / "loss_after_spraying.csv", index_col=[0, 1])
+    assert list(after.index) == [("03 Mar 1-15", p) for p in ("0-30", "31-120", "121+")]
+    assert (after["seasons"] == by_spray["seasons"].iloc[0]).all()
     assert (root / "figures" / "m9_loss_by_spray_date.png").stat().st_size > 0
     m = trained["metrics"]["final_models"]
     assert m["rain_day_rows_one_run_per_field"] == m["rain_day_rows"]   # no copies in this table

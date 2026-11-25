@@ -356,8 +356,17 @@ def run_winprzm(work: Path, exe: Path, timeout: float, poll: float = 0.25) -> No
 
 
 def is_done(dest: Path) -> bool:
+    """Does dest hold a result? A .ZTS file of more than 400 bytes and an .OUT file.
+
+    A run stopped while the result was being copied can leave a .ZTS file of full size that holds
+    only zero bytes; such a file does not count.
+    """
     f = _by_suffix(dest) if dest.is_dir() else {}
-    return ".zts" in f and ".out" in f and f[".zts"].stat().st_size > 400
+    if not (".zts" in f and ".out" in f and f[".zts"].stat().st_size > 400):
+        return False
+    with open(f[".zts"], "rb") as fh:
+        head = fh.read(4096)
+    return head.strip(b"\x00") != b""
 
 
 def full_results(root: str | Path) -> set[str]:

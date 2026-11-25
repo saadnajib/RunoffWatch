@@ -193,7 +193,7 @@ def build_run_quality(runs_root: str | Path, interim: str | Path, trust: str = "
     from .batch import find_runs
 
     interim = Path(interim)
-    qc = pd.read_csv(interim / "runs_qc.csv").set_index("run")
+    qc = pd.read_csv(interim / "runs_qc.csv", low_memory=False).set_index("run")
     inv = pd.read_csv(interim / "inventory_runs.csv").set_index("run")
     status = folder_status(runs_root).set_index("run")
     runs = find_runs(runs_root)

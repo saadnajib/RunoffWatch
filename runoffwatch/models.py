@@ -213,13 +213,50 @@ def fit_classifier(tr, va=None, rounds: int = 1500) -> lgb.Booster:
                 v[CLASSIFIER_FEATURES], v["high_loss"].astype(int), rounds, patience=100)
 
 
+def load_features(path: str | Path) -> pd.DataFrame:
+    """Read the feature table without holding two copies of it while it is converted."""
+    import pyarrow.parquet as pq
+
+    return pq.read_table(path).to_pandas(split_blocks=True, self_destruct=True)
+
+
+def _fit_models(t: pd.DataFrame, tr: np.ndarray, va: np.ndarray | None, rounds) -> tuple[lgb.Booster, lgb.Booster, lgb.Booster]:
+    """Fit the runoff, concentration and high-loss models on the rows of `t` marked by `tr`.
+
+    tr, va: yes/no per row of `t` (va = rows that decide when to stop; None = fixed number of trees).
+    rounds: one number for all three models, or a dict with "runoff", "conc" and "high_loss".
+    Each model is given only the rows it uses, cut straight from `t`. The table can have tens of
+    millions of rows, and a copy of "all training rows" for every step does not fit into memory.
+    """
+    n = rounds if isinstance(rounds, dict) else {"runoff": rounds, "conc": rounds, "high_loss": rounds}
+    water = t["water_row"].to_numpy(dtype=bool) if "water_row" in t.columns else np.ones(len(t), dtype=bool)
+    clean = t["pest_clean"].to_numpy(dtype=bool)
+    wet = (t["runoff_mm"] > 0).to_numpy()
+    have = lambda cols: [c for c in dict.fromkeys(cols) if c in t.columns]      # noqa: E731
+    r_cols = have(RUNOFF_FEATURES + ["runoff_mm"])                               # only the columns a model reads
+    c_cols = have(CONC_FEATURES + ["runoff_mm", "loss_gha", "pest_clean"])
+    k_cols = have(CLASSIFIER_FEATURES + ["high_loss", "pest_clean"])
+    part = lambda mask, extra, cols: None if mask is None else t.loc[mask & extra, cols]      # noqa: E731
+    runoff = fit_runoff(t.loc[tr & water, r_cols], part(va, water, r_cols), n["runoff"])
+    conc = fit_conc(t.loc[tr & clean & wet, c_cols], part(va, clean & wet, c_cols), n["conc"])
+    rows = np.flatnonzero(tr & clean)
+    if len(rows) > MAX_CLASSIFIER_ROWS:                 # keep every high-loss day, thin out the others
+        pos = t["high_loss"].to_numpy(dtype=bool)[rows]
+        keep = pos | (np.random.default_rng(0).random(len(rows)) < (MAX_CLASSIFIER_ROWS - pos.sum()) / max(1, (~pos).sum()))
+        rows = rows[keep]
+    clf = fit_classifier(t.iloc[rows][k_cols], part(va, clean, k_cols), n["high_loss"])
+    return runoff, conc, clf
+
+
 def train_all(features_path: str | Path = "data/processed/features.parquet", model_dir: str | Path = "models",
               results: str | Path = "docs/results", figures: str | Path = "docs/figures",
               rounds: int = 1500) -> dict:
     """Train the three models, evaluate them on held-out weather files AND held-out years, save everything."""
-    t = pd.read_parquet(features_path)
-    t["split"] = split_rows(t["met_hash"], t["date"])
-    tr, va = t[t["split"] == "train"], t[t["split"] == "val"]
+    t = load_features(features_path)
+    t["split"] = pd.Categorical(split_rows(t["met_hash"], t["date"]))
+    is_tr, is_va = (t["split"] == "train").to_numpy(), (t["split"] == "val").to_numpy()
+    clean, wet = t["pest_clean"].to_numpy(dtype=bool), (t["runoff_mm"] > 0).to_numpy()
+    high = t["high_loss"].to_numpy(dtype=bool)
     model_dir, results = Path(model_dir), Path(results)
     model_dir.mkdir(parents=True, exist_ok=True); results.mkdir(parents=True, exist_ok=True)
     count = lambda col: {s: int(t.loc[t["split"] == s, col].nunique()) for s in SPLITS}  # noqa: E731
@@ -229,21 +266,24 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
                      "high_loss_threshold_gha": HIGH_LOSS_GHA}
 
     # ---------------- Models for the evaluation (trained without the held-out years) ----
-    log.info("training runoff model on %d rows", len(_water(tr)))
-    runoff = fit_runoff(tr, va, rounds)
-    ctr = _conc_rows(tr)
-    log.info("training concentration model on %d rows", len(ctr))
-    conc = fit_conc(tr, va, rounds)
+    water = t["water_row"].to_numpy(dtype=bool) if "water_row" in t.columns else np.ones(len(t), dtype=bool)
+    log.info("training on %d rain-day rows: %d for runoff (one run per field), %d runoff days for the concentration, "
+             "%d for the classifier (%d high-loss days)", int(is_tr.sum()), int((is_tr & water).sum()),
+             int((is_tr & clean & wet).sum()), int((is_tr & clean).sum()), int((is_tr & clean & high).sum()))
+    runoff, conc, clf = _fit_models(t, is_tr, is_va, rounds)
+    ctr = t.loc[is_tr & clean & wet, [c for c in ("runoff_mm", "days_since_app", "loss_gha", "app_rate_kgha") if c in t.columns]]
     a, k = fit_decay_baseline(ctr["runoff_mm"].to_numpy(), ctr["days_since_app"].to_numpy(),
                               ctr["loss_gha"].to_numpy() / _rate(ctr))
-    cl_tr, cl_va = tr[tr["pest_clean"]], va[va["pest_clean"]]
-    log.info("training high-loss classifier on %d rows (%d positives)", len(cl_tr), int(cl_tr["high_loss"].sum()))
-    clf = fit_classifier(tr, va, rounds)
-    neg = cl_tr[~cl_tr["high_loss"]].sample(min(300_000, int((~cl_tr["high_loss"]).sum())), random_state=0)
-    lr_train = pd.concat([cl_tr[cl_tr["high_loss"]], neg])
+    del ctr
+    neg_rows = np.flatnonzero(is_tr & clean & ~high)
+    neg_rows = np.random.default_rng(0).choice(neg_rows, min(300_000, len(neg_rows)), replace=False)
+    lr_train = t.iloc[np.concatenate([np.flatnonzero(is_tr & clean & high), neg_rows])]
     logreg = make_pipeline(StandardScaler(), LogisticRegression(max_iter=500, class_weight="balanced"))
     logreg.fit(lr_train[CLASSIFIER_FEATURES], lr_train["high_loss"])
+    del lr_train
+    cl_va = t.loc[is_va & clean, CLASSIFIER_FEATURES + ["high_loss"]]
     threshold = _best_f1_threshold(cl_va["high_loss"].to_numpy(), clf.predict(cl_va[CLASSIFIER_FEATURES]))
+    del cl_va
     metrics["trees"] = {"runoff": runoff.num_trees(), "conc": conc.num_trees(), "high_loss": clf.num_trees()}
     metrics["loss_baseline_fit"] = {"a_g_per_ha_per_mm_per_kg_applied": a, "k_per_day": k,
                                     "half_life_days": float(np.log(2) / k)}
@@ -325,6 +365,9 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
     calendar["by_rain_and_weeks"].to_csv(results / "risk_by_rain_and_weeks_since_spraying.csv")
     by_spray = loss_by_spray_date(t[t["pest_clean"]])
     by_spray.to_csv(results / "loss_by_spray_date.csv")
+    after = loss_after_spraying(t[t["pest_clean"]])
+    if not after.empty:
+        after.to_csv(results / "loss_after_spraying.csv")
     from .figures import spray_date_figure
     spray_date_figure(by_spray, Path(figures))
 
@@ -335,13 +378,14 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
     # year-out score (`train --cv`); they cannot be tested themselves, as no data is left over.
     more = lambda b: int(round(1.1 * b.num_trees()))  # noqa: E731
     log.info("training the final models on all %d rows", len(t))
-    final = {"runoff": fit_runoff(t, rounds=more(runoff)), "conc": fit_conc(t, rounds=more(conc)),
-             "high_loss": fit_classifier(t, rounds=more(clf))}
+    f_runoff, f_conc, f_clf = _fit_models(t, np.ones(len(t), dtype=bool), None,
+                                          {"runoff": more(runoff), "conc": more(conc), "high_loss": more(clf)})
+    final = {"runoff": f_runoff, "conc": f_conc, "high_loss": f_clf}
     for name, booster in final.items():
         booster.save_model(model_dir / MODEL_FILES[name])
     metrics["final_models"] = {"trained_on": "all weather files, all years", "rain_day_rows": int(len(t)),
                                "rain_day_rows_one_run_per_field": int(len(_water(t))),
-                               "runoff_days_with_trusted_pesticide": int(len(_conc_rows(t))),
+                               "runoff_days_with_trusted_pesticide": int((clean & wet).sum()),
                                "trees": {n: b.num_trees() for n, b in final.items()}}
     tr = t                                             # feature ranges below describe the final training data
 
@@ -377,21 +421,23 @@ def yearly_cv(features_path: str | Path = "data/processed/features.parquet",
     """
     from .quality import app_year
 
-    t = pd.read_parquet(features_path)
+    t = load_features(features_path)
     files = split_by_weather(t["met_hash"]).to_numpy()
+    clean, wet = t["pest_clean"].to_numpy(dtype=bool), (t["runoff_mm"] > 0).to_numpy()
     year = app_year(pd.DatetimeIndex(t["date"]))
     with_data = pd.Series(year[t["pest_clean"].to_numpy()]).value_counts()
     years = sorted(int(y) for y in with_data.index[with_data >= 0.02 * with_data.sum()])
     rows, pooled = [], []
     for y in years:
         stop_year = years[(years.index(y) + 1) % len(years)]
-        tr = t[(files == "train") & (year != y) & (year != stop_year)]
-        va = t[(files != "test") & (year == stop_year)]
+        is_tr = (files == "train") & (year != y) & (year != stop_year)
+        is_va = (files != "test") & (year == stop_year)
         te = t[(files == "test") & (year == y)].copy()
-        runoff, conc, clf = fit_runoff(tr, va, rounds), fit_conc(tr, va, rounds), fit_classifier(tr, va, rounds)
-        ctr = _conc_rows(tr)
+        runoff, conc, clf = _fit_models(t, is_tr, is_va, rounds)
+        ctr = t.loc[is_tr & clean & wet, [c for c in ("runoff_mm", "days_since_app", "loss_gha", "app_rate_kgha") if c in t.columns]]
         a, k = fit_decay_baseline(ctr["runoff_mm"].to_numpy(), ctr["days_since_app"].to_numpy(),
                                   ctr["loss_gha"].to_numpy() / _rate(ctr))
+        del ctr
 
         te["runoff_pred"] = runoff.predict(te[RUNOFF_FEATURES])
         tc = te[te["pest_clean"]].copy()
@@ -483,22 +529,77 @@ def loss_by_spray_date(clean: pd.DataFrame) -> pd.DataFrame:
     need = {"app_season", "app_doy", "app_rate_kgha"}
     if not need <= set(clean.columns):
         return pd.DataFrame()
-    g = clean.groupby(["run", "app_season"], observed=True)
-    s = g.agg(loss_gha=("loss_gha", "sum"), app_doy=("app_doy", "first"), rate=("app_rate_kgha", "first"),
-              last_day=("days_since_app", "max"), high_loss_days=("high_loss", "sum"))
-    s = s[s["last_day"] >= 300]
+    s = _kept_seasons(clean, loss_gha=("loss_gha", "sum"), high_loss_days=("high_loss", "sum"))
     if s.empty:
         return pd.DataFrame()
     s["pct_of_dose_lost"] = 100 * s["loss_gha"] / (1000 * s["rate"])
+    out = s.groupby("sprayed").agg(seasons=("loss_gha", "size"), mean_pct_of_dose_lost=("pct_of_dose_lost", "mean"),
+                                   median_pct_of_dose_lost=("pct_of_dose_lost", "median"),
+                                   p90_pct_of_dose_lost=("pct_of_dose_lost", lambda x: x.quantile(0.9)),
+                                   mean_loss_gha=("loss_gha", "mean"))
+    return out.round(4)
+
+
+def _kept_seasons(clean: pd.DataFrame, **aggs) -> pd.DataFrame:
+    """One row per season (run, app_season) that lasts at least 300 days, with its half-month of spraying.
+
+    Extra named aggregations (as in `DataFrame.agg`) can be passed in `aggs`.
+    """
+    g = clean.groupby(["run", "app_season"], observed=True)
+    s = g.agg(app_doy=("app_doy", "first"), rate=("app_rate_kgha", "first"),
+              last_day=("days_since_app", "max"), **aggs)
+    s = s[s["last_day"] >= 300].copy()
+    if s.empty:
+        return s
     # the real date: day of the year counted in the year of the spraying (leap years shift it by one)
     year = s.index.get_level_values("app_season").astype(int)
     when = pd.Series(pd.to_datetime({"year": year, "month": 1, "day": 1}).to_numpy(), index=s.index) \
         + pd.to_timedelta(s["app_doy"] - 1, unit="D")
     s["sprayed"] = when.dt.strftime("%m %b ") + np.where(when.dt.day <= 15, "1-15", "16-end")
-    out = s.groupby("sprayed").agg(seasons=("loss_gha", "size"), mean_pct_of_dose_lost=("pct_of_dose_lost", "mean"),
-                                   median_pct_of_dose_lost=("pct_of_dose_lost", "median"),
-                                   p90_pct_of_dose_lost=("pct_of_dose_lost", lambda x: x.quantile(0.9)),
-                                   mean_loss_gha=("loss_gha", "mean"))
+    return s
+
+
+def loss_after_spraying(clean: pd.DataFrame, periods=((0, 30), (31, 120), (121, None))) -> pd.DataFrame:
+    """When after the spraying is the dose lost? Rain, runoff and loss per season, by period after spraying.
+
+    Same seasons and the same half-month label as `loss_by_spray_date`. Sums are divided by the number
+    of seasons, so each value is the mean of one season (a season without rain in a period counts as 0).
+    """
+    need = {"run", "app_season", "app_doy", "app_rate_kgha", "days_since_app", "loss_gha", "runoff_mm",
+            "rain_mm", "cn_today"}
+    if not need <= set(clean.columns):
+        return pd.DataFrame()
+    s = _kept_seasons(clean)
+    if s.empty:
+        return pd.DataFrame()
+    labels = [f"{lo}-{hi}" if hi is not None else f"{lo}+" for lo, hi in periods]
+    days = clean["days_since_app"].to_numpy()
+    inside = [(days >= lo) & (days <= (np.inf if hi is None else hi)) for lo, hi in periods]
+    codes = np.select(inside, range(len(periods)), -1)           # -1: in no period, dropped below
+    rows = clean[["run", "app_season", "rain_mm", "runoff_mm", "cn_today"]].assign(
+        pct=100 * clean["loss_gha"].to_numpy() / (1000 * clean["app_rate_kgha"].to_numpy()),
+        days_after_spraying=pd.Categorical.from_codes(codes, labels))
+    p = rows.groupby(["run", "app_season", "days_after_spraying"], observed=True).agg(
+        rain_mm=("rain_mm", "sum"), runoff_mm=("runoff_mm", "sum"), pct_of_dose_lost=("pct", "sum"),
+        cn_sum=("cn_today", "sum"), cn_n=("cn_today", "count"))
+    del rows
+    # keep only the long seasons, and give each its half-month
+    p = p.reset_index().merge(s[["sprayed"]].reset_index(), on=["run", "app_season"], how="inner")
+    out = p.groupby(["sprayed", "days_after_spraying"], observed=True)[
+        ["rain_mm", "runoff_mm", "pct_of_dose_lost", "cn_sum", "cn_n"]].sum()
+    full = pd.MultiIndex.from_product([sorted(s["sprayed"].unique()), pd.CategoricalIndex(labels, categories=labels)],
+                                      names=["sprayed", "days_after_spraying"])
+    out = out.reindex(full)
+    out[["rain_mm", "runoff_mm", "pct_of_dose_lost", "cn_n"]] = \
+        out[["rain_mm", "runoff_mm", "pct_of_dose_lost", "cn_n"]].fillna(0)
+    seasons = s.groupby("sprayed").size()
+    out.insert(0, "seasons", seasons.reindex(out.index.get_level_values("sprayed")).to_numpy())
+    for c in ("rain_mm", "runoff_mm", "pct_of_dose_lost"):
+        out[c] = out[c] / out["seasons"]
+    out["curve_number"] = out["cn_sum"] / out["cn_n"].where(out["cn_n"] > 0)
+    out["pct_of_dose_per_mm_runoff"] = out["pct_of_dose_lost"] / out["runoff_mm"].where(out["runoff_mm"] > 0)
+    out = out.drop(columns=["cn_sum", "cn_n"])
+    out.index = out.index.set_levels(out.index.levels[1].astype(str), level=1)
     return out.round(4)
 
 

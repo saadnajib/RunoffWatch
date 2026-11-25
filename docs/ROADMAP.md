@@ -59,6 +59,9 @@ Still to do:
 - [ ] Show uncertainty (for example a range from several forecast members)
 
 ## Phase 6 – New simulation runs (prepared; now possible locally)
+**25 Nov 2026:** runs with varied spray date and dose were made locally (`rerun --variants 2`,
+11,209 usable runs) and the models retrained with spray day and dose as inputs; see MODEL_REPORT.md,
+section 4. Half-life (DT50) and sorption (Koc) are still not varied.
 `python -m runoffwatch design` writes the run files; see [NEW_RUNS_PLAN.md](NEW_RUNS_PLAN.md).
 - [x] Generator for a designed experiment: spray date, dose, half-life and sorption varied; control
       group that changes only the Henry constant

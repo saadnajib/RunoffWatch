@@ -10,6 +10,7 @@ field measurements. See the "Limits" box in the app.
 """
 
 import warnings
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -25,7 +26,42 @@ st.caption("Prototype. Predicts how much pesticide would be washed off the field
 
 @st.cache_resource
 def _models():
-    return load_models("models")
+    # models trained on runs with varied spray dates and doses, if they are there
+    return load_models("models/varied" if Path("models/varied/meta.json").exists() else "models")
+
+
+def _spray_windows(days) -> str:
+    """Spray days of the year as date ranges, e.g. '15 Feb-30 Apr and 1 Oct-30 Nov'.
+
+    The same date is one day later in a leap year (after February), so a range starts with the
+    date of a common year and ends with the date of a leap year.
+    """
+    days = sorted(int(d) for d in days)
+    groups, start = [], days[0]
+    for a, b in zip(days, days[1:] + [None]):
+        if b is None or b - a > 3:
+            groups.append((start, a)); start = b
+    def text(d, year):
+        t = pd.Timestamp(year=year, month=1, day=1) + pd.Timedelta(days=d - 1)
+        return f"{t.day} {t:%b}"
+
+    parts = [text(a, 2001) if text(a, 2001) == text(b, 2000) else f"{text(a, 2001)}-{text(b, 2000)}"
+             for a, b in groups]
+    return " and ".join(parts)
+
+
+def _spray_limits(meta: dict) -> str:
+    """The 'Limits' lines about spray date and dose, true for the models that were loaded."""
+    on = meta["trained_on"]
+    days = on.get("spray_days_seen") or [60, 61]
+    doses = [1000 * float(d) for d in on.get("doses_kgha") or [2.4]]
+    if len(days) <= 2 and len(doses) == 1:           # models that only know the delivered runs
+        return (f"- These models only know **spraying on {_spray_windows(days)} with {doses[0]:.0f} g/ha**. "
+                "Another dose is scaled in proportion, and another spray day is a guess.\n"
+                "- In those runs \"days since spraying\" and the calendar date move together, so the model "
+                "cannot tell them apart. Moving the spray day is new to it.\n")
+    return (f"- These models learned from runs sprayed **{_spray_windows(days)}**, with doses of "
+            f"**{min(doses):.0f} to {max(doses):.0f} g/ha**. A spray day or dose outside these is a guess.\n")
 
 
 try:
@@ -104,12 +140,9 @@ with st.expander("Limits: read before trusting a number", expanded=True):
     st.markdown("""
 - The model learned from **PRZM simulations**, not from field measurements. It tells you what PRZM would say.
 - All simulations are for **one herbicide (Flufenacet) on winter cereals**. Other products and crops are **not covered**.
-- Unless the models were trained on runs with varied spray dates and doses, they only know **spraying on
-  1 March with 2400 g/ha**: another dose is then scaled in proportion, and another season is a guess.
-  The app says so above the table when that is the case.
+""" + _spray_limits(models["meta"]) + """\
+  The app warns above the table when your spray day or dose is outside what the models have seen.
 - "Loss" is pesticide leaving the field edge with runoff water. What reaches a stream is not modelled.
-- In the runs sprayed on 1 March, "days since spraying" and the calendar date move together, so
-  moving the spray day is new to models trained only on those runs.
 - The sliders change one soil property at a time. Real soils change several together; unusual
   combinations are not covered by the training runs.
 - On years it has not seen, the model underestimates total loss and can miss extreme storms.

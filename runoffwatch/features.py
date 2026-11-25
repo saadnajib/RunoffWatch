@@ -184,7 +184,7 @@ def build_feature_table(interim: str | Path | list = "data/interim", out: str | 
     folders = [Path(p) for p in (interim if isinstance(interim, (list, tuple)) else [interim])]
     parts, seen_fields = [], set()
     for folder in folders:
-        rq = pd.read_csv(folder / "run_quality.csv", index_col="run", parse_dates=["clean_until"])
+        rq = pd.read_csv(folder / "run_quality.csv", index_col="run", parse_dates=["clean_until"], low_memory=False)
         rq = rq[rq["clean_until"].notna() & rq["usle_k"].notna()]
         runs = sorted(rq.index)[:limit]
         first_run_of = {}

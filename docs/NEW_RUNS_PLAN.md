@@ -10,6 +10,10 @@ cover the rest of the older plan below: half-life (DT50) and sorption (Koc) are 
 soil and weather stay those of each field, and there is no control group. The tool has not been
 run with the real program yet. The plan below stays as it was written.
 
+**Note 25 Nov 2026: done.** The tool has now been run with the real program: 11,218 runs, 11,209
+usable, and the models were retrained on them. See MODEL_REPORT.md, section 4, and DATA_REPORT.md,
+section 6. Half-life, sorption and the control group are still not done.
+
 **Status: prepared, not submitted.** The run files can be generated on your
 own computer. Uploading them to the modelling workstation needs the agreement
 of the model owners in Landau first.

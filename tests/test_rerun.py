@@ -1033,3 +1033,27 @@ def test_full_results_leaves_out_runs_that_stopped_early(tmp_path):
         (d / "RUN X.ZTS").write_bytes(b"x" * size); (d / "RUN X.OUT").write_bytes(b"y")
     assert full_results(tmp_path / "fixed") == {"run_a", "run_b", "run_c"}
     assert full_results(tmp_path / "nothing_here") == set()
+
+
+def test_is_done_rejects_result_file_of_only_zero_bytes(tmp_path):
+    """A run stopped while writing can leave a .ZTS file of full size that holds only NUL bytes."""
+    zeros, normal = tmp_path / "zeros", tmp_path / "normal"
+    for d in (zeros, normal):
+        d.mkdir(); (d / "RUN X.OUT").write_bytes(b"y")
+    (zeros / "RUN X.ZTS").write_bytes(b"\x00" * 46000)
+    (normal / "RUN X.ZTS").write_bytes(b" Date  RUNF0  ESLS0\r\n" + b"1 0.0 0.0\r\n" * 4000)
+    assert not is_done(zeros)
+    assert is_done(normal)
+    # zeros only at the start, data later in the first 4096 bytes: still a result
+    part = tmp_path / "part"; part.mkdir(); (part / "RUN X.OUT").write_bytes(b"y")
+    (part / "RUN X.ZTS").write_bytes(b"\x00" * 4000 + b"x" * 42000)
+    assert is_done(part)
+
+
+def test_full_results_leaves_out_files_of_only_zero_bytes(tmp_path):
+    from runoffwatch.rerun import full_results
+    root = tmp_path / "fixed" / "batchA"
+    for name, body in (("run_a", b"x" * 46000), ("run_b", b"x" * 46000), ("run_nul", b"\x00" * 46000)):
+        d = root / name; d.mkdir(parents=True)
+        (d / "RUN X.ZTS").write_bytes(body); (d / "RUN X.OUT").write_bytes(b"y")
+    assert full_results(tmp_path / "fixed") == {"run_a", "run_b"}

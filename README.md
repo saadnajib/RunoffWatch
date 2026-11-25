@@ -18,35 +18,60 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
 
 ## Main results so far
 
-> **Important, 23 Nov 2026:** the results below **are from the corrected simulations**. Two
-> settings in the delivered simulations were wrong (the Henry constant and the reference soil
-> moisture), which made the pesticide numbers wrong in every run; all fields were re-run with
-> [`rerun`](#step-2-redo-the-simulations-with-corrected-settings-windows-only) and all models
-> retrained ([docs/DATA_REPORT.md, section 6](docs/DATA_REPORT.md#6-local-re-runs-two-settings-are-wrong-23-nov-2026)).
+> **Current state, 25 Nov 2026:** the models are now trained on simulations with **varied spray
+> dates and doses**. Every field with a corrected result got two more PRZM runs, one sprayed in
+> spring (15 Feb - 30 Apr) and one in autumn (1 Oct - 30 Nov), with 0.24, 1.20 or 2.40 kg/ha. The
+> earlier models, trained on the corrected runs that are all sprayed on 1 March with 2.4 kg/ha,
+> are kept for comparison. Details: [docs/MODEL_REPORT.md, section 4](docs/MODEL_REPORT.md#4-results-with-varied-spray-dates-and-doses).
+>
+> **23 Nov 2026:** two settings in the delivered simulations were wrong (the Henry constant and
+> the reference soil moisture), which made the pesticide numbers wrong in every run; all fields
+> were re-run with [`rerun`](#step-2-redo-the-simulations-with-corrected-settings-windows-only)
+> ([docs/DATA_REPORT.md, section 6](docs/DATA_REPORT.md#6-local-re-runs-two-settings-are-wrong-23-nov-2026)).
 > The old results are kept in `docs/results/delivered/` and `docs/figures/delivered/`; an
 > old-vs-new table is at the top of [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md).
 
 - The data: 9,977 real fields in France (a random sample of real pesticide applications), each
   with its own soil, slope and Agri4Cast weather. After the corrected re-run **5,609 fields have a
-  full ten-year result** (3,958 as delivered); 1,335 cannot be calculated by PRZM. Pesticide, dose
-  and spray date are the same in every run. The weather is labelled 1990-1999 but is really 2006-2015.
+  full ten-year result** (3,958 as delivered); 1,335 cannot be calculated by PRZM. The weather is
+  labelled 1990-1999 but is really 2006-2015.
+- With the varied runs the models learn from 16,818 runs (the 5,609 runs sprayed on 1 March plus
+  11,209 runs with varied spray dates and doses): 24.6 million rain days. The pesticide is
+  Flufenacet in every run, and the crop is always winter cereals with the same crop calendar.
 - In the delivered simulations the pesticide numbers were broken (losses up to 1e34 g/ha) and,
   as the re-runs showed, wrong in all runs. In the corrected runs PRZM's own pesticide balance is
-  exact, so all 5,609 runs are used. The water part did not change.
-- Tested by leaving out one year at a time (ten years, and weather files never used in training),
-  the surrogate reproduces PRZM's daily runoff with R² 0.98 (curve-number formula alone: 0.94) and
-  daily pesticide loss with R² 0.95 (0.89 to 0.99 depending on the year; simple baseline: 0.12).
-  It finds high-loss days with PR-AUC 0.97: 92 % of its alarms are real, and it finds 90 % of
-  the high-loss days. Its total loss is 0.99 times PRZM's (0.86 to 1.12 in single years).
-- It is about a hundred times faster than PRZM (0.03 s against 3.4 s for ten years of one field).
-- Run on 45 years of real weather (1979-2023) for all fields, the surrogate shows that the worst
-  year has 2.8 times the loss of the median year, and that five years carry 23 % of all loss.
-- A second surrogate, a small LSTM, beats the trees on daily pesticide loss and on finding
-  high-loss days in a first test on two years, but is much less exact on small losses and puts
-  the total 8 % too low; it still needs the year-by-year test.
+  exact, so all runs are used. The water part did not change.
+- Tested by leaving out one year at a time (ten years, and weather files never used in training):
 
-Everything describes the PRZM model for Flufenacet at 2.4 kg/ha on winter cereals
-sprayed on 1 March. It is not validated against measurements.
+  | | **Varied dates and doses** | Corrected, 1 March only |
+  |---|---|---|
+  | Runoff, daily R² (curve-number formula alone: 0.94) | **0.98** | 0.98 |
+  | Pesticide loss, daily R² (range over years) | **0.92** (0.78-0.97) | 0.95 (0.89-0.99) |
+  | Sum of all loss, surrogate / PRZM (range over years) | **0.98** (0.90-1.18) | 0.99 (0.86-1.12) |
+  | High-loss days, PR-AUC | **0.97** | 0.97 |
+  | Alarms that are real / high-loss days found | **92 % / 92 %** | 92 % / 90 % |
+
+  The harder task costs a little accuracy on daily loss. In one year (1990) a simple formula
+  beats the surrogate; we do not know why yet.
+- **Spray date (read straight from PRZM).** Spraying in autumn loses 2 to 7 times more of the dose
+  than spraying in spring. The chemistry per millimetre of runoff is the same; the difference is how
+  much water runs off in the first month. That comes from PRZM's fixed crop calendar: until the
+  crop emerges on 12 Nov (the same date in every field and year) much more rain becomes runoff.
+  So the sharp step in mid-November is a property of the PRZM scenario, not of nature
+  ([docs/MODEL_REPORT.md](docs/MODEL_REPORT.md#what-przm-says-about-the-spray-date-and-why)).
+- It is about 70 times faster than PRZM (0.05 s against 3.4 s for ten years of one field; the
+  1-March models: 0.03 s).
+- Run on 45 years of real weather (1979-2023) for all fields, sprayed on 1 March, the surrogate
+  shows that the worst year has 2.8 times the loss of the median year, and that five years carry
+  23 % of all loss (1-March models; the new models give the same five worst years).
+- A second surrogate, a small LSTM, beats the trees on daily pesticide loss and on finding
+  high-loss days in a first test on two years (1-March data), but is much less exact on small
+  losses and puts the total 8 % too low; it still needs the year-by-year test and does not handle
+  varied spray dates yet.
+
+Everything describes the PRZM model for Flufenacet on winter cereals, sprayed between 15 Feb and
+30 Apr or between 1 Oct and 30 Nov with 0.24 to 2.4 kg/ha. It is not validated against
+measurements.
 
 ## How to run it, step by step
 
@@ -104,7 +129,7 @@ pip install -e ".[dev,app]"
 python -m pytest -q
 ```
 
-You should see `521 passed, 1 skipped` (the skipped one needs PyTorch; with PyTorch installed it is `522 passed`).
+You should see `526 passed, 1 skipped` (the skipped one needs PyTorch; with PyTorch installed it is `527 passed`).
 
 **Step 5. Ask the model a question.** This compares 7 possible spray days for a made-up weather example.
 
@@ -190,7 +215,8 @@ dose. By default each copy gets one of two spray windows (15 Feb to 30 Apr, or 1
 one of three doses (0.24, 1.20 or 2.40 kg/ha) and, inside its window, a different random spray day
 in each of the ten simulated years. With two copies, a field gets one spring and one autumn copy.
 
-A trial with 10 fields (20 runs) has worked with the real PRZM program. Try 10 fields first:
+A trial with 10 fields (20 runs) worked with the real PRZM program, and on 25 Nov 2026 the full
+set (11,218 runs) was made and analysed (docs/MODEL_REPORT.md, section 4). Try 10 fields first:
 
 ```bash
 python -m runoffwatch rerun --exe C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe --variants 2 --limit 10
@@ -244,13 +270,25 @@ python -m runoffwatch --dataset varied train
 python -m runoffwatch --dataset varied train --cv
 ```
 
+Optional, the 45-year run with the new models:
+
+```bash
+python -m runoffwatch --dataset varied france
+```
+
+Run `train`, `train --cv` and `france` as **separate commands**, one after the other, not in one
+go: this data set is large, and each step needs about 12 GB of memory. `train` takes about
+22 minutes, `train --cv` about 70 minutes (measured on the project PC).
+
 The feature table holds the corrected runs (sprayed on 1 March) plus the copies with varied spray
 dates and doses. Models go to `models/varied/`, results to `docs/results/varied/` and figures to
 `docs/figures/varied/`, so nothing of the corrected data set is overwritten. `train` also writes
 `loss_by_spray_date.csv` and the figure `m9_loss_by_spray_date.png`: the share of the dose lost in
 the year after spraying, by half-month of spraying, straight from PRZM. `train --cv` adds scores
 per spray window and per dose. The LSTM comparison is not adapted: it refuses runs that are not
-sprayed on 1 March.
+sprayed on 1 March. The app (`streamlit run app.py`) uses the models in `models/varied/`
+when that folder is there, and otherwise the 1-March models in `models/`. On the command line,
+`python -m runoffwatch --dataset varied whatif` uses the models in `models/varied/`.
 
 Unconfirmed: the delivered dose of 2.4 kg/ha looks about ten times higher than usual field rates
 of flufenacet products (a few hundred grams per hectare). This comes from general knowledge and
@@ -307,8 +345,8 @@ set needs about 5 GB of free disk space (measured on the delivered data); both n
 | The three project tasks | Where to look |
 |---|---|
 | **Task 1.** Find the broken simulations | [docs/DATA_REPORT.md](docs/DATA_REPORT.md), numbers in `docs/results/quality_summary.json` |
-| **Task 2.** Predict high-loss days and explain them | [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md), sections 3 and 4 |
-| **Task 3.** Fast copy of the simulator (emulator) | [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md), sections 1 to 3; try it with Part A, steps 5 and 6 |
+| **Task 2.** Predict high-loss days and explain them | [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md), sections 3 to 5 |
+| **Task 3.** Fast copy of the simulator (emulator) | [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md), sections 1 to 4; try it with Part A, steps 5 and 6 |
 
 Running Part B overwrites the models, figures and result files that came with the repository
 (`models/`, `docs/results/`, `docs/figures/`). The reports were written with exactly those files,
@@ -378,7 +416,7 @@ report for one single run.
 | `runoffwatch/lstm.py` | Second surrogate: an LSTM, compared with the trees |
 | `runoffwatch/longrun.py` | Surrogate on 45 years of Agri4Cast weather for France |
 | `runoffwatch/design.py` | Generator for new simulation runs (run files and task archives) |
-| `tests/` | 522 tests on synthetic run folders (no project data in git) |
+| `tests/` | 527 tests on synthetic run folders (no project data in git) |
 | `runoffwatch/pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code, kept for reference |
 
 Code and documents were written with the help of an AI assistant (Claude).
