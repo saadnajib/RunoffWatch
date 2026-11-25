@@ -606,10 +606,10 @@ Autumn spraying loses 2 to 7 times more of the dose than spring spraying.
 **Why** (first 30 days after spraying, mean per season;
 [`loss_after_spraying.csv`](results/varied/loss_after_spraying.csv)):
 - One mm of runoff carries about the same share of the dose in every window
-  (0.04–0.07 %). The chemistry does not differ.
-- What differs is how much water runs off in the first month: 0.7–1.7 mm in
-  spring, 7–9 mm in October, 2.7 mm in late November. Rain differs far less
-  (48–66 mm in spring, 70–76 mm in autumn).
+  (0.05–0.06 %). The chemistry does not differ.
+- What differs is how much water runs off in the first month: 0.7–1.5 mm in
+  spring, 8–9 mm in October, 2.9 mm in late November. Rain differs far less
+  (49–66 mm in spring, 74–78 mm in autumn).
 - The cause is the crop calendar of the PRZM scenario (section 4). Between
   harvest (31 Jul) and emergence (12 Nov) the field counts as stubble or
   fallow with a high curve number, so more rain becomes runoff. From 12 Nov,
@@ -750,7 +750,7 @@ cd RunoffWatch
 python -m venv .venv
 .venv\Scripts\activate          # Windows; on Mac/Linux: source .venv/bin/activate
 pip install -e ".[dev,app]"
-python -m pytest -q             # 522 passed (23 Nov, with PyTorch installed)
+python -m pytest -q             # 527 passed (25 Nov, with PyTorch installed)
 python -m runoffwatch whatif
 streamlit run app.py
 ```

@@ -415,25 +415,29 @@ runs sprayed on 1 March.) File: [`results/varied/loss_by_spray_date.csv`](result
 the number PRZM uses for how easily rain becomes runoff: the higher, the more runoff.
 File: [`results/varied/loss_after_spraying.csv`](results/varied/loss_after_spraying.csv).
 
-| Sprayed | Rain, mm | Runoff, mm | Mean curve number | % of dose lost | % of dose lost per mm of runoff |
-|---|---|---|---|---|---|
-| Feb 16-end | 51 | 0.9 | 80.5 | 0.05 | 0.055 |
-| Mar 1-15 | 48 | 0.7 | 80.5 | 0.04 | 0.057 |
-| Mar 16-end | 48 | 0.7 | 80.5 | 0.04 | 0.050 |
-| Apr 1-15 | 57 | 1.4 | 80.5 | 0.06 | 0.043 |
-| Apr 16-end | 66 | 1.7 | 80.5 | 0.08 | 0.050 |
-| Oct 1-15 | 70 | 7.3 | 87.0 | 0.35 | 0.048 |
-| Oct 16-end | 76 | 8.9 | 85.9 | 0.52 | 0.059 |
-| Nov 1-11 | 75 | 5.9 | 82.7 | 0.38 | 0.066 |
-| Nov 12-15 | 70 | 3.0 | 80.5 | 0.17 | 0.057 |
-| Nov 16-end | 71 | 2.7 | 80.5 | 0.14 | 0.052 |
+| Sprayed | Seasons | Rain, mm | Runoff, mm | Mean curve number | % of dose lost | % of dose lost per mm of runoff |
+|---|---|---|---|---|---|---|
+| Feb 16-end | 9,838 | 51 | 0.9 | 80.5 | 0.05 | 0.056 |
+| Mar 1-15 | 66,449 | 52 | 0.8 | 80.5 | 0.05 | 0.057 |
+| Mar 16-end | 10,627 | 49 | 0.7 | 80.5 | 0.04 | 0.050 |
+| Apr 1-15 | 9,936 | 55 | 1.1 | 80.5 | 0.05 | 0.046 |
+| Apr 16-end | 9,236 | 66 | 1.5 | 80.5 | 0.07 | 0.047 |
+| Oct 1-15 | 12,360 | 74 | 7.8 | 87.0 | 0.37 | 0.047 |
+| Oct 16-end | 13,273 | 78 | 9.4 | 86.0 | 0.55 | 0.058 |
+| Nov 1-15 | 12,386 | 75 | 5.3 | 82.2 | 0.33 | 0.063 |
+| Nov 16-end | 12,252 | 75 | 2.9 | 80.5 | 0.15 | 0.051 |
+
+The table uses half-months, so the first half of November mixes days before and after emergence.
+Splitting November at the emergence date (a one-off check on the varied runs alone): sprayed
+1 to 11 Nov, 5.9 mm of runoff and 0.38 % of the dose lost in the first 30 days; sprayed 12 to
+15 Nov, 3.0 mm and 0.17 %. The rain was about the same (75 and 70 mm).
 
 Reading:
 - **The chemistry is the same.** One millimetre of runoff carries about the same share of the
-  dose in every window (0.04 to 0.07 %).
-- **The amount of runoff in the first month is what differs.** It is 0.7 to 1.7 mm in spring,
-  7 to 9 mm in October and 2.7 mm in late November. The rain differs far less (48 to 66 mm in
-  spring, 70 to 76 mm in autumn).
+  dose in every window (0.05 to 0.06 %).
+- **The amount of runoff in the first month is what differs.** It is 0.7 to 1.5 mm in spring,
+  8 to 9 mm in October and 2.9 mm in late November. The rain differs far less (49 to 66 mm in
+  spring, 74 to 78 mm in autumn).
 - **The cause is PRZM's crop calendar.** Every field is winter cereals with the same calendar in
   every year: emergence 12 Nov, maturity 10 Jun, harvest 31 Jul. Between harvest and emergence
   the field counts as stubble or bare soil, with a high curve number, so far more rain runs off.

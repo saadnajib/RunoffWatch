@@ -365,6 +365,9 @@ def train_all(features_path: str | Path = "data/processed/features.parquet", mod
     calendar["by_rain_and_weeks"].to_csv(results / "risk_by_rain_and_weeks_since_spraying.csv")
     by_spray = loss_by_spray_date(t[t["pest_clean"]])
     by_spray.to_csv(results / "loss_by_spray_date.csv")
+    after = loss_after_spraying(t[t["pest_clean"]])
+    if not after.empty:
+        after.to_csv(results / "loss_after_spraying.csv")
     from .figures import spray_date_figure
     spray_date_figure(by_spray, Path(figures))
 
@@ -526,22 +529,77 @@ def loss_by_spray_date(clean: pd.DataFrame) -> pd.DataFrame:
     need = {"app_season", "app_doy", "app_rate_kgha"}
     if not need <= set(clean.columns):
         return pd.DataFrame()
-    g = clean.groupby(["run", "app_season"], observed=True)
-    s = g.agg(loss_gha=("loss_gha", "sum"), app_doy=("app_doy", "first"), rate=("app_rate_kgha", "first"),
-              last_day=("days_since_app", "max"), high_loss_days=("high_loss", "sum"))
-    s = s[s["last_day"] >= 300]
+    s = _kept_seasons(clean, loss_gha=("loss_gha", "sum"), high_loss_days=("high_loss", "sum"))
     if s.empty:
         return pd.DataFrame()
     s["pct_of_dose_lost"] = 100 * s["loss_gha"] / (1000 * s["rate"])
+    out = s.groupby("sprayed").agg(seasons=("loss_gha", "size"), mean_pct_of_dose_lost=("pct_of_dose_lost", "mean"),
+                                   median_pct_of_dose_lost=("pct_of_dose_lost", "median"),
+                                   p90_pct_of_dose_lost=("pct_of_dose_lost", lambda x: x.quantile(0.9)),
+                                   mean_loss_gha=("loss_gha", "mean"))
+    return out.round(4)
+
+
+def _kept_seasons(clean: pd.DataFrame, **aggs) -> pd.DataFrame:
+    """One row per season (run, app_season) that lasts at least 300 days, with its half-month of spraying.
+
+    Extra named aggregations (as in `DataFrame.agg`) can be passed in `aggs`.
+    """
+    g = clean.groupby(["run", "app_season"], observed=True)
+    s = g.agg(app_doy=("app_doy", "first"), rate=("app_rate_kgha", "first"),
+              last_day=("days_since_app", "max"), **aggs)
+    s = s[s["last_day"] >= 300].copy()
+    if s.empty:
+        return s
     # the real date: day of the year counted in the year of the spraying (leap years shift it by one)
     year = s.index.get_level_values("app_season").astype(int)
     when = pd.Series(pd.to_datetime({"year": year, "month": 1, "day": 1}).to_numpy(), index=s.index) \
         + pd.to_timedelta(s["app_doy"] - 1, unit="D")
     s["sprayed"] = when.dt.strftime("%m %b ") + np.where(when.dt.day <= 15, "1-15", "16-end")
-    out = s.groupby("sprayed").agg(seasons=("loss_gha", "size"), mean_pct_of_dose_lost=("pct_of_dose_lost", "mean"),
-                                   median_pct_of_dose_lost=("pct_of_dose_lost", "median"),
-                                   p90_pct_of_dose_lost=("pct_of_dose_lost", lambda x: x.quantile(0.9)),
-                                   mean_loss_gha=("loss_gha", "mean"))
+    return s
+
+
+def loss_after_spraying(clean: pd.DataFrame, periods=((0, 30), (31, 120), (121, None))) -> pd.DataFrame:
+    """When after the spraying is the dose lost? Rain, runoff and loss per season, by period after spraying.
+
+    Same seasons and the same half-month label as `loss_by_spray_date`. Sums are divided by the number
+    of seasons, so each value is the mean of one season (a season without rain in a period counts as 0).
+    """
+    need = {"run", "app_season", "app_doy", "app_rate_kgha", "days_since_app", "loss_gha", "runoff_mm",
+            "rain_mm", "cn_today"}
+    if not need <= set(clean.columns):
+        return pd.DataFrame()
+    s = _kept_seasons(clean)
+    if s.empty:
+        return pd.DataFrame()
+    labels = [f"{lo}-{hi}" if hi is not None else f"{lo}+" for lo, hi in periods]
+    days = clean["days_since_app"].to_numpy()
+    inside = [(days >= lo) & (days <= (np.inf if hi is None else hi)) for lo, hi in periods]
+    codes = np.select(inside, range(len(periods)), -1)           # -1: in no period, dropped below
+    rows = clean[["run", "app_season", "rain_mm", "runoff_mm", "cn_today"]].assign(
+        pct=100 * clean["loss_gha"].to_numpy() / (1000 * clean["app_rate_kgha"].to_numpy()),
+        days_after_spraying=pd.Categorical.from_codes(codes, labels))
+    p = rows.groupby(["run", "app_season", "days_after_spraying"], observed=True).agg(
+        rain_mm=("rain_mm", "sum"), runoff_mm=("runoff_mm", "sum"), pct_of_dose_lost=("pct", "sum"),
+        cn_sum=("cn_today", "sum"), cn_n=("cn_today", "count"))
+    del rows
+    # keep only the long seasons, and give each its half-month
+    p = p.reset_index().merge(s[["sprayed"]].reset_index(), on=["run", "app_season"], how="inner")
+    out = p.groupby(["sprayed", "days_after_spraying"], observed=True)[
+        ["rain_mm", "runoff_mm", "pct_of_dose_lost", "cn_sum", "cn_n"]].sum()
+    full = pd.MultiIndex.from_product([sorted(s["sprayed"].unique()), pd.CategoricalIndex(labels, categories=labels)],
+                                      names=["sprayed", "days_after_spraying"])
+    out = out.reindex(full)
+    out[["rain_mm", "runoff_mm", "pct_of_dose_lost", "cn_n"]] = \
+        out[["rain_mm", "runoff_mm", "pct_of_dose_lost", "cn_n"]].fillna(0)
+    seasons = s.groupby("sprayed").size()
+    out.insert(0, "seasons", seasons.reindex(out.index.get_level_values("sprayed")).to_numpy())
+    for c in ("rain_mm", "runoff_mm", "pct_of_dose_lost"):
+        out[c] = out[c] / out["seasons"]
+    out["curve_number"] = out["cn_sum"] / out["cn_n"].where(out["cn_n"] > 0)
+    out["pct_of_dose_per_mm_runoff"] = out["pct_of_dose_lost"] / out["runoff_mm"].where(out["runoff_mm"] > 0)
+    out = out.drop(columns=["cn_sum", "cn_n"])
+    out.index = out.index.set_levels(out.index.levels[1].astype(str), level=1)
     return out.round(4)
 
 
