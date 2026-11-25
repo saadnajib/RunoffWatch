@@ -1,0 +1,90 @@
+{
+  "trust_rule": "balance",
+  "balance_tolerance_kgha": 0.001,
+  "runs_with_balance_error_above_tolerance": 0,
+  "balance_error_quantiles_kgha": {
+    "0.5": 3.252e-09,
+    "0.9": 4.032e-08,
+    "0.99": 1.475e-07,
+    "1.0": 9.342e-07
+  },
+  "trusted_runs": 11209,
+  "folders": 11218,
+  "status_counts": {
+    "has_output": 11218
+  },
+  "readable_runs": 11209,
+  "distinct_weather_files": 740,
+  "crashed_before_end": 0,
+  "decay_rule_unstable": 0,
+  "envelope_rule_bad_runs": 0,
+  "runs_never_above_envelope": 11209,
+  "flagged_runs_by_factor": {
+    "5": 0,
+    "10": 0,
+    "50": 0,
+    "1000": 0
+  },
+  "clearly_broken_runs": 0,
+  "clearly_broken_factor": 50.0,
+  "first_bad_app_year_counts": {},
+  "median_decay_growth_per_year": 1.0531963305777645,
+  "share_runs_decay_growing_gt_1p5": 0.0,
+  "max_loss_fraction_of_applied": 0.03406691666666667,
+  "clean_run_years": 110184.47,
+  "total_run_years": 110184.47,
+  "runs_with_at_least_3_clean_years": 11209,
+  "full_length_years": 9.998631074606434,
+  "iforest_flagged": 2349,
+  "iforest_agrees_with_decay_rule": 0.7904362565795343,
+  "iforest_recall_of_decay_rule": NaN,
+  "iforest_recall_of_envelope_flagged": NaN,
+  "iforest_recall_of_clearly_broken": NaN,
+  "bad_share_by_subsoil_oc": {
+    "(-0.01, 0.3]": {
+      "runs": 2734,
+      "share_flagged": 0.0,
+      "share_clearly_broken": 0.0
+    },
+    "(0.3, 0.4]": {
+      "runs": 4490,
+      "share_flagged": 0.0,
+      "share_clearly_broken": 0.0
+    },
+    "(0.4, 0.5]": {
+      "runs": 1190,
+      "share_flagged": 0.0,
+      "share_clearly_broken": 0.0
+    },
+    "(0.5, 1.0]": {
+      "runs": 1492,
+      "share_flagged": 0.0,
+      "share_clearly_broken": 0.0
+    },
+    "(1.0, 100.0]": {
+      "runs": 1303,
+      "share_flagged": 0.0,
+      "share_clearly_broken": 0.0
+    }
+  },
+  "drivers": {
+    "cv_auc_mean": NaN,
+    "share_bad": 0.0,
+    "importance": {
+      "usle_k": NaN,
+      "usle_ls": NaN,
+      "slope_pct": NaN,
+      "cn_2": NaN,
+      "h1_bd": NaN,
+      "h1_fc": NaN,
+      "h1_wp": NaN,
+      "h1_oc": NaN
+    }
+  },
+  "envelope": {
+    "quantile": 0.99,
+    "factor": 5.0,
+    "bin_days": 15,
+    "guard_years": 1
+  }
+}
