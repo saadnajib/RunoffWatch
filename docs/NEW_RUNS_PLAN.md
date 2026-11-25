@@ -14,6 +14,12 @@ run with the real program yet. The plan below stays as it was written.
 usable, and the models were retrained on them. See MODEL_REPORT.md, section 4, and DATA_REPORT.md,
 section 6. Half-life, sorption and the control group are still not done.
 
+**Note 25 Nov 2026, evening: warm-up year.** In every run the first crop cycle starts before the
+simulation, so PRZM carries an irregular crop until 12 Nov 1990, and that period is now left out
+(DATA_REPORT.md, section 6, "The warm-up period"). Future runs should either start one year
+earlier or accept losing year one. Whether this is intended is still to be asked of the model
+owner in Landau.
+
 **Status: prepared, not submitted.** The run files can be generated on your
 own computer. Uploading them to the modelling workstation needs the agreement
 of the model owners in Landau first.
