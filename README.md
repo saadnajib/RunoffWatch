@@ -145,7 +145,7 @@ pip install -e ".[dev,app]"
 python -m pytest -q
 ```
 
-With PyTorch installed you should see `565 passed`. Without PyTorch the LSTM tests are skipped
+With PyTorch installed you should see `567 passed`. Without PyTorch the LSTM tests are skipped
 and show as `skipped`; that is fine.
 
 **Step 5. Ask the model a question.** This compares 7 possible spray days for a made-up weather example.
@@ -457,7 +457,7 @@ report for one single run.
 | `runoffwatch/lstm.py` | Second surrogate: an LSTM, compared with the trees |
 | `runoffwatch/longrun.py` | Surrogate on 45 years of Agri4Cast weather for France |
 | `runoffwatch/design.py` | Generator for new simulation runs (run files and task archives) |
-| `tests/` | 565 tests on synthetic run folders (no project data in git) |
+| `tests/` | 567 tests on synthetic run folders (no project data in git) |
 | `runoffwatch/pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code, kept for reference |
 
 Code and documents were written with the help of an AI assistant (Claude).

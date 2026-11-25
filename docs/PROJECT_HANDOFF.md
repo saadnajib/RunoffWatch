@@ -23,7 +23,7 @@ on the full data; do not let an assistant change them from memory.
 > - **New warm-up rule in the code** (section 5.2): rain days before
 >   12 Nov 1990 are left out, and so are pesticide results of sprayings made
 >   before that day. Application year 1990 then drops out of the
->   year-by-year test, which now has nine held-out years (1991–1999). 565
+>   year-by-year test, which now has nine held-out years (1991–1999). 567
 >   tests pass.
 > - **Rerun finished** (25 Nov, late evening): feature table, training,
 >   year-by-year test and 45-year run for 1 March and for 15 October on the
@@ -359,7 +359,7 @@ Why: the first simulated year is a warm-up period with an irregular crop
 (section 4, crop cycles; evidence in 6.9). Its rows are not a fair test and
 disturb training.
 
-How it works in the code (merged on the branch; 565 tests pass):
+How it works in the code (merged on the branch; 567 tests pass):
 - `przm_io.read_crop_emergences(inp)` reads the emergence dates of the crop
   cycles from the `.inp` file.
 - `quality.warm_up_end(emergences, first_day)` gives the end of the warm-up:
@@ -1019,7 +1019,7 @@ cd RunoffWatch
 python -m venv .venv
 .venv\Scripts\activate          # Windows; on Mac/Linux: source .venv/bin/activate
 pip install -e ".[dev,app]"
-python -m pytest -q             # 565 passed (25 Nov, with PyTorch installed)
+python -m pytest -q             # 567 passed (25 Nov, with PyTorch installed)
 python -m runoffwatch whatif
 streamlit run app.py
 ```
@@ -1256,7 +1256,7 @@ decks. New since 17 Nov:
   first simulated year is a warm-up with an irregular crop (the first crop
   cycle starts before the simulation), so 1990 was not a fair test (6.9).
   1998 is decided by one extreme storm (6.9). The warm-up rule is in the code
-  (5.2; 565 tests pass now). Option `france --scenario` added. The runoff
+  (5.2; 567 tests pass now). Option `france --scenario` added. The runoff
   model as a correction of the curve-number formula was tried and rejected
   (6.9).
 - **Done (25 Nov, late evening): rerun with the warm-up rule.** Feature
