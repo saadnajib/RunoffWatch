@@ -429,3 +429,56 @@ def test_build_feature_table_untrusted_first_run_is_skipped(tmp_path):
     t = build_feature_table(tmp_path / "a", tmp_path / "f.parquet")
     assert set(t["run"].astype(str)) == {"run_1_grid_1__v2"}
     assert _water_runs(t) == {"run_1_grid_1__v2"}
+
+
+# --------------------------------------------------------------------------- #
+# Warm-up period at the start of a run (clean_from)
+# --------------------------------------------------------------------------- #
+def _warm_up_rows():
+    d = _run_daily()                                     # sprayed on day 30 and day 95
+    clean_from, clean_until = d.index[60], pd.Timestamp("2021-01-01")
+    return d, clean_from, run_feature_rows(d, _params(), clean_until), \
+        run_feature_rows(d, _params(), clean_until, clean_from)
+
+
+def test_run_feature_rows_warm_up_rows_are_dropped():
+    d, clean_from, old, new = _warm_up_rows()
+    assert (new.index >= clean_from).all()
+    assert list(new.index) == list(old.index[old.index >= clean_from])
+
+
+def test_run_feature_rows_warm_up_spraying_is_not_clean():
+    d, clean_from, old, new = _warm_up_rows()
+    first_cycle = new.index < d.index[95]                # rows of the spraying made in the warm-up
+    assert first_cycle.any() and not new.loc[first_cycle, "pest_clean"].any()
+    assert old.loc[new.index[first_cycle], "pest_clean"].all()        # they were clean without clean_from
+    assert new.loc[~first_cycle, "pest_clean"].all()                  # the next spraying is clean
+
+
+def test_run_feature_rows_warm_up_keeps_rain_history():
+    d, clean_from, old, new = _warm_up_rows()
+    cols = [c for c in new.columns if c != "pest_clean"]
+    pd.testing.assert_frame_equal(new[cols], old.loc[new.index, cols])
+    assert new["rain_30d_mm"].iloc[0] == old.loc[new.index[0], "rain_30d_mm"] > 0
+
+
+@pytest.mark.parametrize("none", [None, pd.NaT])
+def test_run_feature_rows_without_clean_from_is_unchanged(none):
+    d = _run_daily()
+    cu = pd.Timestamp("2020-03-20")
+    pd.testing.assert_frame_equal(run_feature_rows(d, _params(), cu, none), run_feature_rows(d, _params(), cu))
+
+
+def test_build_feature_table_with_and_without_clean_from(tmp_path):
+    _write_interim(tmp_path / "a", ["run_1_grid_1", "run_2_grid_2"])
+    old = build_feature_table(tmp_path / "a", tmp_path / "f.parquet")       # no clean_from column
+    rq = pd.read_csv(tmp_path / "a" / "run_quality.csv")
+    rq["clean_from"] = ["2020-03-10", np.nan]
+    rq.to_csv(tmp_path / "a" / "run_quality.csv", index=False)
+    new = build_feature_table(tmp_path / "a", tmp_path / "g.parquet")
+    run1_old, run1_new = (t[t["run"] == "run_1_grid_1"] for t in (old, new))
+    assert (run1_new["date"] >= pd.Timestamp("2020-03-10")).all()
+    assert len(run1_new) == (run1_old["date"] >= pd.Timestamp("2020-03-10")).sum() < len(run1_old)
+    run2_old, run2_new = (t[t["run"] == "run_2_grid_2"].reset_index(drop=True) for t in (old, new))
+    pd.testing.assert_frame_equal(run2_old.astype({"run": str, "field": str, "met_hash": str}),
+                                  run2_new.astype({"run": str, "field": str, "met_hash": str}))

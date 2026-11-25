@@ -197,3 +197,23 @@ def test_run_france_compares_with_przm_only_for_the_delivered_spraying(setup, tm
     assert (c is not None) == compared
     if compared:
         assert c["field_years"] > 0
+
+
+def test_run_france_consistency_leaves_out_warm_up_field_years(setup, tmp_path):
+    import shutil
+
+    root, interim, features, wpath = setup
+    warm = tmp_path / "interim"
+    shutil.copytree(interim, warm)
+    rq = pd.read_csv(warm / "run_quality.csv", index_col="run")
+    first = pd.Timestamp(pd.read_parquet(warm / "daily" / f"{rq.index[0]}.parquet").index[0])
+    rq["clean_from"] = pd.Timestamp(first.year, 11, 12)          # the first application year is warm-up
+    rq.to_csv(warm / "run_quality.csv")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        old, new = (longrun.run_france(wpath, folder, features, root / "models", tmp_path / f"{k}.parquet",
+                                       tmp_path, tmp_path, limit=3) for k, folder in enumerate((interim, warm)))
+    c_old, c_new = (s["consistency_with_przm_2006_2015_not_a_test"] for s in (old, new))
+    pz = longrun.przm_field_years(features)
+    assert (pz["app_year"] == first.year + longrun.YEAR_SHIFT).any()       # PRZM has rows in that year
+    assert c_new["field_years"] < c_old["field_years"]

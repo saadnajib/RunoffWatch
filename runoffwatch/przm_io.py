@@ -87,6 +87,36 @@ def read_zts_scale_factors(inp_path: str | Path) -> dict[str, float]:
     return factors
 
 
+_CROP_LINE = re.compile(r"\s*(\d{6})\s+(\d{6})\s+(\d{6})\s+(\d+)\s*")
+
+
+def read_crop_emergences(inp_path: str | Path) -> list[pd.Timestamp]:
+    """Emergence dates of all crop cycles in a PRZM .inp file, in file order.
+
+    A crop line holds three dates DDMMYY (emergence, maturity, harvest) and a crop number, and
+    sits before the 'Chemical Input Data' line. Two-digit years: >= 50 -> 19xx, else 20xx (as for
+    the weather dates). Returns [] when the file cannot be read or has no crop lines.
+    """
+    try:
+        text = Path(inp_path).read_text(encoding="latin-1")
+    except OSError:
+        return []
+    out = []
+    for line in text.splitlines():
+        if line.startswith("Chemical Input Data"):
+            break
+        m = _CROP_LINE.fullmatch(line)
+        if m is None:
+            continue
+        s = m.group(1)
+        yy = int(s[4:6])
+        try:
+            out.append(pd.Timestamp(year=1900 + yy if yy >= 50 else 2000 + yy, month=int(s[2:4]), day=int(s[0:2])))
+        except ValueError:
+            continue                                         # not a real date: not a crop line
+    return out
+
+
 def read_zts(zts_path: str | Path, inp_path: str | Path | None = None) -> pd.DataFrame:
     """Read the daily PRZM time series (.ZTS) and convert to plain units."""
     lines = Path(zts_path).read_text(errors="replace").splitlines()

@@ -42,7 +42,7 @@ import numpy as np
 import pandas as pd
 
 from .przm_inp import InpFormatError, parse_inp
-from .przm_io import read_balance_errors, read_soil_decay
+from .przm_io import read_balance_errors, read_crop_emergences, read_soil_decay
 
 log = logging.getLogger("runoffwatch")
 
@@ -177,6 +177,32 @@ def balance_error_table(runs: list[Path]) -> pd.Series:
     return pd.Series(rows, name="max_balance_error", dtype=float)
 
 
+def warm_up_end(emergences, first_day) -> pd.Timestamp:
+    """End of the warm-up period of a run: the first crop emergence on or after the first simulated day.
+
+    Only when the first crop cycle started before the simulation: until the next emergence the crop
+    state is not the regular one. Otherwise (crop starts inside the simulation, no dates, or no
+    emergence on or after `first_day`) NaT.
+    """
+    if not emergences or pd.isna(first_day):
+        return pd.NaT
+    first_day = pd.Timestamp(first_day)
+    dates = sorted(pd.Timestamp(d) for d in emergences)
+    if dates[0] >= first_day:
+        return pd.NaT
+    return next((d for d in dates if d >= first_day), pd.NaT)
+
+
+def warm_up_table(runs: list[Path], first_day: pd.Series) -> pd.Series:
+    """Per run: end of the warm-up period (see warm_up_end); NaT when there is none."""
+    rows = {}
+    for r in runs:
+        inp = [p for p in r.iterdir() if p.suffix.lower() == ".inp"]
+        start = first_day.get(r.name, pd.NaT)
+        rows[r.name] = warm_up_end(read_crop_emergences(inp[0]), start) if inp else pd.NaT
+    return pd.to_datetime(pd.Series(rows, name="clean_from", dtype="object"))
+
+
 def build_run_quality(runs_root: str | Path, interim: str | Path, trust: str = "envelope"):
     """Combine everything into one row per run. Needs `qc` and `inventory` output in `interim`.
 
@@ -185,6 +211,10 @@ def build_run_quality(runs_root: str | Path, interim: str | Path, trust: str = "
     trust = "balance": a run is trusted completely when PRZM's own yearly balance error stays
         below BALANCE_TOLERANCE (made for the corrected data). The envelope is still computed
         and stored as `above_envelope_app_year`, for information only.
+        It also sets `clean_from`: when the first crop cycle in the .inp started before the
+        simulation, the days up to the next crop emergence are a warm-up period (the crop state is
+        not the regular one yet) and are not used. NaT = no warm-up. With "envelope" `clean_from`
+        is always NaT, so that older analysis stays as it was.
 
     Returns (run_quality, envelope, events, yearly soil decay).
     """
@@ -222,6 +252,9 @@ def build_run_quality(runs_root: str | Path, interim: str | Path, trust: str = "
         rq["first_bad_app_year"] = np.where(ok_balance, np.nan, np.where(rq["n_days"].notna(), first_year, np.nan))
         end = pd.to_datetime(rq["end"])
         rq["clean_until"] = (end + pd.Timedelta(days=1)).where(ok_balance)
+        rq["clean_from"] = warm_up_table(runs, pd.to_datetime(ok["start"])).reindex(rq.index)
+    else:
+        rq["clean_from"] = pd.Series(pd.NaT, index=rq.index, dtype="datetime64[ns]")
     rq["decay_growth_per_year"] = (last / first).reindex(rq.index) ** (1 / (n_years.reindex(rq.index) - 1).clip(lower=1))
     rq["loss_fraction"] = rq["loss_total_gha"] / rq["applied_total_gha"]
     late = events[events["days_since_app"] > 150].groupby("run")["loss_per_mm"].max()
@@ -317,6 +350,9 @@ def audit(runs_root: str | Path = "data/raw/runs", interim: str | Path = "data/i
         "balance_error_quantiles_kgha": ({q: float(np.quantile(bal.dropna().to_numpy(), float(q), method="higher"))
                                           for q in ("0.5", "0.9", "0.99", "1.0")} if bal.notna().any() else {}),
         "trusted_runs": int(readable["clean_until"].notna().sum()),
+        "runs_with_warm_up": int(rq["clean_from"].notna().sum()),
+        "warm_up_until": (rq["clean_from"].mode().min().date().isoformat() if rq["clean_from"].notna().any()
+                          else None),
         "folders": int(len(rq)),
         "status_counts": rq["status"].value_counts().to_dict(),
         "readable_runs": int(len(readable)),

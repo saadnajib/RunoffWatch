@@ -391,3 +391,27 @@ def test_read_run_two_met_files_raises(make_run):
     (run.folder / "other.met").write_text(run.files["met"].read_text())
     with pytest.raises(FileNotFoundError, match="found 2"):
         read_run(run.folder)
+
+
+# --------------------------------------------------------------------------- crop emergences
+
+def test_read_crop_emergences_full_inp(tmp_path):
+    from conftest import write_full_inp
+
+    p = write_full_inp(tmp_path / "a.inp")
+    got = przm_io.read_crop_emergences(p)
+    assert got == [pd.Timestamp(1989 + i, 11, 12) for i in range(10)]
+
+
+def test_read_crop_emergences_latin1_crlf_and_century(tmp_path):
+    lines = ["Run \xe9t\xe9", "1211 1006 3107 0111", "       2", "  121149  100650  310750       1",
+             "  010350  100650  310750      12", "Chemical Input Data: ", "  121160  100661  310761       1"]
+    p = tmp_path / "b.inp"
+    p.write_bytes("\r\n".join(lines).encode("latin-1") + b"\r\n")
+    assert przm_io.read_crop_emergences(p) == [pd.Timestamp("2049-11-12"), pd.Timestamp("1950-03-01")]
+
+
+def test_read_crop_emergences_no_crop_lines_or_missing(tmp_path):
+    write_inp(tmp_path / "c.inp", {"RUNF": "10.0"})
+    assert przm_io.read_crop_emergences(tmp_path / "c.inp") == []
+    assert przm_io.read_crop_emergences(tmp_path / "missing.inp") == []
