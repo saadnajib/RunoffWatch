@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from .features import DEFAULT_RATE_KGHA
 from .paths import DATASETS
 
 CAUTION = ("These numbers copy the simulator PRZM with one crop (winter cereals) and a fixed crop "
@@ -281,18 +282,39 @@ def spray_windows(days) -> str:
                         for a, b in groups)
 
 
+def trained_doses(meta: dict | None) -> list[float]:
+    """The doses (kg/ha) the loaded models have seen, lowest first; the standard dose if the meta does not say."""
+    on = dig(meta, "trained_on", default={}) or {}
+    raw = on.get("doses_kgha") if isinstance(on, dict) else None
+    doses = sorted({d for d in (number(x) for x in (raw if isinstance(raw, (list, tuple)) else [])) if d and d > 0})
+    return doses or [DEFAULT_RATE_KGHA]
+
+
+def default_dose(doses: list[float]) -> float:
+    """The dose the app starts with: the standard dose if the models have seen that range, else their highest dose."""
+    return DEFAULT_RATE_KGHA if doses[0] <= DEFAULT_RATE_KGHA <= doses[-1] else doses[-1]
+
+
 def spray_limits(meta: dict) -> str:
-    """The 'Limits' lines about spray date and dose, true for the models that were loaded."""
+    """The 'Limits' lines about spray day and dose, true for the models that were loaded.
+
+    The app's dose box only takes doses inside the trained range, so only the spray day can still
+    be outside what the models have seen.
+    """
     on = dig(meta, "trained_on", default={}) or {}
     days = on.get("spray_days_seen") or [60, 61]
-    doses = [1000 * float(d) for d in on.get("doses_kgha") or [2.4]]
-    if len(days) <= 2 and len(doses) == 1:           # models that only know the delivered runs
-        return (f"- These models only know **spraying on {spray_windows(days)} with {doses[0]:,.0f} g/ha**. "
-                "Another dose is scaled in proportion, and another spray day is a guess.\n"
+    doses = [1000 * d for d in trained_doses(meta)]
+    if len(days) <= 2:                               # models that only know the delivered runs
+        text = (f"- These models only know **spraying on {spray_windows(days)}**. Another spray day is a guess.\n"
                 "- In those runs \"days since spraying\" and the calendar date move together, so the model "
                 "cannot tell them apart. Moving the spray day is new to it.\n")
-    return (f"- These models learned from runs sprayed **{spray_windows(days)}**, with doses of "
-            f"**{min(doses):,.0f} to {max(doses):,.0f} g/ha**. A spray day or dose outside these is a guess.\n")
+    else:
+        text = (f"- These models learned from runs sprayed **{spray_windows(days)}**. A spray day outside these "
+                "windows is still a guess.\n")
+    if len(doses) == 1:
+        return text + f"- These models only know one dose, **{doses[0]:,.0f} g/ha**, so the dose is fixed.\n"
+    return text + (f"- These models learned from doses of **{doses[0]:,.0f} to {doses[-1]:,.0f} g/ha**. "
+                   "A dose outside this range cannot be entered.\n")
 
 
 def headline(ranked: pd.DataFrame, horizon: int) -> str:

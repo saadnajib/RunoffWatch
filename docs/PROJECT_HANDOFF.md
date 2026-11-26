@@ -31,7 +31,12 @@ on the full data; do not let an assistant change them from memory.
 >   and names the project task it belongs to.
 > - **Windows fix:** the app failed at start on Windows because of Windows
 >   line ends in the model files. Fixed; `git pull` is enough (section 10).
-> - 571 tests pass.
+> - **Dose box limited to the trained range** (7.1). The dose box in the app
+>   now only takes doses the loaded models were trained on: 0.24 to 2.4 kg/ha
+>   for the varied models. Before, it took 0.05 to 5.0 kg/ha and only warned.
+> - **Honesty about the test** (6.3, limit 15 in section 12): there is no
+>   untouched final test set, so the scores may be slightly optimistic.
+> - 576 tests pass (before: 571).
 >
 > *25 Nov 2026, late evening (kept for context):*
 >
@@ -393,7 +398,7 @@ Why: the first simulated year is a warm-up period with an irregular crop
 (section 4, crop cycles; evidence in 6.9). Its rows are not a fair test and
 disturb training.
 
-How it works in the code (merged on the branch; 567 tests passed then, 571
+How it works in the code (merged on the branch; 567 tests passed then, 576
 on 26 Nov):
 - `przm_io.read_crop_emergences(inp)` reads the emergence dates of the crop
   cycles from the `.inp` file.
@@ -596,6 +601,23 @@ pesticide loss = runoff x concentration
   without 1992/1994/1996 (figures), and the final set on all years and files
   (saved in `models/`, or `models/varied/` for the varied data set, which the
   advisor prefers; cannot be tested itself).
+
+**Which numbers come from which test.** Two evaluations are in the code, and
+both are still used:
+
+| Test | Command | Files | Gives |
+|---|---|---|---|
+| Year-by-year test: every year 1991–1999 is the test year once | `python -m runoffwatch train --cv` | `cv_summary.json`, `cv_by_year.csv`, figure m7 | The headline scores, and everything in the app tab "Is the copy right?" except the speed |
+| Single fixed split: test = held-out weather files in the application years 1992 and 1996; year 1994 decides when to stop | `python -m runoffwatch train` | `model_metrics.json`, figures m1 to m6 | The comparison with logistic regression, the SHAP ranking of drivers, the LSTM comparison, the speed, and the "single split" result block (6.7) |
+
+The years 1992 and 1996 of the single split are also test years of the
+year-by-year test. So the single split is not an independent second test.
+
+**Honesty statement.** There is no untouched final test set. The final models
+cannot be tested themselves; their expected accuracy is the year-by-year
+score. Choices such as the warm-up rule and the model settings were made after
+seeing these scores, so the scores may be slightly optimistic. How much was
+not measured. See limit 15 in section 12.
 
 ### 6.4 Results (measured on the corrected data with the warm-up rule; nine held-out years 1991–1999 pooled, range over the years in brackets)
 
@@ -1050,10 +1072,11 @@ of the method.
   following 14 days, and the number of predicted high-loss days. Since
   26 Nov a high-loss day here is a day above a share of the dose (default
   0.1 %, 6.10). Only candidates with a full window are ranked.
-- A dose can be given (`whatif --dose`, a field in the app). The app uses the
+- A dose can be given (`whatif --dose`, a box in the app). The app uses the
   models in `models/varied` when that folder exists (trained on varied spray
-  dates and doses, 6.7); otherwise the 1 March models in `models/`, which scale
-  another dose in proportion, and a note says so.
+  dates and doses, 6.7); otherwise the 1 March models in `models/`, which
+  know only 2.4 kg/ha. Since 26 Nov the dose box in the app only takes doses
+  the loaded models were trained on (7.1).
 - **Limits:** valid only for Flufenacet on winter cereals, inside the two
   spray windows the models were trained on (15 Feb–30 Apr, 1 Oct–30 Nov).
   The autumn effect comes from the fixed emergence date of the PRZM scenario
@@ -1086,6 +1109,31 @@ belongs to. Five tabs:
   the limit"; "What happens after one spray day" (rain and loss per day, with
   a dashed line at the limit when a day comes near it); fold-out "All
   numbers as a table".
+- **The dose box (changed on 26 Nov 2026).** Step 3 has the box "Dose
+  (kg/ha)". It is limited to the range of doses the loaded models were
+  trained on. The range is read from the model file `meta.json` (entry
+  `trained_on` -> `doses_kgha`); it is not written into the code. For the
+  varied models this is 0.24 to 2.4 kg/ha (trained doses 0.24, 1.2 and 2.4).
+  Before, the box took 0.05 to 5.0 kg/ha and only showed a warning outside
+  the trained range.
+  - The box starts at 2.4 kg/ha if that lies inside the range; otherwise at
+    the highest trained dose. The step is 0.01, so each trained dose can be
+    entered exactly.
+  - A caption under the box says which dose range the models were trained
+    on.
+  - If the loaded models know only one dose (the 1-March-only models:
+    2.4 kg/ha), the box is shown switched off at that dose, with a short line
+    saying why. If the model file does not state the doses, the app treats
+    it as 2.4 kg/ha only.
+  - A spray day outside the trained windows can still be chosen. The app
+    still warns then, and the result is a guess. The dose can no longer be
+    outside the range.
+  - Why adjustable and not fixed: the runs themselves have three doses;
+    doses differ between compounds; and in PRZM the loss is proportional to
+    the dose (6.10). So changing the dose does not change which spray day is
+    best, only the amounts in g/ha.
+  - Helper functions in `runoffwatch/appdata.py`: `trained_doses(meta)`,
+    `default_dose(doses)`, `spray_limits(meta)` (wording updated).
 - **Is the copy right?** Three blocks of cards. 1. Does it get the amounts
   right? (R² 0.99 for runoff water and 0.96 for pesticide loss; 99 % of the
   total loss found.) 2. Does it warn on the right days? (a limit picker;
@@ -1114,8 +1162,9 @@ belongs to. Five tabs:
 2. Step 1: keep the example weather, or choose "Upload" and load your own
    CSV (the template download appears then).
 3. Step 2: set the slope and how easily rain runs off.
-4. Step 3: set the dose, the first day you could spray, and the high-loss
-   limit as a share of the dose (start value 0.1 %).
+4. Step 3: set the dose (only inside the trained range, start value
+   2.4 kg/ha), the first day you could spray, and the high-loss limit as a
+   share of the dose (start value 0.1 %).
 5. Read the green box: it names the best and the worst spray day. The bar
    chart shows all candidate days.
 6. To see how far the copy can be trusted, open tab 2. To see why autumn
@@ -1245,7 +1294,7 @@ cd RunoffWatch
 python -m venv .venv
 .venv\Scripts\activate          # Windows; on Mac/Linux: source .venv/bin/activate
 pip install -e ".[dev,app]"
-python -m pytest -q             # 571 passed (26 Nov, with PyTorch installed)
+python -m pytest -q             # 576 passed (26 Nov, with PyTorch installed)
 python -m runoffwatch whatif
 streamlit run app.py
 ```
@@ -1463,10 +1512,23 @@ Reports in `docs/`: `DATA_REPORT.md`, `MODEL_REPORT.md`, `RELATED_WORK.md`,
    figures and the 45-year high-loss-day counts still use the fixed limit of
    1 g/ha. Runoff and loss-amount scores do not depend on the limit.
 13. Low-dose compounds (a few g/ha) are outside the dose range of the runs
-   (0.24–2.4 kg/ha).
+   (0.24–2.4 kg/ha). The dose box in the app is limited to the dose range the
+   loaded models were trained on (7.1). A spray day outside the trained
+   windows can still be chosen; the app warns, and the result is a guess.
 14. 1991 is the weakest year of the 1-March-only models (loss R² 0.867),
    because it is the only year with heavy runoff on the spray day itself.
    This is a limit of data with one fixed spray date (6.11).
+15. **There is no untouched final test set.** In the year-by-year test every
+   year 1991–1999 was a test year once. The final models (the ones the app
+   uses) are trained on all rows, so they cannot be tested themselves; their
+   expected accuracy is the year-by-year score. Choices such as the warm-up
+   rule and the model settings were made after seeing these scores. So the
+   scores may be slightly optimistic. How much was not measured. What does
+   protect the scores: in each round the test year and the weather files of
+   the test fields were not used for training, and the year used to decide
+   when to stop training was a different year from the test year. The single
+   split (6.3) is not an independent second test, because its test years
+   1992 and 1996 are also test years of the year-by-year test.
 
 ---
 
@@ -1533,46 +1595,56 @@ decks. New since 17 Nov:
 - **Done (26 Nov): weak year 1991** of the 1-March-only models explained
   (6.11).
 - **Done (26 Nov): app redesigned** (7.1), and the start failure on Windows
-  fixed (section 10). 571 tests pass.
+  fixed (section 10).
+- **Done (26 Nov): dose box limited to the trained range** (7.1), and the
+  honesty statement about the test written down (6.3, limit 15 in
+  section 12). 576 tests pass.
 
 Next, in this order:
-1. Which share of the dose is serious for which compound group. This is for
+1. Ask the Landau group for a small batch of new PRZM runs the models have
+   never seen, as an independent test: for example a middle dose such as
+   0.6 kg/ha and some new fields. This would give the first score on data
+   that played no part in any choice (limit 15 in section 12).
+2. The default dose in the app stays 2.4 kg/ha until the
+   environmental-science side confirms the realistic dose for Flufenacet. A
+   question about this has been put to them.
+3. Which share of the dose is serious for which compound group. This is for
    the environmental-science side, which is working on a classification by
    compound group. 0.1 % is only our starting value.
-2. The classifier still uses the fixed limit of 1 g/ha. Retrain it with a
+4. The classifier still uses the fixed limit of 1 g/ha. Retrain it with a
    share-of-dose label, or drop it: with the fixed limit it was about as
    good as the predicted loss amount (PR-AUC 0.975 against 0.973), so it
    adds little (6.10).
-3. The 45-year high-loss-day counts (6.6), the alarm columns of
+5. The 45-year high-loss-day counts (6.6), the alarm columns of
    `cv_by_year.csv` and the figures `m3_high_loss_precision_recall.png` and
    `m7_scores_by_held_out_year.png` still use the fixed limit of 1 g/ha.
-4. `docs/figures/app_screenshot.png` was renewed on 26 Nov 2026; make a new
+6. `docs/figures/app_screenshot.png` was renewed on 26 Nov 2026; make a new
    one after the next change of the app.
-5. Ask the model owner in Landau (through the team member in Landau) whether
+7. Ask the model owner in Landau (through the team member in Landau) whether
    the first crop cycle starting before the simulation is intended, and
    whether a warm-up year is normally discarded (6.9).
-6. Ask the environmental-science side whether the fixed emergence date
+8. Ask the environmental-science side whether the fixed emergence date
    (12 Nov) and autumn spraying before emergence are realistic use. The
    spray-date result and the 15 October run depend on it (6.6, 6.8).
-7. Extreme rain days: on the 127 days with at least 80 mm the plain formula
+9. Extreme rain days: on the 127 days with at least 80 mm the plain formula
    beats the surrogate (6.9). The "correction of the formula" idea did not
    help; another approach is still open.
-8. LSTM: adapt it to varied spray dates and doses and to the warm-up rule,
+10. LSTM: adapt it to varied spray dates and doses and to the warm-up rule,
    or drop it. Until then its numbers (6.5) are from the 1 March data and
    include the warm-up period.
-9. Other questions for the model owner in Landau (section 5): the Henry
+11. Other questions for the model owner in Landau (section 5): the Henry
    constant, the reference soil moisture, whether 2.4 kg/ha is the intended
    dose (it looks about ten times higher than usual field rates,
    unconfirmed, section 8.1), and where the zeros in the inputs of the 1,335
    failing fields come from (and whether they can be filled).
-10. Rewrite the reports with the spray-date and dose results and the warm-up
+12. Rewrite the reports with the spray-date and dose results and the warm-up
    rule.
-11. Presentation 2, with the corrected and the varied numbers (with the
+13. Presentation 2, with the corrected and the varied numbers (with the
    warm-up rule). It should also
    correct the statement from the first progress presentation that 73 % of
    the data can be trusted: the plausibility check kept 73 % of the
    run-years, but those were wrong too.
-12. Before any submission of new runs to Landau: confirm the corrected settings
+14. Before any submission of new runs to Landau: confirm the corrected settings
    that `design.py` now writes (Henry 0.37E-06, reference soil moisture 1; 8.2).
 
 Still open from before:
