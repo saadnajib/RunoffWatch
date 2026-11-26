@@ -65,7 +65,8 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
   disturbed training. Without them, daily loss R² rose from 0.917 to 0.965 (varied data). The
   copy is still weakest on the most extreme rain days (80 mm and more).
   There is no untouched final test set: every year 1991-1999 was a test year once, so the scores
-  may be slightly optimistic.
+  may be slightly optimistic. The saved models are now frozen, so that later tests on new runs
+  are honest.
 - **Spray date (read straight from PRZM).** Sprayed in autumn (1 Oct - 30 Nov), the mean share of
   the dose lost per season is 0.19 to 0.66 %; sprayed in spring (15 Feb - 30 Apr) it is 0.08 to
   0.10 % (warm-up left out). The chemistry per millimetre of runoff is the same; the difference is how
@@ -147,7 +148,7 @@ pip install -e ".[dev,app]"
 python -m pytest -q
 ```
 
-With PyTorch installed you should see `576 passed`. Without PyTorch the LSTM tests are skipped
+With PyTorch installed you should see `594 passed`. Without PyTorch the LSTM tests are skipped
 and show as `skipped`; that is fine.
 
 **Step 5. Ask the model a question.** This compares 7 possible spray days for a made-up weather example.
@@ -377,11 +378,16 @@ python -m runoffwatch audit
 python -m runoffwatch features
 ```
 ```bash
-python -m runoffwatch train
+python -m runoffwatch train --models models/mine
 ```
 ```bash
 python -m runoffwatch train --cv
 ```
+
+The models that came with the repository are frozen (see the note under the extras), so `train`
+without `--models` stops with "The models in models are frozen". With `--models models/mine` your
+own models go to a folder of their own. The app and the extras keep using the shipped models unless
+you give them `--models models/mine` too.
 
 On the delivered data these six steps took about 30 minutes on a laptop with 4 cores, most of it
 `train --cv`. The corrected data has more fields with results, so expect somewhat longer. One data
@@ -394,6 +400,12 @@ set needs about 5 GB of free disk space (measured on the delivered data); both n
 | `pip install -e ".[lstm]"` then `python -m runoffwatch lstm` | Trains a second surrogate, an LSTM neural network, and compares it with the tree surrogate on the same test data | about 10-20 min |
 | `python -m runoffwatch france` | Runs the surrogate on the 1979-2024 Agri4Cast weather for France (needs `france_weather_1979_2024.csv` in `data/raw/france_weather/`; pass it with `--weather`). `--spray DD.MM` and `--dose` set the spray day and dose of every year (default 01.03 and 2.4 kg/ha). Add `--scenario NAME` to keep a second spraying apart, for example `france --spray 15.10 --scenario autumn` (results go to `docs/results/autumn/`) | about 8 min |
 | `python -m runoffwatch design` | Writes run files for NEW simulations (varied spray date, dose, substance) into `data/design/`. Nothing is uploaded; see [docs/NEW_RUNS_PLAN.md](docs/NEW_RUNS_PLAN.md) | about 1 min |
+| `python -m runoffwatch --dataset dosecheck check` | Scores the frozen models on runs they were not trained on; trains nothing. Results go to `docs/results/varied/dose_check/` | not measured yet |
+
+The data set `dosecheck` is a test only: 500 extra runs with 0.6 kg/ha, a dose the models have not
+seen, made with `--dataset dosecheck rerun` (steps in docs/PROJECT_HANDOFF.md, section 8.3).
+The saved models are frozen: `models/FROZEN.json` holds a fingerprint of every model file, and
+`train` refuses to overwrite a frozen folder (`train --cv` still works).
 
 **Step 4. Look at the results.**
 
@@ -403,9 +415,10 @@ set needs about 5 GB of free disk space (measured on the delivered data); both n
 | **Task 2.** Predict high-loss days and explain them | [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md), sections 3 to 5 |
 | **Task 3.** Fast copy of the simulator (emulator) | [docs/MODEL_REPORT.md](docs/MODEL_REPORT.md), sections 1 to 4; try it with Part A, steps 5 and 6 |
 
-Running Part B overwrites the models, figures and result files that came with the repository
-(`models/`, `docs/results/`, `docs/figures/`). The reports were written with exactly those files,
-so small differences after your own run are normal.
+Running Part B overwrites the figures and result files that came with the repository
+(`docs/results/`, `docs/figures/`). The reports were written with exactly those files, so small
+differences after your own run are normal. The shipped models in `models/` are frozen and are not
+overwritten.
 
 ### Part C: the delivered data (how the fault was found)
 
@@ -426,7 +439,7 @@ python -m runoffwatch --dataset delivered audit
 python -m runoffwatch --dataset delivered features
 ```
 ```bash
-python -m runoffwatch --dataset delivered train
+python -m runoffwatch --dataset delivered train --models models/delivered_mine
 ```
 ```bash
 python -m runoffwatch --dataset delivered train --cv
@@ -447,7 +460,8 @@ overwrite the corrected ones. The extras take the same option, for example
 | `No run folders ... under data/raw/runs_fixed` | Run `rerun` first (Part B, step 2), or add `--dataset delivered` to work on the delivered data |
 | `No run folders ... under data/raw/runs` | Run `extract` first |
 | `... runs_qc.csv` or `run_quality.csv` not found | A step was skipped, or you mixed data sets; run the commands of Part B, step 3 in order, all with or all without `--dataset delivered` |
-| `missing [...]. Run python -m runoffwatch train first` | The `models/` folder is empty; run `git checkout models` to get the shipped models back, or run `train` |
+| `missing [...]. Run python -m runoffwatch train first` | The `models/` folder is empty; run `git checkout models` to get the shipped models back |
+| `The models in ... are frozen` | `train` does not overwrite the shipped models; add `--models models/mine` to train your own (Part B, step 3) |
 | `python` is not recognised (Windows) | Use `py` instead of `python` |
 
 Other useful commands: `python -m runoffwatch --help` lists everything;
@@ -471,7 +485,7 @@ report for one single run.
 | `runoffwatch/lstm.py` | Second surrogate: an LSTM, compared with the trees |
 | `runoffwatch/longrun.py` | Surrogate on 45 years of Agri4Cast weather for France |
 | `runoffwatch/design.py` | Generator for new simulation runs (run files and task archives) |
-| `tests/` | 576 tests on synthetic run folders (no project data in git) |
+| `tests/` | 594 tests on synthetic run folders (no project data in git) |
 | `runoffwatch/pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code, kept for reference |
 
 Code and documents were written with the help of an AI assistant (Claude).
