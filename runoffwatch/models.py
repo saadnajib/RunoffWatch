@@ -715,6 +715,16 @@ def load_models(model_dir: str | Path = "models") -> dict:
     missing = [f for f in [*MODEL_FILES.values(), "meta.json"] if not (model_dir / f).exists()]
     if missing:
         raise FileNotFoundError(f"{model_dir}: missing {missing}. Run `python -m runoffwatch train` first.")
-    out = {name: lgb.Booster(model_file=str(model_dir / f)) for name, f in MODEL_FILES.items()}
+    out = {name: _read_booster(model_dir / f) for name, f in MODEL_FILES.items()}
     out["meta"] = json.loads((model_dir / "meta.json").read_text())
     return out
+
+
+def _read_booster(path: Path) -> lgb.Booster:
+    """Read a saved model, also when git on Windows gave the file Windows line ends.
+
+    LightGBM finds each tree in the file by counting bytes. Git on Windows can turn every line end
+    into two bytes on checkout; then the counts are off and loading stops with "Model format error,
+    expect a tree here". So the line ends are put back before the model is read.
+    """
+    return lgb.Booster(model_str=Path(path).read_bytes().replace(b"\r\n", b"\n").decode("utf-8"))

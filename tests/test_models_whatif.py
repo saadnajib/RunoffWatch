@@ -854,3 +854,16 @@ def test_alarm_by_share_of_dose_without_any_high_loss_day():
     out = models.alarm_by_share_of_dose(P, limits_pct=(0.5,))["0.5"]
     assert out == {"high_loss_days": 0, "alarms": 0, "precision": None, "recall": None,
                    "by_dose_kgha": {"2.4": {"high_loss_days": 0, "alarms": 0, "precision": None, "recall": None}}}
+
+
+def test_load_models_survives_windows_line_ends(trained, tmp_path):
+    """Git on Windows may check the model files out with CRLF line ends; the models must still load."""
+    for f in [*MODEL_FILES.values(), "meta.json"]:
+        raw = (trained["root"] / "models" / f).read_bytes()
+        assert b"\r\n" not in raw
+        (tmp_path / f).write_bytes(raw.replace(b"\n", b"\r\n"))
+    m = models.load_models(tmp_path)
+    rows = trained["table"].head(500)
+    for name in MODEL_FILES:
+        cols = m[name].feature_name()
+        np.testing.assert_array_equal(m[name].predict(rows[cols]), trained["models"][name].predict(rows[cols]))
