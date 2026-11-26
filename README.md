@@ -58,7 +58,7 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
   | Pesticide loss, daily R² (range over years) | **0.965** (0.907-0.976) | 0.948 (0.867-0.986) |
   | Sum of all loss, surrogate / PRZM (range over years) | **0.985** (0.950-1.082) | 0.948 (0.831-1.086) |
   | High-loss days, PR-AUC | **0.973** | 0.965 |
-  | Alarms that are real / high-loss days found | **92.6 % / 92.6 %** | 91.7 % / 88.0 % |
+  | Alarms that are real / high-loss days found (fixed limit of 1 g/ha) | **92.6 % / 92.6 %** | 91.7 % / 88.0 % |
 
   With the varied data, 4,815,867 rain days were scored, 19,654 of them high-loss days. The old
   weak year 1990 turned out to be the warm-up year: its rows were not a fair test and also
@@ -71,8 +71,8 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
   crop emerges on 12 Nov (the same date in every field and year) much more rain becomes runoff.
   So the sharp step in mid-November is a property of the PRZM scenario, not of nature
   ([docs/MODEL_REPORT.md](docs/MODEL_REPORT.md#what-przm-says-about-the-spray-date-and-why)).
-- It is about 70 times faster than PRZM (0.05 s against 3.4 s for ten years of one field; the
-  1-March models: 0.03 s).
+- It is about 60 times faster than PRZM (0.06 s against 3.4 s for ten years of one field; the
+  1-March models: 0.01 s).
 - Run on 45 years of real weather (1979-2023) for all 5,609 fields with 2.4 kg/ha, sprayed on
   1 March, the surrogate (varied models) shows that the worst year has 2.87 times the loss of the
   median year, and that the five worst years carry 22.7 % of all loss. Mean loss rises from
@@ -145,7 +145,7 @@ pip install -e ".[dev,app]"
 python -m pytest -q
 ```
 
-With PyTorch installed you should see `567 passed`. Without PyTorch the LSTM tests are skipped
+With PyTorch installed you should see `571 passed`. Without PyTorch the LSTM tests are skipped
 and show as `skipped`; that is fine.
 
 **Step 5. Ask the model a question.** This compares 7 possible spray days for a made-up weather example.
@@ -167,18 +167,27 @@ streamlit run app.py
 ```
 
 (If you did step 3, the first command is already done.) Your browser opens the app. It has
-five tabs:
+five tabs. Each tab answers one question, starts with the answer and names the project task it
+belongs to; details are in fold-out boxes.
 
 | Tab | What it does |
 |---|---|
-| Compare spray days | The spray-day advisor: predicted pesticide loss for several candidate spray days, for a weather table, a soil and a dose |
-| How good is the copy? | The scores of the year-by-year test: runoff, pesticide loss and alarms for high-loss days |
-| Spray date | What the simulations say about the spray date: the share of the dose lost by half-month of spraying |
-| 45 years of French weather | The surrogate on 1979-2023 weather for all fields; choose spraying on 1 March or 15 October, or compare both |
-| About and limits | What the project is, the four tasks, the limits, and which models are loaded |
+| Pick a spray day | Task 4, the advisor: which spray day loses the least pesticide? Set weather, field and spraying in three steps; a green box names the best and the worst day |
+| Is the copy right? | Tasks 3 and 2: does the copy get the amounts right, does it warn on the right days, and how fast is it |
+| Spring or autumn? | Task 2: PRZM's own results; spraying in autumn loses about 5 times more of the dose than in spring, and why |
+| 45 years of weather | Task 3 put to use: the copy on 1979-2023 weather for all fields, spraying on 1 March or 15 October, side by side |
+| About | What this is, how to use each tab, the four tasks, what a high-loss day is, the limits and which models are loaded |
+
+In the app a high-loss day is a day on which the field loses at least a chosen share of the dose
+(start value 0.1 %, adjustable from 0.01 to 0.5 %). The 0.1 % is our own starting value, not an
+official limit.
 
 The app reads only the models and result tables that are in the repository. No simulation data
 is needed. Stop it with `Ctrl+C` in the terminal.
+
+On Windows: if the app stopped at start with many lines "Model format error, expect a tree here",
+your copy has the model files with Windows line ends. This is fixed since 26 Nov 2026; run
+`git pull` and start the app again.
 
 **Optional: use your own weather.** Make a CSV file with the columns
 `date, rain_mm, temp_c` (and `pan_evap_mm` if you have it), one row per day,
@@ -450,14 +459,14 @@ report for one single run.
 | `runoffwatch/quality.py` | Task 1: which results can be trusted (envelope rule, Isolation Forest, causes) |
 | `runoffwatch/features.py` | One row per rain day: weather, spray history and soil inputs |
 | `runoffwatch/models.py` | Surrogate (runoff x concentration), high-loss classifier, baselines, evaluation |
-| `runoffwatch/whatif.py`, `app.py` | Spray-day advisor (library and command line) and the five-tab Streamlit app |
+| `runoffwatch/whatif.py`, `app.py` | Spray-day advisor (library and command line; high-loss limit as a share of the dose) and the five-tab Streamlit app |
 | `runoffwatch/figures.py`, `report.py` | Figures and single-run report |
 | `models/` | Trained models (LightGBM text files, 2 MB) |
 | `docs/figures/`, `docs/results/` | Figures and result tables used in the reports |
 | `runoffwatch/lstm.py` | Second surrogate: an LSTM, compared with the trees |
 | `runoffwatch/longrun.py` | Surrogate on 45 years of Agri4Cast weather for France |
 | `runoffwatch/design.py` | Generator for new simulation runs (run files and task archives) |
-| `tests/` | 567 tests on synthetic run folders (no project data in git) |
+| `tests/` | 571 tests on synthetic run folders (no project data in git) |
 | `runoffwatch/pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code, kept for reference |
 
 Code and documents were written with the help of an AI assistant (Claude).

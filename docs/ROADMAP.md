@@ -98,8 +98,10 @@ section 4. Half-life (DT50) and sorption (Koc) are still not varied.
 
 ## Open questions
 - [ ] Answers from Landau (DATA_REPORT.md §4)
-- [ ] Is "1 g/ha in one day" a sensible definition of a high-loss day? (Sarah)
-- [ ] Limit for a high-loss day as a share of the dose, adjustable, instead of a fixed 1 g/ha
-      (a fixed g/ha limit cannot hold across compounds whose doses differ by a factor of 100 or more)
+- [x] Is "1 g/ha in one day" a sensible definition of a high-loss day? Answered: no, a fixed g/ha
+      limit cannot hold across compounds whose doses differ by a factor of 100 or more
+- [x] Limit for a high-loss day as a share of the dose, adjustable (26 Nov 2026: in the app, start
+      value 0.1 %, and in the alarm scores; MODEL_REPORT.md, section 4). Still open: which share is
+      serious for which compound group (environmental-science side)
 - [ ] Course deadline
 - [ ] New team member on the Kaiserslautern side?
