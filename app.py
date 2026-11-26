@@ -203,7 +203,8 @@ def loss_bar_chart(table: pd.DataFrame):
                  alt.Tooltip("predicted_loss_gha:Q", title="Predicted loss (g/ha)", format=".3f"),
                  alt.Tooltip("rain_in_window_mm:Q", title="Rain in window (mm)", format=".1f"),
                  alt.Tooltip("high_loss_days:Q", title="Days above the limit")])
-    text = alt.Chart(df).mark_text(align="left", dx=4, limit=220).encode(y=y, x="predicted_loss_gha:Q", text="mark:N")
+    text = alt.Chart(df).mark_text(align="left", dx=4, limit=220, color=c["line"]).encode(   # readable in both themes
+        y=y, x="predicted_loss_gha:Q", text="mark:N")
     # Streamlit fits legend and axis inside the height, so they are added to 30 px per bar
     return (bars + text).properties(height=120 + 30 * len(df))
 
