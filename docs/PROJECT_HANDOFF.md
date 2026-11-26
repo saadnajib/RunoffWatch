@@ -10,7 +10,8 @@ repository as well. Numbers below marked "measured" come from running the code
 on the full data; do not let an assistant change them from memory.
 
 > **State on 26 Nov 2026: the high-loss limit is now a share of the dose,
-> the app is simpler, 1991 is explained.** No model was retrained; the new
+> the app is simpler, 1991 is explained, the models are frozen.** No model
+> was retrained; the new
 > scores in 6.10 come from the saved held-out predictions of the
 > year-by-year test.
 > - **High-loss limit as a share of the dose** (section 6.10). A fixed limit
@@ -36,7 +37,18 @@ on the full data; do not let an assistant change them from memory.
 >   for the varied models. Before, it took 0.05 to 5.0 kg/ha and only warned.
 > - **Honesty about the test** (6.3, limit 15 in section 12): there is no
 >   untouched final test set, so the scores may be slightly optimistic.
-> - 576 tests pass (before: 571).
+> - **Models frozen** (6.12). `models/FROZEN.json` holds a fingerprint of
+>   every saved model file in `models/`, `models/varied/` and
+>   `models/delivered/`. `train` refuses to overwrite a frozen folder. A
+>   later test on new runs is honest only if the models could not be
+>   adjusted after seeing those runs.
+> - **New command `check` and test-only data set `dosecheck`** (6.12,
+>   section 10). `check` scores the frozen models on runs they were not
+>   trained on. It trains nothing.
+> - **The 0.6 kg/ha dose check is prepared, but not run yet** (6.12, 8.3).
+>   The code is ready. The PRZM runs must still be made on the Windows PC.
+>   No result exists yet.
+> - 594 tests pass (before: 576).
 >
 > *25 Nov 2026, late evening (kept for context):*
 >
@@ -1061,6 +1073,57 @@ checked on the held-out predictions of 1991 (175,095 rain days).
 Conclusion: this is a limit of data with one fixed spray date, not a fault
 of the method.
 
+### 6.12 Frozen models and the check on new runs (26 Nov 2026)
+
+**What is frozen.** The file `models/FROZEN.json` holds a fingerprint
+(SHA-256) of every saved model file and `meta.json` in three folders:
+`models/` (1-March-only models), `models/varied/` (the models the app uses)
+and `models/delivered/`. They were frozen on 26 Nov 2026; the files are
+those of commit 3150b96 on main. Windows line ends are ignored when the
+fingerprint is made, so it is the same on every computer.
+
+**Why.** A test on runs that arrive later is only honest if the models
+could not be adjusted after seeing those runs. The freeze makes that
+checkable (limit 15 in section 12).
+
+**What the freeze does in the code:**
+- `python -m runoffwatch train` refuses to write into a frozen folder
+  (message "The models in ... are frozen"). `train --cv` still works,
+  because it saves no models.
+- The new command `check` only scores models that are frozen and unchanged.
+- A test in the test suite fails if a frozen model file in the repository
+  changes.
+- To train new models on purpose later: write to another folder with
+  `--models <folder>`, or remove that folder from `models/FROZEN.json`
+  deliberately, and say so in the documents.
+
+**The command `check`.** `python -m runoffwatch --dataset dosecheck check`
+scores the frozen models on runs they were not trained on. It trains
+nothing. It writes `new_runs_check.json` and `new_runs_check_by_year.csv`
+into the results folder and prints the scores next to the scores of the
+year-by-year test. It also saves the predictions next to the feature table
+(data, never committed). Scores: runoff R², pesticide loss R², total loss
+copy / PRZM, and the alarm table by share of the dose; for all rows, per
+year, per dose and per spray season.
+
+**What the 0.6 kg/ha check is.** One extra copy of 500 fields (every k-th
+field, so all batches take part), with a dose of 0.6 kg/ha and new random
+spray dates inside the trained windows (seed 2 instead of 1). 0.6 kg/ha
+lies between the trained doses 0.24 and 1.2 and was never seen by the
+models. It tests the models in `models/varied/`. The data set is
+`dosecheck` (section 10).
+
+**What it is NOT.** The fields, their weather files and the years
+1990–1999 were all in the training data. So it tests the dose only (does
+the copy hold between the trained doses?). It is not an independent test.
+That still needs new fields from the Landau group (section 13).
+
+**Status.** The code is ready. The whole chain was rehearsed on 40
+existing run folders (inventory, qc, audit, features and check ran without
+error). The 0.6 kg/ha runs themselves are NOT made yet: PRZM only runs on
+Windows, so the project owner has to run them on their own PC (steps in
+8.3). No result exists yet.
+
 ---
 
 ## 7. The spray-day advisor (Task 4, prototype)
@@ -1269,6 +1332,35 @@ belongs to. Five tabs:
 - With such runs (from Landau or made locally), dose, DT50 and Koc become
   model inputs and the advisor could compare days, doses and substances.
 
+### 8.3 The 0.6 kg/ha dose check: how to run it
+
+What the check is and is not: 6.12. Run these seven steps on the Windows
+PC, from the repository root, in the environment `runoffwatch`, one after
+the other:
+```bash
+python -m runoffwatch --dataset dosecheck rerun --exe C:\Temp\X3MZI0OQ2D67EUQHFZ\WINPRZM.exe
+python -m runoffwatch --dataset dosecheck add-weather
+python -m runoffwatch --dataset dosecheck inventory
+python -m runoffwatch --dataset dosecheck qc
+python -m runoffwatch --dataset dosecheck audit
+python -m runoffwatch --dataset dosecheck features
+python -m runoffwatch --dataset dosecheck check
+```
+1. `rerun` makes the 500 runs with 0.6 kg/ha in `data/raw/runs_dosecheck/`.
+   About 7 minutes (3.4 s per run, four at a time).
+2. `add-weather` puts each field's weather file into the new run folders.
+3. `inventory` finds what differs between the new runs.
+4. `qc` reads and checks every new run.
+5. `audit` decides which results can be trusted.
+6. `features` builds the feature table
+   `data/processed/features_dosecheck.parquet`.
+7. `check` scores the frozen models in `models/varied/` on these runs. It
+   trains nothing.
+
+Afterwards commit only the files in `docs/results/varied/dose_check/` (and
+the figures in `docs/figures/varied/dose_check/`), never `data/`. Then
+write the result into 6.12.
+
 ---
 
 ## 9. Other things known about the Landau side
@@ -1294,7 +1386,7 @@ cd RunoffWatch
 python -m venv .venv
 .venv\Scripts\activate          # Windows; on Mac/Linux: source .venv/bin/activate
 pip install -e ".[dev,app]"
-python -m pytest -q             # 576 passed (26 Nov, with PyTorch installed)
+python -m pytest -q             # 594 passed (26 Nov, with PyTorch installed)
 python -m runoffwatch whatif
 streamlit run app.py
 ```
@@ -1314,12 +1406,13 @@ Full pipeline from the raw data (put the ten archives in `data/raw/archives/`):
 | 3 | `python -m runoffwatch qc` | Reads and checks every run | 1 min |
 | 4 | `python -m runoffwatch audit` | Task 1: which results are trusted; with trust rule `balance` it also writes the warm-up end `clean_from` (5.2) | 30 s |
 | 5 | `python -m runoffwatch features` | Builds the feature table | 2 min |
-| 6 | `python -m runoffwatch train` | Trains surrogate and classifier, saves final models | 3 min (`varied`: 22 min, about 12 GB memory) |
+| 6 | `python -m runoffwatch train` | Trains surrogate and classifier, saves final models; since 26 Nov it refuses to write into a frozen folder (6.12) | 3 min (`varied`: 22 min, about 12 GB memory) |
 | 7 | `python -m runoffwatch train --cv` | Leave-one-year-out evaluation; since 26 Nov it also saves the held-out predictions next to the feature table (see below) | 25–30 min (`varied`: 70 min) |
 | – | `python -m runoffwatch lstm` (needs `pip install -e ".[lstm]"`) | LSTM vs trees | 12–20 min |
 | – | `python -m runoffwatch france` | Surrogate on 45 years of France weather; `--spray DD.MM`, `--dose`, `--scenario NAME` (own sub-folder, see below) | 8 min (`varied`: 22 min) |
 | – | `python -m runoffwatch design` | Run files for new simulations | 1 min |
-| – | `python -m runoffwatch rerun --exe ...` (Windows only) | Runs PRZM again on every folder with inputs, with the two corrected settings; with `--variants N`, N extra copies per field with varied spray dates and dose (`--spray-windows`, `--doses`, `--seed`) | about 1.5 h for 6,958 folders, four at a time; `--variants 2`: about 2.6 h for 11,218 runs |
+| – | `python -m runoffwatch rerun --exe ...` (Windows only) | Runs PRZM again on every folder with inputs, with the two corrected settings; with `--variants N`, N extra copies per field with varied spray dates and dose (`--spray-windows`, `--doses`, `--seed`); `--sample N` uses only N fields, spread evenly over all fields | about 1.5 h for 6,958 folders, four at a time; `--variants 2`: about 2.6 h for 11,218 runs |
+| – | `python -m runoffwatch --dataset dosecheck check` | Scores the frozen models on runs they were not trained on; trains nothing (6.12, 8.3). Options `--features`, `--models`, `--results` | not measured yet |
 
 The `rerun` command, first as a test on 20 folders, then on all (it skips
 folders that are already done, so it can be stopped with Ctrl+C and started
@@ -1368,6 +1461,10 @@ python -m runoffwatch --dataset varied train
 python -m runoffwatch --dataset varied train --cv
 python -m runoffwatch --dataset varied france
 ```
+**Since 26 Nov the saved models are frozen (6.12).** The `train` lines here and
+in the next block are what was run on 25 Nov. Today `train` stops with "The
+models in ... are frozen". To train again, add `--models <another folder>`.
+
 **Memory (learned on 25 Nov):** the varied feature table has 24.6 million
 rows. Training needs about 12 GB and must start in a fresh process: running
 the feature build and the training in one process ran out of memory on a
@@ -1419,6 +1516,30 @@ set (not adapted) and does not use the warm-up rule.
   `high_loss_pct_of_dose` (default 0.1). The limit in g/ha is in
   `.attrs["high_loss_limit_gha"]` of the result of `predict_days`.
 
+**Frozen models and the command `check` (26 Nov 2026, section 6.12):**
+- `models/FROZEN.json` holds the SHA-256 fingerprint of every model file
+  and `meta.json` in `models/`, `models/varied/` and `models/delivered/`.
+  `train` refuses to write into a frozen folder; `train --cv` still works.
+  To train new models on purpose, use `--models <folder>`, or remove the
+  folder from `models/FROZEN.json` deliberately and say so in the
+  documents.
+- Functions in `models.py`: `fingerprint`, `write_frozen`, `frozen_state`,
+  `score_new_runs`.
+- A fourth data set, `dosecheck` (in `paths.py`), is test-only: `train`,
+  `lstm`, `design` and `france` are refused for it. Folders: runs
+  `data/raw/runs_dosecheck/`, interim `data/interim_dosecheck/`, feature
+  table `data/processed/features_dosecheck.parquet`, results
+  `docs/results/varied/dose_check/`, figures
+  `docs/figures/varied/dose_check/`. It tests the models in
+  `models/varied/`. Steps: 8.3.
+- New option `rerun --sample N`: only N fields, spread evenly over all
+  fields (every k-th field), so all batches take part.
+- The same `check` command is meant for the new fields from the Landau
+  group later. Build a feature table of the new runs only, then:
+```bash
+python -m runoffwatch check --features <table> --models models/varied --results <folder>
+```
+
 Modules (`runoffwatch/`):
 
 | File | Purpose |
@@ -1428,19 +1549,21 @@ Modules (`runoffwatch/`):
 | `batch.py` | Unpack, inventory, quality-check all runs in parallel |
 | `quality.py` | Envelope rule, balance rule, Isolation Forest, causes of the breakdown; `warm_up_end` and the `clean_from` column of `run_quality.csv` (5.2) |
 | `features.py` | Feature table; `weather_features` is shared by training and the advisor; `run_feature_rows(..., clean_from)` drops the warm-up period |
-| `models.py` | Surrogate, classifier, baselines, split, leave-one-year-out evaluation; `load_features()` reads the feature table without a second copy; `alarm_by_share_of_dose`, `rescore_alarms` (6.10) |
+| `models.py` | Surrogate, classifier, baselines, split, leave-one-year-out evaluation; `load_features()` reads the feature table without a second copy; `alarm_by_share_of_dose`, `rescore_alarms` (6.10); `fingerprint`, `write_frozen`, `frozen_state`, `score_new_runs` (frozen models and `check`, 6.12) |
 | `lstm.py` | LSTM surrogate and comparison (not adapted to varied spray dates or the warm-up rule) |
 | `whatif.py`, `../app.py` | Advisor library, command line, Streamlit app (five tabs, 7.1); high-loss limit as a share of the dose (`high_loss_pct_of_dose`) |
 | `appdata.py` | Helpers for the app: finds and reads result files safely, formats numbers; since 26 Nov also small helpers for the limit text, alarm lookup, season means and short scenario names (tested in `tests/test_app.py`) |
 | `design.py` | Generator for new simulation runs |
-| `rerun.py` | Runs PRZM again on Windows with the two corrected settings (`rerun` command) |
+| `rerun.py` | Runs PRZM again on Windows with the two corrected settings (`rerun` command; `--sample N` since 26 Nov) |
+| `paths.py` | Default folders of the four data sets (`corrected`, `delivered`, `varied`, `dosecheck`) |
 | `longrun.py` | Surrogate on 45 years of Agri4Cast weather for France (`france` command); the comparison with PRZM leaves out field-years that start before `clean_from` |
 | `figures.py`, `report.py` | Figures; single-run report |
 | `pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code |
 
 Other folders: `models/` (trained LightGBM models, about 2 MB; corrected
 1 March data), `models/varied/` (models of the varied data set, used by the
-app when present), `docs/` (reports, figures, result tables; the subfolders
+app when present), `models/FROZEN.json` (fingerprints of the frozen
+models, 6.12), `docs/` (reports, figures, result tables; the subfolders
 `delivered/` and `varied/` of `docs/results/` and `docs/figures/` hold the
 other two data sets), `tests/` (synthetic run folders only), `data/` (local,
 never committed).
@@ -1528,14 +1651,17 @@ Reports in `docs/`: `DATA_REPORT.md`, `MODEL_REPORT.md`, `RELATED_WORK.md`,
    the test fields were not used for training, and the year used to decide
    when to stop training was a different year from the test year. The single
    split (6.3) is not an independent second test, because its test years
-   1992 and 1996 are also test years of the year-by-year test.
+   1992 and 1996 are also test years of the year-by-year test. Since
+   26 Nov 2026 the models are frozen (6.12), so a later test on new runs is
+   honest. The 0.6 kg/ha check tests the dose only; it does not replace an
+   independent test with new fields.
 
 ---
 
 ## 13. Status and next steps
 
 State on 26 Nov 2026 (share-of-dose limit in the app and in the scores;
-app redesigned).
+app redesigned; models frozen).
 
 Done: data audit; surrogate with honest evaluation; classifier, SHAP ranking,
 risk table; advisor prototype; LSTM comparison; surrogate on 45 years of
@@ -1598,53 +1724,60 @@ decks. New since 17 Nov:
   fixed (section 10).
 - **Done (26 Nov): dose box limited to the trained range** (7.1), and the
   honesty statement about the test written down (6.3, limit 15 in
-  section 12). 576 tests pass.
+  section 12). 576 tests passed then.
+- **Done (26 Nov): models frozen, `check` command ready** (6.12). The
+  test-only data set `dosecheck` and `rerun --sample` were added, and the
+  whole chain was rehearsed on 40 existing run folders. 594 tests pass.
 
 Next, in this order:
-1. Ask the Landau group for a small batch of new PRZM runs the models have
+1. Run the seven steps of the 0.6 kg/ha dose check on the Windows PC (8.3)
+   and write the result into 6.12. This tests the dose only.
+2. Ask the Landau group for a small batch of new PRZM runs the models have
    never seen, as an independent test: for example a middle dose such as
    0.6 kg/ha and some new fields. This would give the first score on data
-   that played no part in any choice (limit 15 in section 12).
-2. The default dose in the app stays 2.4 kg/ha until the
+   that played no part in any choice (limit 15 in section 12). The models
+   are frozen (6.12), and the same `check` command will score those runs
+   (section 10).
+3. The default dose in the app stays 2.4 kg/ha until the
    environmental-science side confirms the realistic dose for Flufenacet. A
    question about this has been put to them.
-3. Which share of the dose is serious for which compound group. This is for
+4. Which share of the dose is serious for which compound group. This is for
    the environmental-science side, which is working on a classification by
    compound group. 0.1 % is only our starting value.
-4. The classifier still uses the fixed limit of 1 g/ha. Retrain it with a
+5. The classifier still uses the fixed limit of 1 g/ha. Retrain it with a
    share-of-dose label, or drop it: with the fixed limit it was about as
    good as the predicted loss amount (PR-AUC 0.975 against 0.973), so it
    adds little (6.10).
-5. The 45-year high-loss-day counts (6.6), the alarm columns of
+6. The 45-year high-loss-day counts (6.6), the alarm columns of
    `cv_by_year.csv` and the figures `m3_high_loss_precision_recall.png` and
    `m7_scores_by_held_out_year.png` still use the fixed limit of 1 g/ha.
-6. `docs/figures/app_screenshot.png` was renewed on 26 Nov 2026; make a new
+7. `docs/figures/app_screenshot.png` was renewed on 26 Nov 2026; make a new
    one after the next change of the app.
-7. Ask the model owner in Landau (through the team member in Landau) whether
+8. Ask the model owner in Landau (through the team member in Landau) whether
    the first crop cycle starting before the simulation is intended, and
    whether a warm-up year is normally discarded (6.9).
-8. Ask the environmental-science side whether the fixed emergence date
+9. Ask the environmental-science side whether the fixed emergence date
    (12 Nov) and autumn spraying before emergence are realistic use. The
    spray-date result and the 15 October run depend on it (6.6, 6.8).
-9. Extreme rain days: on the 127 days with at least 80 mm the plain formula
+10. Extreme rain days: on the 127 days with at least 80 mm the plain formula
    beats the surrogate (6.9). The "correction of the formula" idea did not
    help; another approach is still open.
-10. LSTM: adapt it to varied spray dates and doses and to the warm-up rule,
+11. LSTM: adapt it to varied spray dates and doses and to the warm-up rule,
    or drop it. Until then its numbers (6.5) are from the 1 March data and
    include the warm-up period.
-11. Other questions for the model owner in Landau (section 5): the Henry
+12. Other questions for the model owner in Landau (section 5): the Henry
    constant, the reference soil moisture, whether 2.4 kg/ha is the intended
    dose (it looks about ten times higher than usual field rates,
    unconfirmed, section 8.1), and where the zeros in the inputs of the 1,335
    failing fields come from (and whether they can be filled).
-12. Rewrite the reports with the spray-date and dose results and the warm-up
+13. Rewrite the reports with the spray-date and dose results and the warm-up
    rule.
-13. Presentation 2, with the corrected and the varied numbers (with the
+14. Presentation 2, with the corrected and the varied numbers (with the
    warm-up rule). It should also
    correct the statement from the first progress presentation that 73 % of
    the data can be trusted: the plausibility check kept 73 % of the
    run-years, but those were wrong too.
-14. Before any submission of new runs to Landau: confirm the corrected settings
+15. Before any submission of new runs to Landau: confirm the corrected settings
    that `design.py` now writes (Henry 0.37E-06, reference soil moisture 1; 8.2).
 
 Still open from before:
@@ -1682,5 +1815,6 @@ Still open from before:
 | Agri4Cast / MARS | EU daily weather grid (25 km cells) from the Joint Research Centre |
 | Henry constant | How easily the pesticide moves from soil water into the air; PRZM uses it as a dimensionless number. Delivered: 0.03 (wrong); corrected: 0.37E-06 |
 | Reference soil moisture / moisture correction | PRZM slows decay in dry soil: rate × (moisture / reference moisture)^0.7. Delivered reference: 100 (wrong for this program, which counts field capacity as 1); corrected: 1 |
+| Frozen models | Saved models whose files may no longer change; their fingerprints are in `models/FROZEN.json`. `train` refuses to overwrite them, so a later test on new runs is honest (6.12) |
 | rerun | Our command that runs PRZM again on all folders with inputs, with the two corrected settings (`python -m runoffwatch rerun`) |
 | Plausibility check / envelope rule | Our rule that removes run-years with impossible pesticide losses (section 5) |

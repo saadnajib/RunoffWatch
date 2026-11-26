@@ -1,6 +1,6 @@
-"""Command line: python -m runoffwatch [--dataset corrected|delivered|varied] <command> ...
+"""Command line: python -m runoffwatch [--dataset corrected|delivered|varied|dosecheck] <command> ...
 
-Three data sets (see runoffwatch/paths.py):
+Four data sets (see runoffwatch/paths.py):
   corrected  (default) the re-runs with the two corrected settings, in data/raw/runs_fixed/;
              results in data/interim_fixed/, data/processed/*_fixed.parquet, models/, docs/results/,
              docs/figures/; audit trusts a run when PRZM's own balance error is small
@@ -10,6 +10,9 @@ Three data sets (see runoffwatch/paths.py):
   varied     copies of the corrected runs with varied spray dates and doses, in data/raw/runs_varied/;
              its feature table also holds the corrected runs; results in data/interim_varied/,
              models/varied/, docs/results/varied/, docs/figures/varied/
+  dosecheck  a test only: copies of 500 fields with a dose the models have not seen (0.6 kg/ha), in
+             data/raw/runs_dosecheck/; made with `--dataset dosecheck rerun`, scored with `check`;
+             results in docs/results/varied/dose_check/; train, lstm, design and france are refused
 A path given on the command line always wins over the data set's default.
 
 Commands (run in this order):
@@ -24,6 +27,7 @@ Commands (run in this order):
   train      Tasks 2+3: surrogate + classifier -> <models>, <results>, <figures>
   lstm       second surrogate (LSTM) compared with the trees (needs PyTorch)
   france     surrogate on 46 years of Agri4Cast weather for France -> <results>/france_*.csv
+  check      score the FROZEN models on runs they were not trained on -> <results>/new_runs_check.json
   whatif     spray-day comparison from a weather file (uses the trained surrogate in <models>)
   design     run files for new simulations (spray date, dose, substance); nothing is uploaded
   run        analyse a single run folder (tables + plots)
@@ -50,7 +54,9 @@ DATASET_ARGS = {
     "france": {"interim": "fields_interim", "features": "features", "models": "models", "out": "france_out",
                "results": "results", "figures": "figures"},
     "whatif": {"models": "models"},
+    "check": {"features": "features", "models": "models", "results": "results"},
 }
+TEST_ONLY_REFUSED = ("train", "lstm", "design", "france")     # commands a test-only data set must never run
 DS = " (default: from --dataset)"
 
 
@@ -131,7 +137,8 @@ def build_parser() -> argparse.ArgumentParser:
     wi.add_argument("--dose", type=float, default=2.4, help="dose in kg/ha (default: 2.4)")
 
     aw = sub.add_parser("add-weather", help="put each field's weather file into result folders that came without it")
-    aw.add_argument("--runs", default="data/raw/runs_varied", help="result folders made by `rerun --variants`")
+    aw.add_argument("--runs", default=None,
+                    help="result folders made by `rerun --variants` (default: data/raw/runs_varied, or from a test-only --dataset)")
     aw.add_argument("--source", default="data/raw/runs", help="the original run folders, which hold the weather files")
 
     rr = sub.add_parser("rerun", help="run PRZM again on Windows with corrected Henry constant and moisture setting")
@@ -145,14 +152,21 @@ def build_parser() -> argparse.ArgumentParser:
     rr.add_argument("--workers", type=int, default=4, help="PRZM runs at the same time")
     rr.add_argument("--limit", type=int, help="only the first N folders (for a quick test)")
     rr.add_argument("--retry-failed", action="store_true", help="also retry folders where PRZM reported an error last time")
-    rr.add_argument("--variants", type=int, default=0,
-                    help="extra copies per field with varied spray dates and dose (0 = plain re-run)")
+    rr.add_argument("--variants", type=int, default=None,
+                    help="extra copies per field with varied spray dates and dose (default 0 = plain re-run)")
     rr.add_argument("--spray-windows", default=None,
                     help="spray windows for the copies, day.month-day.month, comma separated (default: 15.02-30.04,01.10-30.11)")
     rr.add_argument("--doses", default=None, help="doses in kg/ha for the copies, comma separated (default: 0.24,1.20,2.40)")
-    rr.add_argument("--seed", type=int, default=1, help="number that fixes the random spray dates")
+    rr.add_argument("--seed", type=int, default=None, help="number that fixes the random spray dates (default 1)")
+    rr.add_argument("--sample", type=int, default=None,
+                    help="only this many fields, spread evenly over all fields (default: all)")
     rr.add_argument("--fields-from", default=None,
                     help="only fields with a finished result in this folder (default with --variants: data/raw/runs_fixed if it exists)")
+
+    ck = sub.add_parser("check", help="score the frozen models on runs they were not trained on (trains nothing)")
+    ck.add_argument("--features", default=None, help="feature table of the new runs" + DS)
+    ck.add_argument("--models", default=None, help="frozen model folder" + DS)
+    ck.add_argument("--results", default=None, help="where the result files go" + DS)
 
     r = sub.add_parser("run", help="analyse one run folder")
     r.add_argument("folder")
@@ -177,9 +191,18 @@ def resolve_paths(a: argparse.Namespace) -> argparse.Namespace:
         a.results, a.figures = str(Path(a.results) / a.scenario), str(Path(a.figures) / a.scenario)
         out = Path(a.out)
         a.out = str(out.with_name(f"{out.stem}_{a.scenario}{out.suffix}"))
+    if paths.get("test_only") and a.cmd in TEST_ONLY_REFUSED:
+        raise SystemExit(f"The data set '{a.dataset}' is only for testing the frozen models. `{a.cmd}` is refused; "
+                         "use `check`.")
+    if a.cmd == "add-weather" and a.runs is None:
+        a.runs = paths["runs"] if paths.get("test_only") else RERUN_VARIED_OUT
     if a.cmd == "rerun":           # always starts from the delivered folder; the target depends on the kind of re-run
+        preset = paths.get("rerun", {})          # a test-only data set fixes which copies are made
+        for key, default in (("variants", 0), ("doses", None), ("seed", 1), ("sample", None)):
+            if getattr(a, key) is None:
+                setattr(a, key, preset.get(key, default))
         if a.out is None:
-            a.out = RERUN_VARIED_OUT if a.variants else RERUN_OUT
+            a.out = paths["runs"] if paths.get("test_only") else (RERUN_VARIED_OUT if a.variants else RERUN_OUT)
         if a.variants and a.fields_from is None and Path(RERUN_OUT).is_dir():
             a.fields_from = RERUN_OUT
     return a
@@ -226,7 +249,8 @@ def main(argv=None) -> int:
                                moisture_ref=pick(a.moisture_ref, rerun.MOISTURE_REF_FIXED), workers=a.workers, limit=a.limit,
                                retry_failed=a.retry_failed, variants=a.variants,
                                windows=split(a.spray_windows, rerun.DEFAULT_WINDOWS),
-                               doses=split(a.doses, rerun.DEFAULT_DOSES), seed=a.seed, fields_from=a.fields_from)
+                               doses=split(a.doses, rerun.DEFAULT_DOSES), seed=a.seed, fields_from=a.fields_from,
+                               sample=a.sample)
         if a.variants:
             print(f"spray plan: {Path(a.out) / 'rerun_plan.csv'}")
         counts = {}
@@ -254,7 +278,11 @@ def main(argv=None) -> int:
         print(f"\n{len(t):,} rain-day rows written to {a.out}")
     elif a.cmd == "train":
         import json
-        from .models import train_all, yearly_cv
+        from .models import frozen_state, train_all, yearly_cv
+        if not a.cv and frozen_state(a.models) is not None:
+            raise SystemExit(f"The models in {a.models} are frozen (models/FROZEN.json): a test on new runs is only honest "
+                             "if they stay as they are. To train anyway, write to another folder with --models, or take "
+                             "this folder out of models/FROZEN.json on purpose.")
         if a.cv:
             print(json.dumps(yearly_cv(a.features, results=a.results, figures=a.figures, rounds=a.rounds), indent=2))
             print(f"per year: {Path(a.results) / 'cv_by_year.csv'} | "
@@ -307,6 +335,32 @@ def main(argv=None) -> int:
             print("NOTE:", note)
         print(f"Dose: {a.dose:g} kg/ha. Valid only for Flufenacet on winter cereals, and for spray dates and doses "
               "like those in the training runs (see docs/MODEL_REPORT.md).")
+    elif a.cmd == "check":
+        import json
+        from .models import score_new_runs
+        paths = DATASETS[a.dataset]
+        try:
+            m = score_new_runs(a.features, a.models, a.results, compare_with=paths.get("compare_with"),
+                               what_is_new=paths.get("what_is_new", ""))
+        except RuntimeError as e:
+            raise SystemExit(str(e)) from None
+        except FileNotFoundError as e:
+            raise SystemExit(f"Not found: {e}. `check` needs the feature table of the new runs and the frozen models. "
+                             "Run the steps before it first: rerun, add-weather, inventory, qc, audit, features.") from None
+        want = m["expected_from_year_by_year_test"] or {}
+        print(f"\nfrozen models: {a.models} (frozen on {m['models']['frozen_on']}) | runs: {m['runs']} | "
+              f"doses: {m['doses_kgha']} kg/ha, new to the models: {m['doses_not_in_training']}")
+        print(f"what is new: {m['what_is_new'] or 'not stated'}")
+        print(f"{'score':40s}{'new runs':>10s}{'year-by-year test':>20s}")
+        for key, name in (("runoff_r2", "runoff R2"), ("loss_r2", "pesticide loss R2"),
+                          ("loss_total_pred_over_true", "total loss, copy / PRZM")):
+            show = lambda v: "n/a" if v is None else f"{v:.3f}"  # noqa: E731
+            print(f"{name:40s}{show(m['pooled'][key]):>10s}{show(want.get(key)):>20s}")
+        for pct, v in m["alarm_by_share_of_dose"].items():
+            e = (want.get("alarm_by_share_of_dose") or {}).get(pct, {})
+            pr = lambda d: "n/a" if d.get("precision") is None or d.get("recall") is None else f"{100 * d['precision']:.0f}/{100 * d['recall']:.0f} %"  # noqa: E731
+            print(f"{'alarm at ' + pct + ' % of dose, right/found':40s}{pr(v):>10s}{pr(e):>20s}   ({v['high_loss_days']} high-loss days)")
+        print(f"details: {Path(a.results) / 'new_runs_check.json'}, {Path(a.results) / 'new_runs_check_by_year.csv'}")
     elif a.cmd == "run":
         from .report import analyze_run
         analyze_run(a.folder, a.out)

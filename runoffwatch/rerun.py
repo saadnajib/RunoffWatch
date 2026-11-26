@@ -448,7 +448,7 @@ def rerun_all(runs_root: str | Path, out_root: str | Path, exe: str | Path, work
               henry: str | None = HENRY_FIXED, moisture_ref: str | None = MOISTURE_REF_FIXED, workers: int = 4,
               limit: int | None = None, timeout: float = 120, retry_failed: bool = False,
               variants: int = 0, windows=DEFAULT_WINDOWS, doses=DEFAULT_DOSES, seed: int = 1,
-              fields_from: str | Path | None = None, copy_weather: bool | None = None,
+              fields_from: str | Path | None = None, copy_weather: bool | None = None, sample: int | None = None,
               runner: Callable[[Path, Path, float], None] = run_winprzm) -> list[dict]:
     """Re-run every folder with input files. Folders that are already done are skipped,
     so the command can be stopped and started again. Folders for which PRZM itself reported a
@@ -459,6 +459,8 @@ def rerun_all(runs_root: str | Path, out_root: str | Path, exe: str | Path, work
         named <field>__v1, <field>__v2, ... and the plan is written to <out_root>/rerun_plan.csv.
     fields_from: a folder of finished results (for example data/raw/runs_fixed); only fields that
         have a full result there are used. Saves the time for fields PRZM cannot calculate.
+    sample: use only this many fields, spread evenly over all fields (every k-th folder), instead of
+        all of them. `limit` then counts within this choice. The same number always picks the same fields.
     copy_weather: store a copy of the weather file with every result. Default: yes for plain
         re-runs, no for varied ones (it is the same file as in `runs_root` and takes a lot of room).
 
@@ -489,6 +491,11 @@ def rerun_all(runs_root: str | Path, out_root: str | Path, exe: str | Path, work
         if not good:
             raise FileNotFoundError(f"no finished results under {fields_from}")
         sources = [s for s in sources if s.name in good]
+    if sample is not None:
+        if sample < 1:
+            raise RerunError("sample must be 1 or more")
+        if sample < len(sources):                 # every k-th folder, so that all batches take part
+            sources = [sources[i * len(sources) // sample] for i in range(sample)]
     sources = sources[:limit]
     plan: dict[Path, Variant | None] = {}
     todo = []
@@ -512,6 +519,8 @@ def rerun_all(runs_root: str | Path, out_root: str | Path, exe: str | Path, work
     settings = f"henry={henry}\nmoisture_ref={moisture_ref}\n"
     if variants:
         settings += f"variants={variants}\nwindows={','.join(windows)}\ndoses={','.join(doses)}\nseed={seed}\n"
+    if sample is not None:
+        settings += f"sample={sample}\n"
     note = out_root / "rerun_settings.txt"
     if note.exists():
         before = "".join(l for l in note.read_text().splitlines(keepends=True) if not l.startswith("source="))
