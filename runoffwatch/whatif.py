@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 from .features import DEFAULT_RATE_KGHA, MIN_RAIN_MM, weather_features
-from .models import conc_per_mm, load_models
+from .models import DEFAULT_SHARE_OF_DOSE_PCT, conc_per_mm, load_models
 from .przm_inp import SOIL_FEATURES
 
 # Median field of the training runs (close to the standard FOCUS R1 soil).
@@ -105,13 +105,17 @@ def check_inputs(weather: pd.DataFrame, soil: dict, spray_date: pd.Timestamp, me
 
 
 def predict_days(weather: pd.DataFrame, spray_date, soil: dict | None = None, models: dict | None = None,
-                 model_dir: str | Path = "models", rate_kgha: float = DEFAULT_RATE_KGHA) -> pd.DataFrame:
+                 model_dir: str | Path = "models", rate_kgha: float = DEFAULT_RATE_KGHA,
+                 high_loss_pct_of_dose: float = DEFAULT_SHARE_OF_DOSE_PCT) -> pd.DataFrame:
     """Predicted runoff and pesticide loss for every day from the spray date on.
 
     rate_kgha: the dose that is sprayed, in kg/ha.
+    high_loss_pct_of_dose: a day counts as a high-loss day when it loses at least this many percent
+             of the dose (0.1 % of 2.4 kg/ha is 2.4 g/ha). The limit in g/ha is in
+             `.attrs["high_loss_limit_gha"]`.
     weather: daily table (index or column `date`; rain_mm, temp_c, optional pan_evap_mm) that
              includes the spray date, ideally starting 30+ days before it.
-    Returns one row per day: rain_mm, runoff_mm, loss_gha, high_loss_day (loss >= 1 g/ha).
+    Returns one row per day: rain_mm, runoff_mm, loss_gha, high_loss_day.
     Notes about inputs the models have not seen are in `.attrs["notes"]` and raised as warnings.
     """
     models = models or load_models(model_dir)
@@ -123,6 +127,8 @@ def predict_days(weather: pd.DataFrame, spray_date, soil: dict | None = None, mo
         raise ValueError(f"spray date {spray_date.date()} is not inside the weather table")
     if not (np.isfinite(rate_kgha) and rate_kgha > 0):
         raise ValueError("the dose must be a number above zero")
+    if not (np.isfinite(high_loss_pct_of_dose) and high_loss_pct_of_dose > 0):
+        raise ValueError("the high-loss limit must be a share of the dose above zero")
     notes = check_inputs(w, soil, spray_date, meta, rate_kgha)
     for note in notes:
         warnings.warn(note, stacklevel=2)
@@ -142,17 +148,21 @@ def predict_days(weather: pd.DataFrame, spray_date, soil: dict | None = None, mo
         conc = conc_per_mm(meta, models["conc"].predict(fr[meta["conc_features"]]), rate_kgha)
         out.loc[rainy, "runoff_mm"] = runoff
         out.loc[rainy, "loss_gha"] = runoff * np.where(conc > meta["conc_floor"] * 1.01, conc, 0.0)
-    out["high_loss_day"] = out["loss_gha"] >= meta["high_loss_threshold_gha"]
+    limit_gha = 10.0 * high_loss_pct_of_dose * rate_kgha     # percent of a dose in kg/ha, expressed in g/ha
+    out["high_loss_day"] = out["loss_gha"] >= limit_gha
     out.attrs["notes"] = notes
+    out.attrs["high_loss_limit_gha"] = limit_gha
     return out
 
 
 def compare_spray_days(weather: pd.DataFrame, candidates, horizon_days: int = 14, soil: dict | None = None,
                        models: dict | None = None, model_dir: str | Path = "models",
-                       rate_kgha: float = DEFAULT_RATE_KGHA) -> pd.DataFrame:
+                       rate_kgha: float = DEFAULT_RATE_KGHA,
+                       high_loss_pct_of_dose: float = DEFAULT_SHARE_OF_DOSE_PCT) -> pd.DataFrame:
     """For each candidate spray date: predicted pesticide loss in the following `horizon_days`.
 
-    Lower is better. Only candidates whose whole window lies inside the weather table are
+    Lower is better. `high_loss_days` counts the days that lose at least `high_loss_pct_of_dose`
+    percent of the dose. Only candidates whose whole window lies inside the weather table are
     ranked; a shorter window would look better only because it adds up fewer days.
     `.attrs["notes"]` lists every warning about inputs outside what the models have seen.
     """
@@ -162,7 +172,7 @@ def compare_spray_days(weather: pd.DataFrame, candidates, horizon_days: int = 14
     for c in pd.to_datetime(list(candidates)):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            days = predict_days(w, c, soil, models, rate_kgha=rate_kgha)
+            days = predict_days(w, c, soil, models, rate_kgha=rate_kgha, high_loss_pct_of_dose=high_loss_pct_of_dose)
         notes += [n for n in days.attrs["notes"] if n not in notes]
         days = days.iloc[:horizon_days]
         worst = days["loss_gha"].idxmax()

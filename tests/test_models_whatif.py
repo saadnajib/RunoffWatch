@@ -221,7 +221,16 @@ def test_predict_days(trained):
     assert (days.loc[dry, ["runoff_mm", "loss_gha"]] == 0).all().all()
     assert (days[["runoff_mm", "loss_gha"]] >= 0).all().all()
     assert not days.loc[dry, "high_loss_day"].any()
-    assert (days["high_loss_day"] == (days["loss_gha"] >= 1.0)).all()
+    # a high-loss day is a share of the dose: 0.1 % of the standard 2.4 kg/ha is 2.4 g/ha
+    assert days.attrs["high_loss_limit_gha"] == pytest.approx(2.4)
+    assert (days["high_loss_day"] == (days["loss_gha"] >= 2.4)).all()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        low = whatif.predict_days(w, WEATHER_SPRAY, models=trained["models"], rate_kgha=1.2, high_loss_pct_of_dose=0.05)
+    assert low.attrs["high_loss_limit_gha"] == pytest.approx(0.6)
+    assert (low["high_loss_day"] == (low["loss_gha"] >= 0.6)).all()
+    with pytest.raises(ValueError, match="high-loss limit"):
+        whatif.predict_days(w, WEATHER_SPRAY, models=trained["models"], high_loss_pct_of_dose=0)
     assert days.attrs["notes"] == []
     assert days.loc["2026-03-10", "runoff_mm"] > days.loc[~dry, "runoff_mm"].min()   # the 32 mm storm
 
@@ -847,6 +856,27 @@ def test_alarm_by_share_of_dose_uses_the_dose_of_each_row():
     low = out["by_dose_kgha"]["0.24"]
     assert low == {"high_loss_days": 1, "alarms": 2, "precision": 0.5, "recall": 1.0}
     json.dumps(out)
+
+
+def test_alarm_by_share_of_dose_by_year_and_spray_window(tmp_path):
+    """With `year` and `app_doy` the same scores come for each held-out year and spray window."""
+    P = pd.DataFrame({"year": [1991, 1991, 1992, 1992], "app_doy": [60, 60, 288, 288],
+                      "app_rate_kgha": [2.4] * 4,
+                      "loss_gha":  [3.0, 0.0, 3.0, 3.0],
+                      "loss_pred": [3.0, 3.0, 3.0, 0.0]})
+    out = models.alarm_by_share_of_dose(P, limits_pct=(0.1,))["0.1"]
+    assert out["by_year"]["1991"] == {"high_loss_days": 1, "alarms": 2, "precision": 0.5, "recall": 1.0}
+    assert out["by_year"]["1992"] == {"high_loss_days": 2, "alarms": 1, "precision": 1.0, "recall": 0.5}
+    assert set(out["by_spray_window"]) == set(models.spray_window(P["app_doy"]))
+    assert sum(v["high_loss_days"] for v in out["by_spray_window"].values()) == out["high_loss_days"] == 3
+    # the same table again from saved predictions, written into the summary file
+    P.to_parquet(tmp_path / "pred.parquet")
+    (tmp_path / "cv_summary.json").write_text(json.dumps({"pooled": {"loss_r2": 0.9}}))
+    again = models.rescore_alarms(tmp_path / "pred.parquet", tmp_path)
+    saved = json.loads((tmp_path / "cv_summary.json").read_text())
+    assert saved["pooled"] == {"loss_r2": 0.9}
+    assert set(again) == set(saved["alarm_by_share_of_dose"]) == {f"{p:g}" for p in models.SHARE_OF_DOSE_LIMITS_PCT}
+    assert saved["alarm_by_share_of_dose"]["0.1"]["by_year"] == out["by_year"]
 
 
 def test_alarm_by_share_of_dose_without_any_high_loss_day():

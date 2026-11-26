@@ -122,6 +122,27 @@ def test_headline_and_template():
     assert ad.weather_template(w).splitlines() == ["date,rain_mm,temp_c", "2026-01-01,0.0,3.0", "2026-01-02,1.5,4.0"]
 
 
+def test_high_loss_limit_helpers():
+    assert ad.limit_gha(0.1, 2.4) == pytest.approx(2.4) and ad.limit_gha(0.05, 0.24) == pytest.approx(0.12)
+    assert ad.limit_text(0.1) == "0.1% of the dose"
+    assert ad.limit_text(0.05, 1.2) == "0.05% of the dose (0.60 g/ha)"
+    cv = {"alarm_by_share_of_dose": {"0.1": {"precision": 0.9}, "0.05": "broken"}}
+    assert ad.alarm_scores(cv, 0.1) == {"precision": 0.9}
+    assert ad.alarm_scores(cv, 0.05) is None and ad.alarm_scores(cv, 0.2) is None and ad.alarm_scores(None, 0.1) is None
+    assert [ad.flag_text(n) for n in (0, 1, 3, None)] == ["", "1 day above the limit", "3 days above the limit", ""]
+
+
+def test_season_means_and_short_scenario_name(tmp_path):
+    t = pd.DataFrame({"sprayed": ["03 Mar 1-15", "03 Mar 16-end", "10 Oct 1-15", "11 Nov 1-15"],
+                      "mean_pct_of_dose_lost": [0.1, 0.2, 0.4, 0.8], "seasons": [300, 100, 50, 50]})
+    m = ad.season_means(t)
+    assert m["Spring (Feb-Apr)"] == pytest.approx({"mean": 0.125, "low": 0.1, "high": 0.2})     # weighted by seasons
+    assert m["Autumn (Oct-Nov)"] == pytest.approx({"mean": 0.6, "low": 0.4, "high": 0.8})
+    assert ad.season_means(t.drop(columns="seasons"))["Spring (Feb-Apr)"]["mean"] == pytest.approx(0.15)
+    assert ad.scenario_short({"spraying": {"day": 15, "month": 10}}, tmp_path / "autumn") == "Spraying on 15 October"
+    assert ad.scenario_short(None, tmp_path / "autumn") == "Scenario 'autumn'"
+
+
 # --------------------------------------------------------------------------- #
 # The app itself (in-process, no browser)
 # --------------------------------------------------------------------------- #
@@ -136,7 +157,8 @@ def run_app(cwd: Path, monkeypatch):
 
 
 def texts(at) -> str:
-    parts = [m.value for m in at.markdown] + [c.value for c in at.caption] + [i.value for i in at.info]
+    parts = ([m.value for m in at.markdown] + [c.value for c in at.caption] + [i.value for i in at.info]
+             + [x.value for x in at.success])
     return "\n".join(str(p) for p in parts)
 
 
@@ -151,12 +173,28 @@ needs_models = pytest.mark.skipif(not (ROOT / "models/meta.json").exists(), reas
 def test_app_with_repo_files(monkeypatch):
     at = run_app(ROOT, monkeypatch)
     assert not at.exception, [e.value for e in at.exception]
-    assert [t.label for t in at.tabs] == ["Compare spray days", "How good is the copy?", "Spray date",
-                                         "45 years of French weather", "About and limits"]
+    assert [t.label for t in at.tabs] == ["Pick a spray day", "Is the copy right?", "Spring or autumn?",
+                                         "45 years of weather", "About"]
     body = texts(at)
+    assert "Project task: 4, the spray-day advisor." in body        # every tab names its project task
+    assert "1 g/ha or more" not in body                             # the limit is a share of the dose now
     if not errors(at):                               # models loaded (they may be mid-rewrite)
         assert "Lowest predicted loss: spraying on" in body
         assert ad.CAUTION in body
+        assert "a day is flagged from 2.40 g/ha lost in one day" in body      # 0.1 % of 2,400 g/ha
+        # the high-loss limit is shown in two tabs; changing one changes the other and the scores shown
+        cards = {m.label: m.value for m in at.metric}
+        limit = {s.key: s for s in at.select_slider if s.key}
+        limit["limit_advisor"].set_value(0.5).run()
+        assert not at.exception
+        assert at.session_state["limit_quality"] == 0.5
+        assert "a day is flagged from 12.0 g/ha lost in one day" in texts(at)
+        after = {m.label: m.value for m in at.metric}
+        if "High-loss days in the test" in cards:
+            assert after["High-loss days in the test"] != cards["High-loss days in the test"]
+            assert after["Pesticide loss"] == cards["Pesticide loss"]         # amounts do not depend on the limit
+        {s.key: s for s in at.select_slider if s.key}["limit_quality"].set_value(0.1).run()
+        assert at.session_state["limit_advisor"] == 0.1
     # change inputs and run again
     at.slider[0].set_value(8.0).run()
     assert not at.exception
@@ -207,10 +245,11 @@ def test_app_with_broken_results(tmp_path, monkeypatch):
         json.dumps({"spraying": {"day": 15, "month": 10, "rate_kgha": 2.4}}))
     at = run_app(tmp_path, monkeypatch)
     assert not at.exception, [e.value for e in at.exception]
-    assert "Scenario" in [s.label for s in at.selectbox]
-    scen = next(s for s in at.selectbox if s.label == "Scenario")
+    scen = next(r for r in at.radio if r.label == "Scenario")
+    assert scen.options == ["Spraying on 1 March", "Spraying on 15 October"]
     scen.set_value(scen.options[1]).run()
     assert not at.exception
+    assert "the alarm table by share of the dose" not in texts(at)      # the summary itself is unreadable here
 
 
 def test_app_without_models(tmp_path, monkeypatch):
