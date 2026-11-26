@@ -1,0 +1,2 @@
+# Model files: LightGBM finds its trees by counting bytes, so the line ends must stay as saved.
+models/**/*.txt text eol=lf
