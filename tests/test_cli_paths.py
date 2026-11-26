@@ -11,8 +11,10 @@ KEYS = {"runs", "interim", "features", "models", "results", "figures", "france_o
 
 
 def test_datasets_have_the_same_keys():
-    assert set(DATASETS) == {"corrected", "delivered", "varied"}
+    assert set(DATASETS) == {"corrected", "delivered", "varied", "dosecheck"}
     assert set(DATASETS["corrected"]) == set(DATASETS["delivered"]) == set(DATASETS["varied"]) == KEYS
+    # the test-only data set has the same keys plus what makes it a test
+    assert set(DATASETS["dosecheck"]) == KEYS | {"test_only", "compare_with", "what_is_new", "rerun"}
     assert DEFAULT_DATASET == "corrected"
 
 
@@ -225,3 +227,68 @@ def test_france_scenario_name_is_checked():
     import pytest
     with pytest.raises(SystemExit):
         parse_args(["france", "--scenario", "../elsewhere"])
+
+
+# --------------------------------------------------------------------------- #
+# The test-only data set (a dose the models have not seen) and the check command
+# --------------------------------------------------------------------------- #
+def test_dosecheck_never_writes_where_training_data_or_other_results_live():
+    d = DATASETS["dosecheck"]
+    assert d["test_only"] is True and d["models"] == DATASETS["varied"]["models"]       # tests the varied models
+    for name in ("corrected", "delivered", "varied"):
+        for k in ("runs", "interim", "features", "results", "figures", "france_out"):
+            assert d[k] != DATASETS[name][k], (name, k)
+        assert not set(d["features_from"]) & set(DATASETS[name]["features_from"]), name
+    assert float(d["rerun"]["doses"]) not in (0.24, 1.2, 2.4)                           # a dose the models never saw
+    assert d["rerun"]["seed"] != 1                                                      # other spray dates than in training
+
+
+@pytest.mark.parametrize("cmd", ["train", "lstm", "design", "france"])
+def test_dosecheck_refuses_everything_that_trains_or_reuses_it(cmd):
+    with pytest.raises(SystemExit, match="only for testing the frozen models"):
+        parse_args(["--dataset", "dosecheck", cmd])
+
+
+def test_dosecheck_defaults_for_rerun_add_weather_and_check(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    d = DATASETS["dosecheck"]
+    a = parse_args(["--dataset", "dosecheck", "rerun", "--exe", "x.exe"])
+    assert (a.out, a.variants, a.doses, a.seed, a.sample) == (d["runs"], 1, "0.60", 2, 500)
+    a = parse_args(["--dataset", "dosecheck", "rerun", "--exe", "x.exe", "--sample", "50", "--seed", "7"])
+    assert (a.sample, a.seed, a.doses) == (50, 7, "0.60")                               # what is typed wins
+    assert parse_args(["--dataset", "dosecheck", "add-weather"]).runs == d["runs"]
+    a = parse_args(["--dataset", "dosecheck", "check"])
+    assert (a.features, a.models, a.results) == (d["features"], d["models"], d["results"])
+    a = parse_args(["--dataset", "dosecheck", "features"])
+    assert a.interim == d["features_from"] and a.out == d["features"]
+    # the other data sets keep their old defaults
+    a = parse_args(["rerun", "--exe", "x.exe"])
+    assert (a.variants, a.doses, a.seed, a.sample) == (0, None, 1, None)
+
+
+def test_train_refuses_a_frozen_model_folder(tmp_path, monkeypatch):
+    """`train` must not overwrite frozen models; `train --cv` writes no models and is not stopped here."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "models").mkdir()
+    for f in ("runoff.txt", "conc.txt", "high_loss.txt", "meta.json"):
+        (tmp_path / "models" / f).write_text("x")
+    from runoffwatch import models
+    models.write_frozen(["models"], "models/FROZEN.json", frozen_on="2026-11-26", reason="test")
+    with pytest.raises(SystemExit, match="are frozen"):
+        main(["train", "--features", "none.parquet"])
+    seen = {}
+    monkeypatch.setattr(models, "train_all", lambda *a, **k: seen.setdefault("trained", a[1]) and {} or
+                        {"split": 0, "runoff": 0, "loss": 0, "high_loss": 0})
+    assert main(["train", "--features", "none.parquet", "--models", "models/new"]) == 0     # another folder is fine
+    assert seen["trained"] == "models/new"
+
+
+def test_check_without_the_new_runs_says_what_to_do(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "FROZEN.json").write_text('{"frozen_on": "2026-11-26", "folders": {"models/varied": {}}}')
+    with pytest.raises(SystemExit, match="Run the steps before it first"):
+        main(["--dataset", "dosecheck", "check"])
+    (tmp_path / "models" / "FROZEN.json").unlink()
+    with pytest.raises(SystemExit, match="is not frozen"):
+        main(["--dataset", "dosecheck", "check"])

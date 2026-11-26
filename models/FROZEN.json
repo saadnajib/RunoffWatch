@@ -1,0 +1,25 @@
+{
+  "what": "Fingerprints of the saved models. A test on runs that arrived after this date is only honest if the models were not changed in between.",
+  "frozen_on": "2026-11-26",
+  "reason": "Frozen before any new PRZM runs are made or received (a check with a dose of 0.6 kg/ha on known fields, and new fields requested from the Landau group). The files are those of commit 3150b96 on main.",
+  "folders": {
+    "models": {
+      "runoff.txt": "ee0e8bfaad8e3a501e1132615ef4e577ddf6af6243cb213f4681bc50f2245ede",
+      "conc.txt": "9931c65090cafb963c33bcea7c220a388e4738fdd868f0dc95f201160c09afd6",
+      "high_loss.txt": "78bd8c8ac3933ebceec768ee91d7b3ddbc83228c7920fdd4fd6d3f2866f38640",
+      "meta.json": "6054ced5f630f5194ff6508b511847dca0f643e1cec8159513cbf2a1735f6a4b"
+    },
+    "models/varied": {
+      "runoff.txt": "91e0e6775930e747a4824e8afee432f7b591a9cf7b900f96323a0bf9d7fac3be",
+      "conc.txt": "176b26ac14940caab65812a99bd9263a22f731436bdadf622cfe5ff8e3e54259",
+      "high_loss.txt": "91fd049a7ac7029c2da77c7a6793af6f9a0e87ee80efcf79d6138ce7c12b52c2",
+      "meta.json": "c75b5cb1677458e68dac0ccc8cfc2de6d1bb4fe16a9b1eb293fbb17b0fdf27ce"
+    },
+    "models/delivered": {
+      "runoff.txt": "14a5e391cb6746f69e42ecea09db7fe72d8fc04c042dc7e510032a2de0e3c371",
+      "conc.txt": "3e82dbd7d3f37819c1eff3ec7df6bd2e1aa24c10447d8067eae8a055abfc87b3",
+      "high_loss.txt": "6ab4c2ddd99a3ce856d44d849704c78bad5aa969d563f414f35960d732d5cf36",
+      "meta.json": "40ff3f650aa914c157b3b18ca446ef39331a3c0e3f6f43a19311615776236903"
+    }
+  }
+}

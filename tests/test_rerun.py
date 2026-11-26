@@ -450,6 +450,24 @@ def test_rerun_all_limit(tree, tmp_path):
     assert len(rerun_all(tree, out, "WINPRZM.exe", "rr", workers=2, limit=3, runner=more)) == 1
 
 
+def test_rerun_all_sample_spreads_over_all_fields(tree, tmp_path):
+    """sample=2 of the four fields takes every second one, so both batches take part; the same call picks the same."""
+    out = tmp_path / "out"
+    recs = rerun_all(tree, out, "WINPRZM.exe", "rr", workers=2, sample=2, runner=FakeRunner())
+    assert sorted(r["run"] for r in recs) == ["run_1", "run_3"]
+    assert "sample=2" in (out / "rerun_settings.txt").read_text()
+    assert rerun_all(tree, out, "WINPRZM.exe", "rr", workers=2, sample=2, runner=FakeRunner()) == []
+    # more than there are: all fields; with copies: one copy of each sampled field, with the given dose
+    assert len(rerun_all(tree, tmp_path / "all", "WINPRZM.exe", "rr", workers=2, sample=99, runner=FakeRunner())) == 4
+    recs = rerun_all(tree, tmp_path / "v", "WINPRZM.exe", "rr", workers=2, sample=2, variants=1, doses=("0.60",),
+                     seed=2, runner=FakeRunner())
+    assert sorted(r["run"] for r in recs) == ["run_1__v1", "run_3__v1"]
+    plan = (tmp_path / "v" / "rerun_plan.csv").read_text()
+    assert plan.count(",0.60,") == 2
+    with pytest.raises(RerunError, match="sample"):
+        rerun_all(tree, out, "WINPRZM.exe", "rr", sample=0, runner=FakeRunner())
+
+
 def test_rerun_all_workers_never_share_a_work_folder(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     root = tmp_path / "root"

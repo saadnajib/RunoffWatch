@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -897,3 +898,86 @@ def test_load_models_survives_windows_line_ends(trained, tmp_path):
     for name in MODEL_FILES:
         cols = m[name].feature_name()
         np.testing.assert_array_equal(m[name].predict(rows[cols]), trained["models"][name].predict(rows[cols]))
+
+
+# --------------------------------------------------------------------------- #
+# Frozen models and the check on runs that came later
+# --------------------------------------------------------------------------- #
+def test_fingerprint_and_frozen_state(trained, tmp_path):
+    import shutil
+    root = tmp_path / "repo"
+    shutil.copytree(trained["root"] / "models", root / "models")
+    manifest = root / "models" / "FROZEN.json"
+    assert models.frozen_state(root / "models", manifest) is None                       # no fingerprint file yet
+    print_ = models.fingerprint(root / "models")
+    assert set(print_) == {*MODEL_FILES.values(), "meta.json"} and all(len(h) == 64 for h in print_.values())
+    import os
+    cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        data = models.write_frozen(["models"], "models/FROZEN.json", frozen_on="2026-11-26", reason="before new runs")
+    finally:
+        os.chdir(cwd)
+    assert data["folders"] == {"models": print_}
+    assert models.frozen_state(root / "models", manifest) == {"frozen_on": "2026-11-26", "changed": []}
+    assert models.frozen_state(root / "elsewhere", manifest) is None                    # a folder that is not listed
+    # Windows line ends (git on Windows) do not count as a change
+    f = root / "models" / MODEL_FILES["runoff"]
+    f.write_bytes(f.read_bytes().replace(b"\n", b"\r\n"))
+    assert models.frozen_state(root / "models", manifest)["changed"] == []
+    # one more tree, or a missing file, does
+    f.write_bytes(f.read_bytes() + b"x\n")
+    (root / "models" / "meta.json").unlink()
+    assert models.frozen_state(root / "models", manifest)["changed"] == sorted(["meta.json", MODEL_FILES["runoff"]])
+
+
+def test_score_new_runs_needs_frozen_models_and_trains_nothing(trained_varied, tmp_path):
+    import shutil
+    root = tmp_path / "repo"
+    shutil.copytree(trained_varied["root"] / "models", root / "models")
+    features, manifest = trained_varied["root"] / "features.parquet", root / "models" / "FROZEN.json"
+    with pytest.raises(RuntimeError, match="is not frozen"):
+        models.score_new_runs(features, root / "models", root / "res", manifest=manifest)
+    manifest.write_text(json.dumps({"frozen_on": "2026-11-26", "folders": {"models": models.fingerprint(root / "models")}}))
+    before = models.fingerprint(root / "models")
+    (root / "cv.json").write_text(json.dumps({"held_out_years": [1991], "pooled": {"runoff_r2": 0.9, "loss_r2": 0.8},
+                                             "alarm_by_share_of_dose": {"0.1": {"precision": 0.9, "recall": 0.8, "by_year": {}}}}))
+    out = models.score_new_runs(features, root / "models", root / "res", compare_with=root / "cv.json",
+                                what_is_new="nothing, a test", manifest=manifest)
+    assert models.fingerprint(root / "models") == before                                # nothing was trained or saved
+    t = trained_varied["table"]
+    assert out["runs"] == t["run"].nunique() and out["fields"] == t["field"].nunique()
+    assert out["doses_kgha"] == [0.6, 1.2, 2.4] and out["doses_not_in_training"] == []
+    assert out["models"]["frozen_on"] == "2026-11-26" and out["what_is_new"] == "nothing, a test"
+    p = out["pooled"]
+    assert p["rain_days"] == len(t) and p["rain_days_with_trusted_pesticide"] == int(t["pest_clean"].sum())
+    assert p["runoff_r2"] > 0.5 and p["loss_r2"] is not None and p["loss_total_pred_over_true"] > 0
+    assert set(out["by_dose_kgha"]) == {"0.6", "1.2", "2.4"}
+    assert sum(v["rain_days_with_trusted_pesticide"] for v in out["by_dose_kgha"].values()) == p["rain_days_with_trusted_pesticide"]
+    assert set(out["alarm_by_share_of_dose"]) == {f"{x:g}" for x in models.SHARE_OF_DOSE_LIMITS_PCT}
+    assert out["expected_from_year_by_year_test"]["loss_r2"] == 0.8
+    assert out["expected_from_year_by_year_test"]["alarm_by_share_of_dose"]["0.1"] == {
+        "high_loss_days": None, "alarms": None, "precision": 0.9, "recall": 0.8}
+    saved = json.loads((root / "res" / "new_runs_check.json").read_text())
+    assert saved["pooled"] == p
+    by_year = pd.read_csv(root / "res" / "new_runs_check_by_year.csv")
+    assert list(by_year["year"]) == out["years"] and by_year["rain_days"].sum() == p["rain_days"]
+    assert (features.with_name("features_check_predictions.parquet")).is_file()
+    # a changed model is refused
+    f = root / "models" / MODEL_FILES["conc"]
+    f.write_bytes(f.read_bytes() + b"x\n")
+    with pytest.raises(RuntimeError, match="was changed after it was frozen"):
+        models.score_new_runs(features, root / "models", root / "res", manifest=manifest)
+
+
+def test_committed_models_match_their_fingerprints():
+    """The tripwire: the models in the repository are the ones that were frozen."""
+    root = Path(__file__).resolve().parents[1]
+    manifest = root / models.FROZEN_FILE
+    if not manifest.is_file():
+        pytest.skip("no frozen models in this checkout")
+    folders = json.loads(manifest.read_text())["folders"]
+    assert folders, "the fingerprint file lists no folder"
+    for folder in folders:
+        state = models.frozen_state(root / folder, manifest)
+        assert state is not None and state["changed"] == [], (folder, state)

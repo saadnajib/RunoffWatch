@@ -25,6 +25,7 @@ share one weather file and neighbouring weather files share the same storms.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -750,3 +751,143 @@ def _read_booster(path: Path) -> lgb.Booster:
     expect a tree here". So the line ends are put back before the model is read.
     """
     return lgb.Booster(model_str=Path(path).read_bytes().replace(b"\r\n", b"\n").decode("utf-8"))
+
+
+# --------------------------------------------------------------------------- #
+# Frozen models and the check on runs that came later
+# --------------------------------------------------------------------------- #
+FROZEN_FILE = "models/FROZEN.json"
+
+
+def fingerprint(model_dir: str | Path) -> dict[str, str]:
+    """SHA-256 of every model file and of meta.json in a model folder.
+
+    Windows line ends are removed first (git on Windows may add them on checkout), so the same
+    models give the same fingerprint on every computer.
+    """
+    return {f: _sha256(Path(model_dir) / f) for f in [*MODEL_FILES.values(), "meta.json"]}
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def write_frozen(model_dirs, manifest: str | Path = FROZEN_FILE, *, frozen_on: str, reason: str) -> dict:
+    """Write down the fingerprints of the models in `model_dirs` (paths as seen from the repository root).
+
+    From then on `train` refuses to overwrite these folders, and `check` only scores models that
+    still match. To train new models on purpose: use another folder, or take the folder out of the file.
+    """
+    data = {"what": "Fingerprints of the saved models. A test on runs that arrived after this date is only "
+                    "honest if the models were not changed in between.",
+            "frozen_on": frozen_on, "reason": reason,
+            "folders": {Path(d).as_posix(): fingerprint(d) for d in model_dirs}}
+    Path(manifest).write_text(json.dumps(data, indent=2) + "\n")
+    return data
+
+
+def frozen_state(model_dir: str | Path, manifest: str | Path = FROZEN_FILE) -> dict | None:
+    """Is this model folder frozen, and do its files still match?
+
+    None: no fingerprint file, or the folder is not in it. Otherwise {"frozen_on", "changed"}, with
+    `changed` listing the files that differ from the fingerprint or are missing (empty = unchanged).
+    The folders in the file are read from the repository root, which is the folder above the file's folder.
+    """
+    manifest = Path(manifest)
+    try:
+        data = json.loads(manifest.read_text())
+    except (OSError, ValueError):
+        return None
+    root, here = manifest.resolve().parent.parent, Path(model_dir).resolve()
+    for folder, files in (data.get("folders") or {}).items():
+        if (root / folder).resolve() == here:
+            def same(name: str, wanted: str) -> bool:
+                try:
+                    return _sha256(here / name) == wanted
+                except OSError:                       # a missing file is a change too
+                    return False
+            return {"frozen_on": data.get("frozen_on"), "changed": sorted(f for f, h in files.items() if not same(f, h))}
+    return None
+
+
+def score_new_runs(features_path: str | Path, model_dir: str | Path = "models", results: str | Path = "docs/results/check",
+                   compare_with: str | Path | None = None, what_is_new: str = "",
+                   manifest: str | Path = FROZEN_FILE) -> dict:
+    """Score the frozen models on runs they were not trained on. Nothing is trained here.
+
+    features_path: feature table of the new runs only (made with `features`).
+    Only frozen, unchanged models are scored (see write_frozen): the point of this test is that
+    the models could not be adjusted after the new runs were seen.
+    Writes `new_runs_check.json` and `new_runs_check_by_year.csv` to `results`, and the predictions
+    next to the feature table. `compare_with`: the `cv_summary.json` of the same models, whose
+    pooled scores are copied into the result as the scores that were expected.
+    """
+    from .quality import app_year
+
+    state = frozen_state(model_dir, manifest)
+    if state is None:
+        raise RuntimeError(f"{model_dir} is not frozen ({manifest}). Only frozen models are checked on new runs.")
+    if state["changed"]:
+        raise RuntimeError(f"{model_dir} was changed after it was frozen on {state['frozen_on']}: {state['changed']}. "
+                           "Restore the frozen files (git checkout) before checking new runs.")
+    m = load_models(model_dir)
+    meta = m["meta"]
+    t = load_features(features_path)
+    if not len(t):
+        raise RuntimeError(f"{features_path} has no rows")
+    t["runoff_pred"] = m["runoff"].predict(t[meta["runoff_features"]])
+    tc = t[t["pest_clean"]].copy()
+    if not len(tc):
+        raise RuntimeError(f"{features_path} has no rain day with trusted pesticide results")
+    tc["loss_pred"] = tc["runoff_pred"] * conc_per_mm(meta, m["conc"].predict(tc[meta["conc_features"]]), _rate(tc))
+    tc["year"] = app_year(pd.DatetimeIndex(tc["date"]))
+    t["year"] = app_year(pd.DatetimeIndex(t["date"]))
+
+    def scores(a: pd.DataFrame, c: pd.DataFrame) -> dict:
+        r2 = lambda y, p: float(r2_score(y, p)) if len(y) > 1 else None  # noqa: E731
+        total = float(c["loss_gha"].sum())
+        return {"rain_days": int(len(a)), "rain_days_with_trusted_pesticide": int(len(c)),
+                "runoff_r2": r2(a["runoff_mm"], a["runoff_pred"]),
+                "runoff_r2_curve_number": r2(a["runoff_mm"], a["cn_runoff_mm"]),
+                "loss_r2": r2(c["loss_gha"], c["loss_pred"]),
+                "loss_total_pred_over_true": float(c["loss_pred"].sum() / total) if total > 0 else None}
+
+    trained = sorted(float(d) for d in dig_doses(meta))
+    doses = sorted(float(d) for d in np.unique(np.round(_rate(tc), 3)))
+    by_year = pd.DataFrame({int(y): scores(a, tc[tc["year"] == y]) for y, a in t.groupby("year")}).T.rename_axis("year")
+    expected = None
+    if compare_with is not None and Path(compare_with).is_file():
+        cv = json.loads(Path(compare_with).read_text())
+        expected = {"from": str(Path(compare_with).as_posix()), "held_out_years": cv.get("held_out_years"),
+                    **{k: cv.get("pooled", {}).get(k) for k in ("runoff_r2", "runoff_r2_curve_number", "loss_r2",
+                                                               "loss_total_pred_over_true")},
+                    "alarm_by_share_of_dose": {k: {x: v.get(x) for x in ("high_loss_days", "alarms", "precision", "recall")}
+                                               for k, v in (cv.get("alarm_by_share_of_dose") or {}).items()}}
+    out = {
+        "what_is_new": what_is_new,
+        "models": {"folder": Path(model_dir).as_posix(), "frozen_on": state["frozen_on"], "fingerprint": fingerprint(model_dir),
+                   "trained_doses_kgha": trained},
+        "runs": int(t["run"].nunique()), "fields": int(t["field"].nunique()) if "field" in t.columns else None,
+        "doses_kgha": doses, "doses_not_in_training": [d for d in doses if not any(abs(d - x) < 1e-6 for x in trained)],
+        "years": [int(y) for y in by_year.index],
+        "pooled": scores(t, tc),
+        "by_dose_kgha": {str(d): scores(t[np.isclose(_rate(t), d, atol=1e-3)], tc[np.isclose(_rate(tc), d, atol=1e-3)])
+                         for d in doses},
+        "by_spray_window": {str(w): scores(t[spray_window(t["app_doy"]) == w], c)
+                            for w, c in tc.groupby(spray_window(tc["app_doy"]))},
+        "alarm_by_share_of_dose": alarm_by_share_of_dose(tc),
+        "expected_from_year_by_year_test": expected,
+    }
+    results = Path(results); results.mkdir(parents=True, exist_ok=True)
+    fp = Path(features_path)
+    tc[["year", "date", "run", "rain_mm", "runoff_mm", "runoff_pred", "cn_runoff_mm", "loss_gha", "loss_pred", "app_doy",
+        *[c for c in ("app_rate_kgha",) if c in tc.columns]]].to_parquet(
+        fp.with_name(f"{fp.stem}_check_predictions.parquet"), index=False)
+    by_year.round(4).to_csv(results / "new_runs_check_by_year.csv")
+    (results / "new_runs_check.json").write_text(json.dumps(out, indent=2))
+    return out
+
+
+def dig_doses(meta: dict) -> list:
+    """The doses a saved model set was trained on (the delivered dose if the meta file does not say)."""
+    return (meta.get("trained_on") or {}).get("doses_kgha") or [DEFAULT_RATE_KGHA]
