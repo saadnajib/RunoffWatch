@@ -14,11 +14,11 @@
   "high_loss_days": 19654,
   "storm_dates_with_high_loss": 572,
   "pooled": {
-    "runoff_r2": 0.9857557797309499,
+    "runoff_r2": 0.9857557797309503,
     "runoff_r2_curve_number": 0.9401156902313232,
-    "loss_r2": 0.9646605388251732,
+    "loss_r2": 0.9646605388246078,
     "loss_r2_baseline": 0.7824924351091211,
-    "loss_total_pred_over_true": 0.9850693498363601,
+    "loss_total_pred_over_true": 0.985069348975618,
     "pr_auc_surrogate": 0.9734810426663199,
     "pr_auc_classifier": 0.9746087106767907,
     "pr_auc_rain_rule": 0.1061773700201274,
@@ -30,20 +30,20 @@
   },
   "range_over_years": {
     "runoff_r2": [
-      0.9539580370050331,
-      0.9931724792756318
+      0.9539580370050332,
+      0.9931724792756319
     ],
     "runoff_r2_curve_number": [
       0.8292811512947083,
       0.967355489730835
     ],
     "loss_r2": [
-      0.9073298938028924,
-      0.9755683818154609
+      0.9073298938029166,
+      0.9755683818154647
     ],
     "loss_total_pred_over_true": [
-      0.9504648431503739,
-      1.0822862154726227
+      0.9504648431505354,
+      1.0822862154726864
     ],
     "pr_auc_surrogate": [
       0.9611429651212242,
@@ -63,8 +63,8 @@
     "autumn (Oct-Nov)": {
       "rows": 1553593,
       "high_loss_days": 11503,
-      "loss_r2": 0.9618362994676577,
-      "loss_total_pred_over_true": 0.9877454671948137,
+      "loss_r2": 0.9618362994670742,
+      "loss_total_pred_over_true": 0.9877454659702856,
       "pr_auc_surrogate": 0.9747960100295817,
       "alarm_precision": 0.927539991353221,
       "alarm_recall": 0.9325393375641137
@@ -72,8 +72,8 @@
     "spring (Feb-Apr)": {
       "rows": 3262274,
       "high_loss_days": 8151,
-      "loss_r2": 0.9755464510887895,
-      "loss_total_pred_over_true": 0.9804973269352838,
+      "loss_r2": 0.9755464510882927,
+      "loss_total_pred_over_true": 0.9804973266960813,
       "pr_auc_surrogate": 0.9737730581359553,
       "alarm_precision": 0.9237529397202624,
       "alarm_recall": 0.9155931787510735
@@ -83,8 +83,8 @@
     "0.24": {
       "rows": 1070740,
       "high_loss_days": 981,
-      "loss_r2": 0.9630546295458959,
-      "loss_total_pred_over_true": 0.9993356346190974,
+      "loss_r2": 0.963054629545891,
+      "loss_total_pred_over_true": 0.9993356346191413,
       "pr_auc_surrogate": 0.9603000795722294,
       "alarm_precision": 0.8991853360488798,
       "alarm_recall": 0.9001019367991845
@@ -92,8 +92,8 @@
     "1.2": {
       "rows": 1095118,
       "high_loss_days": 5581,
-      "loss_r2": 0.9646872994781839,
-      "loss_total_pred_over_true": 0.9944764378407183,
+      "loss_r2": 0.9646872994752951,
+      "loss_total_pred_over_true": 0.9944764347406849,
       "pr_auc_surrogate": 0.9742597455011338,
       "alarm_precision": 0.9230769230769231,
       "alarm_recall": 0.9310159469629099
@@ -101,11 +101,589 @@
     "2.4": {
       "rows": 2650009,
       "high_loss_days": 13092,
-      "loss_r2": 0.9646525438709517,
-      "loss_total_pred_over_true": 0.9807386166819675,
+      "loss_r2": 0.9646525438708139,
+      "loss_total_pred_over_true": 0.9807386165561626,
       "pr_auc_surrogate": 0.9743463068490811,
       "alarm_precision": 0.9292565027238548,
       "alarm_recall": 0.9250687442713107
+    }
+  },
+  "alarm_by_share_of_dose": {
+    "0.01": {
+      "high_loss_days": 63255,
+      "alarms": 63223,
+      "precision": 0.9419673220188856,
+      "recall": 0.941490791241799,
+      "by_dose_kgha": {
+        "0.24": {
+          "high_loss_days": 17310,
+          "alarms": 17260,
+          "precision": 0.9461761297798378,
+          "recall": 0.9434430964760254
+        },
+        "1.2": {
+          "high_loss_days": 17120,
+          "alarms": 17126,
+          "precision": 0.9450543033983417,
+          "recall": 0.9453855140186916
+        },
+        "2.4": {
+          "high_loss_days": 28825,
+          "alarms": 28837,
+          "precision": 0.9376148697853453,
+          "recall": 0.9380052038161318
+        }
+      },
+      "by_year": {
+        "1991": {
+          "high_loss_days": 5783,
+          "alarms": 5749,
+          "precision": 0.9419029396416768,
+          "recall": 0.9363652083693584
+        },
+        "1992": {
+          "high_loss_days": 7074,
+          "alarms": 7133,
+          "precision": 0.9275199775690453,
+          "recall": 0.9352558665535765
+        },
+        "1993": {
+          "high_loss_days": 6874,
+          "alarms": 6943,
+          "precision": 0.9337462192135965,
+          "recall": 0.9431189991271458
+        },
+        "1994": {
+          "high_loss_days": 7658,
+          "alarms": 7582,
+          "precision": 0.9352413611184384,
+          "recall": 0.9259597806215722
+        },
+        "1995": {
+          "high_loss_days": 5233,
+          "alarms": 5371,
+          "precision": 0.919754235710296,
+          "recall": 0.9440091725587617
+        },
+        "1996": {
+          "high_loss_days": 7151,
+          "alarms": 7149,
+          "precision": 0.9425094418799832,
+          "recall": 0.9422458397426934
+        },
+        "1997": {
+          "high_loss_days": 10602,
+          "alarms": 10391,
+          "precision": 0.9639110768934654,
+          "recall": 0.9447274099226561
+        },
+        "1998": {
+          "high_loss_days": 6723,
+          "alarms": 6741,
+          "precision": 0.9468921524996291,
+          "recall": 0.949427338985572
+        },
+        "1999": {
+          "high_loss_days": 6157,
+          "alarms": 6164,
+          "precision": 0.9526281635301752,
+          "recall": 0.9537112229982134
+        }
+      },
+      "by_spray_window": {
+        "autumn (Oct-Nov)": {
+          "high_loss_days": 34504,
+          "alarms": 34372,
+          "precision": 0.9507738857209357,
+          "recall": 0.947136563876652
+        },
+        "spring (Feb-Apr)": {
+          "high_loss_days": 28751,
+          "alarms": 28851,
+          "precision": 0.9314755121139648,
+          "recall": 0.9347153142499391
+        }
+      }
+    },
+    "0.02": {
+      "high_loss_days": 46494,
+      "alarms": 46134,
+      "precision": 0.9414965101660381,
+      "recall": 0.9342065642878651,
+      "by_dose_kgha": {
+        "0.24": {
+          "high_loss_days": 13045,
+          "alarms": 12953,
+          "precision": 0.9431019840963484,
+          "recall": 0.9364507474128019
+        },
+        "1.2": {
+          "high_loss_days": 12910,
+          "alarms": 12906,
+          "precision": 0.940802727413606,
+          "recall": 0.9405112316034082
+        },
+        "2.4": {
+          "high_loss_days": 20539,
+          "alarms": 20275,
+          "precision": 0.9409124537607891,
+          "recall": 0.9288183455864453
+        }
+      },
+      "by_year": {
+        "1991": {
+          "high_loss_days": 4133,
+          "alarms": 4030,
+          "precision": 0.9518610421836228,
+          "recall": 0.9281393660779095
+        },
+        "1992": {
+          "high_loss_days": 4858,
+          "alarms": 4903,
+          "precision": 0.9273913930246788,
+          "recall": 0.9359818855496089
+        },
+        "1993": {
+          "high_loss_days": 5060,
+          "alarms": 5111,
+          "precision": 0.9189982390921542,
+          "recall": 0.9282608695652174
+        },
+        "1994": {
+          "high_loss_days": 5904,
+          "alarms": 5656,
+          "precision": 0.9506718528995757,
+          "recall": 0.9107384823848238
+        },
+        "1995": {
+          "high_loss_days": 3811,
+          "alarms": 3888,
+          "precision": 0.9272119341563786,
+          "recall": 0.9459459459459459
+        },
+        "1996": {
+          "high_loss_days": 5050,
+          "alarms": 5013,
+          "precision": 0.9353680430879713,
+          "recall": 0.9285148514851486
+        },
+        "1997": {
+          "high_loss_days": 7944,
+          "alarms": 7833,
+          "precision": 0.9513596323247798,
+          "recall": 0.9380664652567976
+        },
+        "1998": {
+          "high_loss_days": 5096,
+          "alarms": 4990,
+          "precision": 0.9561122244488978,
+          "recall": 0.9362244897959183
+        },
+        "1999": {
+          "high_loss_days": 4638,
+          "alarms": 4710,
+          "precision": 0.9471337579617835,
+          "recall": 0.961836998706339
+        }
+      },
+      "by_spray_window": {
+        "autumn (Oct-Nov)": {
+          "high_loss_days": 27353,
+          "alarms": 27276,
+          "precision": 0.9442366915970084,
+          "recall": 0.9415786202610317
+        },
+        "spring (Feb-Apr)": {
+          "high_loss_days": 19141,
+          "alarms": 18858,
+          "precision": 0.9375331424329197,
+          "recall": 0.9236716994932345
+        }
+      }
+    },
+    "0.05": {
+      "high_loss_days": 27297,
+      "alarms": 27262,
+      "precision": 0.9307827745579929,
+      "recall": 0.9295893321610433,
+      "by_dose_kgha": {
+        "0.24": {
+          "high_loss_days": 7869,
+          "alarms": 7936,
+          "precision": 0.9280493951612904,
+          "recall": 0.9359512009149829
+        },
+        "1.2": {
+          "high_loss_days": 7963,
+          "alarms": 8019,
+          "precision": 0.9315375982042648,
+          "recall": 0.9380886600527439
+        },
+        "2.4": {
+          "high_loss_days": 11465,
+          "alarms": 11307,
+          "precision": 0.932165914919961,
+          "recall": 0.9193196685564762
+        }
+      },
+      "by_year": {
+        "1991": {
+          "high_loss_days": 2304,
+          "alarms": 2262,
+          "precision": 0.9363395225464191,
+          "recall": 0.9192708333333334
+        },
+        "1992": {
+          "high_loss_days": 2639,
+          "alarms": 2684,
+          "precision": 0.9236214605067065,
+          "recall": 0.9393709738537325
+        },
+        "1993": {
+          "high_loss_days": 2966,
+          "alarms": 3076,
+          "precision": 0.9076723016905072,
+          "recall": 0.9413351314902225
+        },
+        "1994": {
+          "high_loss_days": 3897,
+          "alarms": 3672,
+          "precision": 0.9509803921568627,
+          "recall": 0.8960739030023095
+        },
+        "1995": {
+          "high_loss_days": 2221,
+          "alarms": 2329,
+          "precision": 0.9072563331902104,
+          "recall": 0.9513732552904097
+        },
+        "1996": {
+          "high_loss_days": 2841,
+          "alarms": 2763,
+          "precision": 0.9406442272891784,
+          "recall": 0.9148187258007744
+        },
+        "1997": {
+          "high_loss_days": 4610,
+          "alarms": 4620,
+          "precision": 0.9294372294372294,
+          "recall": 0.9314533622559653
+        },
+        "1998": {
+          "high_loss_days": 3224,
+          "alarms": 3124,
+          "precision": 0.9619078104993598,
+          "recall": 0.9320719602977667
+        },
+        "1999": {
+          "high_loss_days": 2595,
+          "alarms": 2732,
+          "precision": 0.9088579795021962,
+          "recall": 0.9568400770712909
+        }
+      },
+      "by_spray_window": {
+        "autumn (Oct-Nov)": {
+          "high_loss_days": 17960,
+          "alarms": 18065,
+          "precision": 0.9309161361749239,
+          "recall": 0.936358574610245
+        },
+        "spring (Feb-Apr)": {
+          "high_loss_days": 9337,
+          "alarms": 9197,
+          "precision": 0.9305208220071762,
+          "recall": 0.9165684909499839
+        }
+      }
+    },
+    "0.1": {
+      "high_loss_days": 15798,
+      "alarms": 15853,
+      "precision": 0.9157257301457138,
+      "recall": 0.9189137865552601,
+      "by_dose_kgha": {
+        "0.24": {
+          "high_loss_days": 4692,
+          "alarms": 4713,
+          "precision": 0.9172501591343094,
+          "recall": 0.9213554987212276
+        },
+        "1.2": {
+          "high_loss_days": 4865,
+          "alarms": 4865,
+          "precision": 0.9169578622816033,
+          "recall": 0.9169578622816033
+        },
+        "2.4": {
+          "high_loss_days": 6241,
+          "alarms": 6275,
+          "precision": 0.9136254980079681,
+          "recall": 0.9186027880147413
+        }
+      },
+      "by_year": {
+        "1991": {
+          "high_loss_days": 1210,
+          "alarms": 1159,
+          "precision": 0.9309749784296808,
+          "recall": 0.8917355371900827
+        },
+        "1992": {
+          "high_loss_days": 1392,
+          "alarms": 1461,
+          "precision": 0.893908281998631,
+          "recall": 0.9382183908045977
+        },
+        "1993": {
+          "high_loss_days": 1755,
+          "alarms": 1916,
+          "precision": 0.8475991649269311,
+          "recall": 0.9253561253561253
+        },
+        "1994": {
+          "high_loss_days": 2257,
+          "alarms": 2135,
+          "precision": 0.9288056206088993,
+          "recall": 0.8785999113867966
+        },
+        "1995": {
+          "high_loss_days": 1426,
+          "alarms": 1429,
+          "precision": 0.9244226731980406,
+          "recall": 0.926367461430575
+        },
+        "1996": {
+          "high_loss_days": 1537,
+          "alarms": 1526,
+          "precision": 0.9325032765399738,
+          "recall": 0.9258295380611581
+        },
+        "1997": {
+          "high_loss_days": 2644,
+          "alarms": 2700,
+          "precision": 0.91,
+          "recall": 0.9292738275340393
+        },
+        "1998": {
+          "high_loss_days": 2135,
+          "alarms": 2005,
+          "precision": 0.9655860349127182,
+          "recall": 0.906791569086651
+        },
+        "1999": {
+          "high_loss_days": 1442,
+          "alarms": 1522,
+          "precision": 0.911957950065703,
+          "recall": 0.9625520110957004
+        }
+      },
+      "by_spray_window": {
+        "autumn (Oct-Nov)": {
+          "high_loss_days": 11488,
+          "alarms": 11549,
+          "precision": 0.9184344964932029,
+          "recall": 0.9233112813370473
+        },
+        "spring (Feb-Apr)": {
+          "high_loss_days": 4310,
+          "alarms": 4304,
+          "precision": 0.908457249070632,
+          "recall": 0.9071925754060325
+        }
+      }
+    },
+    "0.2": {
+      "high_loss_days": 7827,
+      "alarms": 7888,
+      "precision": 0.9025101419878296,
+      "recall": 0.9095438865465696,
+      "by_dose_kgha": {
+        "0.24": {
+          "high_loss_days": 2336,
+          "alarms": 2359,
+          "precision": 0.9012293344637559,
+          "recall": 0.9101027397260274
+        },
+        "1.2": {
+          "high_loss_days": 2490,
+          "alarms": 2521,
+          "precision": 0.9051963506545022,
+          "recall": 0.9164658634538153
+        },
+        "2.4": {
+          "high_loss_days": 3001,
+          "alarms": 3008,
+          "precision": 0.9012632978723404,
+          "recall": 0.9033655448183938
+        }
+      },
+      "by_year": {
+        "1991": {
+          "high_loss_days": 516,
+          "alarms": 515,
+          "precision": 0.912621359223301,
+          "recall": 0.9108527131782945
+        },
+        "1992": {
+          "high_loss_days": 696,
+          "alarms": 742,
+          "precision": 0.8773584905660378,
+          "recall": 0.9353448275862069
+        },
+        "1993": {
+          "high_loss_days": 795,
+          "alarms": 970,
+          "precision": 0.7690721649484537,
+          "recall": 0.9383647798742139
+        },
+        "1994": {
+          "high_loss_days": 1072,
+          "alarms": 1003,
+          "precision": 0.9621136590229312,
+          "recall": 0.9001865671641791
+        },
+        "1995": {
+          "high_loss_days": 719,
+          "alarms": 712,
+          "precision": 0.8862359550561798,
+          "recall": 0.8776077885952712
+        },
+        "1996": {
+          "high_loss_days": 771,
+          "alarms": 742,
+          "precision": 0.9231805929919138,
+          "recall": 0.8884565499351491
+        },
+        "1997": {
+          "high_loss_days": 1310,
+          "alarms": 1344,
+          "precision": 0.8980654761904762,
+          "recall": 0.9213740458015267
+        },
+        "1998": {
+          "high_loss_days": 1253,
+          "alarms": 1137,
+          "precision": 0.969217238346526,
+          "recall": 0.879489225857941
+        },
+        "1999": {
+          "high_loss_days": 695,
+          "alarms": 723,
+          "precision": 0.9156293222683264,
+          "recall": 0.9525179856115108
+        }
+      },
+      "by_spray_window": {
+        "autumn (Oct-Nov)": {
+          "high_loss_days": 6249,
+          "alarms": 6293,
+          "precision": 0.9044970602256476,
+          "recall": 0.9108657385181629
+        },
+        "spring (Feb-Apr)": {
+          "high_loss_days": 1578,
+          "alarms": 1595,
+          "precision": 0.8946708463949843,
+          "recall": 0.9043092522179975
+        }
+      }
+    },
+    "0.5": {
+      "high_loss_days": 2506,
+      "alarms": 2476,
+      "precision": 0.8885298869143781,
+      "recall": 0.8778930566640064,
+      "by_dose_kgha": {
+        "0.24": {
+          "high_loss_days": 758,
+          "alarms": 755,
+          "precision": 0.8807947019867549,
+          "recall": 0.8773087071240105
+        },
+        "1.2": {
+          "high_loss_days": 765,
+          "alarms": 736,
+          "precision": 0.8980978260869565,
+          "recall": 0.8640522875816994
+        },
+        "2.4": {
+          "high_loss_days": 983,
+          "alarms": 985,
+          "precision": 0.8873096446700508,
+          "recall": 0.8891149542217701
+        }
+      },
+      "by_year": {
+        "1991": {
+          "high_loss_days": 129,
+          "alarms": 115,
+          "precision": 0.9565217391304348,
+          "recall": 0.8527131782945736
+        },
+        "1992": {
+          "high_loss_days": 242,
+          "alarms": 249,
+          "precision": 0.8755020080321285,
+          "recall": 0.9008264462809917
+        },
+        "1993": {
+          "high_loss_days": 189,
+          "alarms": 220,
+          "precision": 0.7136363636363636,
+          "recall": 0.8306878306878307
+        },
+        "1994": {
+          "high_loss_days": 323,
+          "alarms": 295,
+          "precision": 0.9355932203389831,
+          "recall": 0.8544891640866873
+        },
+        "1995": {
+          "high_loss_days": 301,
+          "alarms": 267,
+          "precision": 0.9850187265917603,
+          "recall": 0.8737541528239202
+        },
+        "1996": {
+          "high_loss_days": 228,
+          "alarms": 211,
+          "precision": 0.943127962085308,
+          "recall": 0.8728070175438597
+        },
+        "1997": {
+          "high_loss_days": 413,
+          "alarms": 439,
+          "precision": 0.8519362186788155,
+          "recall": 0.9055690072639225
+        },
+        "1998": {
+          "high_loss_days": 453,
+          "alarms": 447,
+          "precision": 0.8859060402684564,
+          "recall": 0.8741721854304636
+        },
+        "1999": {
+          "high_loss_days": 228,
+          "alarms": 233,
+          "precision": 0.8884120171673819,
+          "recall": 0.9078947368421053
+        }
+      },
+      "by_spray_window": {
+        "autumn (Oct-Nov)": {
+          "high_loss_days": 2100,
+          "alarms": 2077,
+          "precision": 0.888781896966779,
+          "recall": 0.8790476190476191
+        },
+        "spring (Feb-Apr)": {
+          "high_loss_days": 406,
+          "alarms": 399,
+          "precision": 0.8872180451127819,
+          "recall": 0.8719211822660099
+        }
+      }
     }
   }
 }

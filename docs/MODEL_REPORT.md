@@ -16,6 +16,16 @@ LSTM comparison in [`results/lstm_vs_trees.json`](results/lstm_vs_trees.json) is
 [`results/model_metrics.json`](results/model_metrics.json).
 Which data went in: [DATA_REPORT.md](DATA_REPORT.md).
 
+## What changed on 26 Nov 2026: high-loss limit as a share of the dose
+
+A fixed limit of 1 g/ha for a "high-loss day" cannot hold across compounds, so the app now counts a
+day as a high-loss day when the field loses at least a chosen share of the dose (start value 0.1 %,
+adjustable). The alarm was scored again for several shares, from the saved held-out predictions; no
+model was retrained. Results:
+[section 4, high-loss limit as a share of the dose](#high-loss-limit-as-a-share-of-the-dose-26-nov-2026).
+Why 1991 is the weakest year of the 1-March models: section 3, pesticide loss. Scores marked
+"at 1 g/ha" below use the old fixed limit.
+
 ## What changed on 25 Nov 2026 (evening): warm-up rule
 
 **The rule.** In every run the first crop cycle starts before the simulation: emergence is
@@ -53,8 +63,8 @@ brackets; before = ten years 1990-1999, after = nine years 1991-1999):
 | Pesticide loss, daily R² | 0.917 (0.78-0.97) | **0.965 (0.907-0.976)** | 0.95 (0.89-0.99) | **0.948 (0.867-0.986)** |
 | Sum of all loss, surrogate / PRZM | 0.98 (0.90-1.18) | **0.985 (0.950-1.082)** | 0.99 (0.86-1.12) | **0.948 (0.831-1.086)** |
 | High-loss days, PR-AUC: surrogate / classifier | 0.968 / 0.972 | **0.973 / 0.975** | 0.97 / 0.94 | **0.965 / 0.954** |
-| Alarm at 1 g/ha: share of alarms that are real | 91.7 % | **92.6 %** | 92 % | **91.7 %** |
-| Alarm at 1 g/ha: share of high-loss days found | 91.8 % (87.7-96.0 %) | **92.6 % (89.3-95.6 %)** | 90 % (81-97 %) | **88.0 % (80.1-97.7 %)** |
+| Alarm at the fixed limit of 1 g/ha: share of alarms that are real | 91.7 % | **92.6 %** | 92 % | **91.7 %** |
+| Alarm at the fixed limit of 1 g/ha: share of high-loss days found | 91.8 % (87.7-96.0 %) | **92.6 % (89.3-95.6 %)** | 90 % (81-97 %) | **88.0 % (80.1-97.7 %)** |
 
 In short:
 - With varied spray dates the daily loss got clearly better (R² 0.917 -> 0.965). Autumn gained most.
@@ -137,7 +147,8 @@ the leave-one-year-out score; they cannot be tested themselves because no data i
 advisor uses `models/varied/` when that folder is there.
 
 **High-loss classifier**: is today a day with at least 1 g/ha pesticide loss
-(0.04 % of the dose)? In the corrected data such days are 0.32 % of all rain days
+(0.04 % of the dose)? It still uses this fixed limit of 1 g/ha; the app's alarm does not use the
+classifier but the predicted loss amount (section 4, share of the dose). In the corrected data such days are 0.32 % of all rain days
 (25,940 days, before the warm-up rule) and carry most of the pesticide loss (DATA_REPORT.md, section 6).
 On the 1-March data it is again the weaker of the two ways to find such days (section 3), but by
 a smaller margin than before, and is kept for comparison and for the driver ranking. With varied
@@ -210,6 +221,17 @@ Honest reading:
   very unstable on the corrected data (R² -13.6 in 1991, and close to zero in 1995).
 - The year still matters: R² 0.986 in the best year (1994), 0.867 in the worst (1991). A year's
   score is decided by a handful of storms.
+- **Why 1991 is the weakest year (checked on 26 Nov 2026 on its 175,095 held-out rain days).**
+  1991 is the only year with heavy runoff on the spray day itself (1 March 1991). On the spray day
+  PRZM loses only about 0.56 g/ha per mm of runoff, against about 2.3 in days 1 to 7 after
+  spraying. With 1991 held out, the model has almost no such example (all other years together:
+  580 rain days with 140 mm of runoff, against 1,886 rain days with 4,671 mm in 1991). On 1 March
+  1991 the copy gets the runoff right (1,221 against 1,247 mm) but predicts 38 % too much loss
+  (966 against 702 g/ha); this day holds 52 % of the squared error of 1991. Another 37 % sits on
+  7 March 1991, a rain day shortly after the storm, where the copy predicts too little runoff and
+  loss. Without 1 March the loss R² of 1991 is 0.914, and the yearly total is right (1.006). The
+  varied models do not have this weakness (1991: 0.973), because their spray dates are spread. So
+  this is a limit of data with one fixed spray date, not a fault of the method.
 - **Over all years the total loss is 5 % too low** (ratio 0.948). Before the warm-up rule it was
   almost exact (0.99). Single years are off in both directions: 0.83 in 1997 (17 % too low) and
   1.09 in 1995 (9 % too high). On the delivered data the total was 8 % too low on average and 30 %
@@ -230,7 +252,8 @@ Honest reading:
 ![Precision-recall](figures/m3_high_loss_precision_recall.png)
 
 - Rain today alone is nearly useless. A high-loss day needs rain **and** fresh pesticide.
-- Alarm when the surrogate predicts 1 g/ha or more: 4,948 alarms, **91.7 % of them real**, and
+- Alarm when the surrogate predicts 1 g/ha or more (fixed limit of 1 g/ha; for a share of the
+  dose see section 4): 4,948 alarms, **91.7 % of them real**, and
   **88.0 % of the high-loss days found** (between 80.1 % and 97.7 % depending on the year). So an
   alarm can be trusted, and about one high-loss day in eight is still missed.
 - Predicting the amount and then applying the limit is better than predicting yes/no directly,
@@ -379,9 +402,9 @@ files of the test fields are never used in training. The first two columns are t
 | Pesticide loss, daily R² of the simple baseline | - | -0.24 | 0.782 |
 | Sum of all loss, surrogate / PRZM (range) | 0.92 (0.70-1.16) | 0.948 (0.831-1.086) | 0.985 (0.950-1.082) |
 | High-loss days, PR-AUC: surrogate / classifier / rain rule | 0.92 / 0.81 / 0.06 | 0.965 / 0.954 / 0.108 | 0.973 / 0.975 / 0.106 |
-| Alarm at 1 g/ha: number of alarms | - | 4,948 | 19,644 |
-| Alarm at 1 g/ha: share of alarms that are real | 91 % | 91.7 % | 92.6 % |
-| Alarm at 1 g/ha: share of high-loss days found (range) | 76 % (36-92 %) | 88.0 % (80.1-97.7 %) | 92.6 % (89.3-95.6 %) |
+| Alarm at the fixed limit of 1 g/ha: number of alarms | - | 4,948 | 19,644 |
+| Alarm at the fixed limit of 1 g/ha: share of alarms that are real | 91 % | 91.7 % | 92.6 % |
+| Alarm at the fixed limit of 1 g/ha: share of high-loss days found (range) | 76 % (36-92 %) | 88.0 % (80.1-97.7 %) | 92.6 % (89.3-95.6 %) |
 
 ![Scores by held-out year, varied data](figures/varied/m7_scores_by_held_out_year.png)
 
@@ -430,6 +453,50 @@ Honest reading:
   autumn was clearly harder (0.90 against 0.97). So most of the autumn weakness came from the
   warm-up year.
 - The small dose is scored on only 981 high-loss days, so its numbers are less certain.
+- The high-loss days and alarm columns in this table use the fixed limit of 1 g/ha.
+
+### High-loss limit as a share of the dose (26 Nov 2026)
+
+**Why.** Doses of different compounds differ by a factor of 100 or more. One gram per hectare is
+nothing for a herbicide sprayed at 1 to 3 kg/ha, and very serious for an insecticide sprayed at 5
+to 10 g/ha. In our runs 1 g/ha is 0.42 %, 0.083 % and 0.042 % of the doses 0.24, 1.2 and
+2.4 kg/ha. So the app now counts a day as a high-loss day when the field loses at least a chosen
+share of the dose. It starts with 0.1 % (2.4 g/ha at 2.4 kg/ha); the user can choose 0.01, 0.02,
+0.05, 0.1, 0.2 or 0.5 %. The 0.1 % is our own starting value, not an official limit. Which share is
+serious for which compound group is still open.
+
+**Scores** (no model retrained; the alarm "predicted loss at or above the limit" scored again on
+the saved held-out predictions of the year-by-year test; entry `alarm_by_share_of_dose` in
+[`results/varied/cv_summary.json`](results/varied/cv_summary.json)). Varied data, 4,815,867 rain
+days:
+
+| Limit (% of dose) | High-loss days (PRZM) | Alarms | Alarms that are real | High-loss days found | Real, range over years | Found, range over years |
+|---|---|---|---|---|---|---|
+| 0.01 | 63,255 | 63,223 | 94.2 % | 94.1 % | 92.0-96.4 % | 92.6-95.4 % |
+| 0.02 | 46,494 | 46,134 | 94.1 % | 93.4 % | 91.9-95.6 % | 91.1-96.2 % |
+| 0.05 | 27,297 | 27,262 | 93.1 % | 93.0 % | 90.7-96.2 % | 89.6-95.7 % |
+| 0.1 (app start value) | 15,798 | 15,853 | 91.6 % | 91.9 % | 84.8-96.6 % | 87.9-96.3 % |
+| 0.2 | 7,827 | 7,888 | 90.3 % | 91.0 % | 76.9-96.9 % | 87.8-95.3 % |
+| 0.5 | 2,506 | 2,476 | 88.9 % | 87.8 % | 71.4-98.5 % | 83.1-90.8 % |
+
+Reading:
+- The stricter the limit (higher share), the fewer high-loss days there are and the more the
+  scores vary between years. For comparison, the fixed limit of 1 g/ha: 19,654 high-loss days,
+  92.6 % real, 92.6 % found.
+- At 0.1 % the scores are the same for every dose: 0.24 kg/ha 4,692 high-loss days, 91.7 % real,
+  92.1 % found; 1.2 kg/ha 4,865, 91.7 %, 91.7 %; 2.4 kg/ha 6,241, 91.4 %, 91.9 %. (With the fixed
+  limit the lowest dose had only 981 high-loss days.)
+- The loss is proportional to the dose in PRZM: the mean share of the dose lost per rain day is
+  0.001926 % at 0.24 kg/ha and 0.001923 % at 1.2 kg/ha. So a share of the dose treats every dose
+  alike.
+- On the 1-March runs (2.4 kg/ha only; [`results/cv_summary.json`](results/cv_summary.json)) the
+  scores at 0.1 % are 1,927 high-loss days, 88.2 % real, 91.3 % found. At 0.2 % and 0.5 % there
+  are so few high-loss days that the per-year scores swing widely.
+
+**Still on the fixed limit of 1 g/ha:** the classifier and its PR-AUC, `alarm_at_1_gha` in
+`cv_summary.json`, the alarm columns of `cv_by_year.csv`, the figures
+`m3_high_loss_precision_recall.png` and `m7_scores_by_held_out_year.png`, and the high-loss days
+per field-year of the 45-year runs. Runoff and loss-amount scores never depended on the limit.
 
 ### One fixed split (test years 1992 and 1996)
 
@@ -443,7 +510,7 @@ used in training. Numbers from [`results/varied/model_metrics.json`](results/var
   error comes from the runoff stage, not from the chemistry.
 - High-loss days, PR-AUC: surrogate 0.971, gradient-boosting classifier 0.970, logistic regression
   0.799, rain rule 0.081.
-- Alarm at 1 g/ha: 3,819 alarms, 93 % of them real, 91 % of the high-loss days found. 74 % of the
+- Alarm at the fixed limit of 1 g/ha: 3,819 alarms, 93 % of them real, 91 % of the high-loss days found. 74 % of the
   pesticide loss falls on alarm days.
 
 ![Loss, varied data](figures/varied/m2_loss_surrogate.png)
@@ -615,7 +682,8 @@ File: [`results/risk_by_rain_and_weeks_since_spraying.csv`](results/risk_by_rain
 
 Input: a daily weather table (about 30 days of history plus the forecast) and
 a soil. Output: predicted pesticide loss in the 14 days after each candidate
-spray day.
+spray day. Since 26 Nov 2026 a high-loss day in the app is a day above a chosen share of the
+dose (start value 0.1 %).
 
 **Which models it uses (25 Nov 2026).** The app uses the models in `models/varied/` when that
 folder is there (on the command line: `python -m runoffwatch --dataset varied whatif`). These models have seen other spray days and doses: spray days from 15 Feb to
@@ -630,10 +698,11 @@ of a real field ([section 4](#what-przm-says-about-the-spray-date-and-why)).
 
 ![App](figures/app_screenshot.png)
 
-In the built-in made-up example a storm front arrives on 9-12 March. Spraying
-on 19-23 February loses almost nothing in the following 14 days; spraying on
-25 February puts the storm inside the window. (The screenshot still shows the old version of the
-app, and its numbers are from the models trained on the delivered data.)
+In the built-in made-up example a storm front arrives on 9-12 March. The app
+compares spraying on each day from 6 to 15 March. Spraying on 15 March, after
+the storm, loses 0.010 g/ha in the following 14 days. Spraying on 9 March
+puts the storm right after the spraying and loses 26.1 g/ha. (Screenshot of
+26 Nov 2026, models trained on the varied runs, dose 2.4 kg/ha.)
 
 ## 7. Limits
 
@@ -686,11 +755,12 @@ app, and its numbers are from the models trained on the delivered data.)
    it agrees with PRZM in 2006-2015 (not a test). PRZM was never run with a fixed 15 October date.
 13. **The advisor has not been evaluated as a decision tool.** We tested how well the surrogate
    reproduces PRZM, not whether following its advice lowers losses.
-14. **The limit of 1 g/ha for a "high-loss day" is under review.** It is our own choice. The
-   environmental-science side pointed out that a fixed g/ha limit cannot hold across compounds,
-   because doses differ by a factor of 100 or more. In our runs 1 g/ha is 0.42 %, 0.083 % and
-   0.042 % of the three doses. Planned: a limit as a share of the dose, adjustable. The runoff and
-   loss-amount scores do not depend on the limit; the classifier and alarm scores do.
+14. **The limit for a "high-loss day" is our own choice.** A fixed limit of 1 g/ha cannot hold
+   across compounds, because doses differ by a factor of 100 or more. Since 26 Nov 2026 the app
+   and the alarm scores use a share of the dose (start value 0.1 %, adjustable; section 4). The
+   0.1 % is not an official limit; which share is serious for which compound group is still open.
+   The classifier, some result files and the 45-year high-loss-day counts still use 1 g/ha. The
+   runoff and loss-amount scores do not depend on the limit.
 15. The app fills in evaporation from a monthly average when the weather file has none.
 
 ## 8. Next steps
@@ -702,7 +772,10 @@ app, and its numbers are from the models trained on the delivered data.)
   the 45-year French weather was run for 15 October as well.
 - Ask the model owner in Landau whether the first crop cycle before the simulation start is
   intended, and whether a warm-up year is normally discarded.
-- Make the high-loss limit a share of the dose, adjustable, and rescore the classifier and alarms.
+- Done on 26 Nov 2026: the high-loss limit is a share of the dose in the app and in the alarm
+  scores (section 4). Still open: which share is serious for which compound group
+  (environmental-science side); retrain the classifier with a share-of-dose label; the 45-year
+  high-loss-day counts still use 1 g/ha.
 - Find a better answer for extreme rain (80 mm and more); the correction of the formula did not
   help (section 7).
 - Ask the environmental-science side when an autumn herbicide is really sprayed, and whether

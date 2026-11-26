@@ -162,6 +162,49 @@ def fmt_int(x) -> str:
     return "n/a" if x is None else f"{x:,.0f}"
 
 
+def limit_gha(pct_of_dose, dose_kgha) -> float:
+    """A share of the dose (in percent) as an amount in g/ha: 0.1 % of 2.4 kg/ha -> 2.4 g/ha."""
+    return 10.0 * float(pct_of_dose) * float(dose_kgha)
+
+
+def limit_text(pct_of_dose, dose_kgha=None) -> str:
+    """'0.1% of the dose', with a dose also the amount: '0.1% of the dose (2.40 g/ha)'."""
+    text = f"{fmt_pct_small(pct_of_dose)} of the dose"
+    return text if dose_kgha is None else f"{text} ({fmt_gha(limit_gha(pct_of_dose, dose_kgha))})"
+
+
+def alarm_scores(cv: dict | None, pct_of_dose) -> dict | None:
+    """The alarm scores for one share-of-dose limit from `cv_summary.json`, or None if they are not there."""
+    entry = dig(cv, "alarm_by_share_of_dose", f"{float(pct_of_dose):g}")
+    return entry if isinstance(entry, dict) else None
+
+
+def flag_text(days_above_limit) -> str:
+    """Bar label for a spray day: '' / '1 day above the limit' / '3 days above the limit'."""
+    n = number(days_above_limit)
+    if not n:
+        return ""
+    return f"{n:.0f} day{'s' if n > 1 else ''} above the limit"
+
+
+def season_means(by_date: pd.DataFrame) -> dict:
+    """Mean share of the dose lost per spray season from the half-month table.
+
+    `by_date`: columns `sprayed` ('03 Mar 1-15') and `mean_pct_of_dose_lost`; with a column `seasons`
+    (number of simulated seasons behind each row) the mean is weighted by it.
+    Returns {season name: {"mean", "low", "high"}}, low and high being the lowest and highest half-month.
+    """
+    out = {}
+    for name, g in by_date.groupby(by_date["sprayed"].map(season), sort=False):
+        v = pd.to_numeric(g["mean_pct_of_dose_lost"], errors="coerce")
+        w = pd.to_numeric(g["seasons"], errors="coerce") if "seasons" in g.columns else pd.Series(1.0, index=g.index)
+        ok = v.notna() & w.notna() & (w > 0)
+        if ok.any():
+            out[name] = {"mean": float((v[ok] * w[ok]).sum() / w[ok].sum()), "low": float(v[ok].min()),
+                         "high": float(v[ok].max())}
+    return out
+
+
 def rank_labels(ranks) -> list[str]:
     """Ranks as text, ties marked: [1, 1, 3, NA] -> ['1 (tie)', '1 (tie)', '3', 'not ranked']."""
     ranks = pd.Series(ranks)
@@ -202,6 +245,14 @@ def scenario_label(folder: Path, summary: dict | None, results_dir: Path) -> str
     spraying = dig(summary, "spraying")
     base = "Standard run" if Path(folder) == Path(results_dir) else f"Scenario '{Path(folder).name}'"
     return f"{base}: {spraying_text(spraying)}" if spraying else base
+
+
+def scenario_short(summary: dict | None, folder: Path) -> str:
+    """Short name of a 45-year scenario: 'Spraying on 1 March', or the folder name if the date is not stated."""
+    day, month = (number(dig(summary, "spraying", k)) for k in ("day", "month"))
+    if day is None or month is None or not 1 <= month <= 12:
+        return f"Scenario '{Path(folder).name}'"
+    return f"Spraying on {day:.0f} {MONTH_NAMES[int(month) - 1]}"
 
 
 # --------------------------------------------------------------------------- #

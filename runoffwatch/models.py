@@ -47,6 +47,7 @@ CONC_OUTPUT = "g_per_ha_per_mm_per_kg_applied"   # written to meta.json; older m
 CONC_FLOOR = 1e-7          # g/ha per mm; below this the pesticide loss is zero for all purposes
 MODEL_FILES = {"runoff": "runoff.txt", "conc": "conc.txt", "high_loss": "high_loss.txt"}
 SHARE_OF_DOSE_LIMITS_PCT = (0.01, 0.02, 0.05, 0.1, 0.2, 0.5)   # limits for a high-loss day, in percent of the dose
+DEFAULT_SHARE_OF_DOSE_PCT = 0.1    # the limit the app starts with: one thousandth of the dose lost in one day
 
 
 # --------------------------------------------------------------------------- #
@@ -532,11 +533,18 @@ def alarm_by_share_of_dose(P: pd.DataFrame, limits_pct=SHARE_OF_DOSE_LIMITS_PCT)
     A fixed limit means something different for every dose: 1 g/ha is 0.04 % of 2.4 kg/ha but 0.4 % of
     0.24 kg/ha. Here a day counts as high-loss when PRZM lost at least `limit` percent of the last dose,
     and the alarm goes off when the predicted loss reaches the same amount. No model is refitted for
-    this; only the predicted loss amount is used. Scores for all rows and for each dose.
+    this; only the predicted loss amount is used. Scores for all rows, for each dose and, where the
+    columns `year` and `app_doy` are there, for each held-out year and each spray window.
     """
     limit_gha = 10.0 * _rate(P)                          # 1 % of a dose in kg/ha, expressed in g/ha
     true, pred = P["loss_gha"].to_numpy(dtype=float), P["loss_pred"].to_numpy(dtype=float)
-    dose = P["app_rate_kgha"].round(3).astype(str).to_numpy() if "app_rate_kgha" in P.columns else None
+    groups = {}
+    if "app_rate_kgha" in P.columns:
+        groups["by_dose_kgha"] = P["app_rate_kgha"].round(3).astype(str).to_numpy()
+    if "year" in P.columns:
+        groups["by_year"] = P["year"].astype(int).astype(str).to_numpy()
+    if "app_doy" in P.columns:
+        groups["by_spray_window"] = np.asarray(spray_window(P["app_doy"])).astype(str)
 
     def scores(pos, alarm):
         return {"high_loss_days": int(pos.sum()), "alarms": int(alarm.sum()),
@@ -547,10 +555,24 @@ def alarm_by_share_of_dose(P: pd.DataFrame, limits_pct=SHARE_OF_DOSE_LIMITS_PCT)
     for pct in limits_pct:
         pos, alarm = true >= pct * limit_gha, pred >= pct * limit_gha
         entry = scores(pos, alarm)
-        if dose is not None:
-            entry["by_dose_kgha"] = {d: scores(pos[dose == d], alarm[dose == d]) for d in sorted(set(dose))}
+        for name, g in groups.items():
+            entry[name] = {k: scores(pos[g == k], alarm[g == k]) for k in sorted(set(g))}
         out[f"{pct:g}"] = entry
     return out
+
+
+def rescore_alarms(predictions_path: str | Path, results: str | Path = "docs/results") -> dict:
+    """Score the share-of-dose alarm again from the saved held-out predictions of `yearly_cv`.
+
+    Writes the table into `cv_summary.json` (entry `alarm_by_share_of_dose`) without training anything,
+    so another set of limits or groups costs seconds instead of an hour.
+    """
+    P = pd.read_parquet(predictions_path, columns=["year", "app_doy", "app_rate_kgha", "loss_gha", "loss_pred"])
+    path = Path(results) / "cv_summary.json"
+    summary = json.loads(path.read_text())
+    summary["alarm_by_share_of_dose"] = alarm_by_share_of_dose(P)
+    path.write_text(json.dumps(summary, indent=2))
+    return summary["alarm_by_share_of_dose"]
 
 
 def loss_by_spray_date(clean: pd.DataFrame) -> pd.DataFrame:
