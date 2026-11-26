@@ -157,13 +157,27 @@ def step_field() -> dict:
     return soil_settings(slope_pct=slope, h1_oc=oc, h1_sand=float(sand), h1_clay=float(clay), cn_2=float(cn))
 
 
-def step_spraying(weather, example: bool):
+def dose_box(meta: dict) -> float:
+    """The dose in kg/ha, limited to the doses the loaded models were trained on."""
+    doses = ad.trained_doses(meta)
+    low, high = doses[0], doses[-1]
+    if low == high:                      # one dose only: nothing to choose
+        st.number_input("Dose (kg/ha)", value=low, disabled=True, format="%.2f")
+        st.caption(f"Fixed: the models were trained on one dose only ({low:g} kg/ha).")
+        return low
+    dose = st.number_input("Dose (kg/ha)", min_value=low, max_value=high, value=ad.default_dose(doses), step=0.01,
+                           format="%.2f")
+    st.caption(f"The models were trained on doses from {low:g} to {high:g} kg/ha.")
+    return min(high, max(low, round(float(dose), 2)))
+
+
+def step_spraying(weather, example: bool, meta: dict):
     with st.container(border=True):
         st.markdown("##### Step 3 · Spraying")
         if weather is None:
             st.caption("Choose the weather first.")
             return None
-        dose = st.number_input("Dose (kg/ha)", min_value=0.05, max_value=5.0, value=2.4, step=0.05)
+        dose = dose_box(meta)
         first_ok, last_ok = weather.index[min(30, len(weather) - 2)].date(), weather.index[-2].date()
         if example and pd.Timestamp(EXAMPLE_FIRST_DAY) in weather.index[:-1]:
             first_ok = pd.Timestamp(EXAMPLE_FIRST_DAY).date()     # days before and after the storm in March
@@ -306,7 +320,7 @@ def tab_advisor(models, error):
     with left:
         weather, example = step_weather()
         soil = step_field()
-        plan = step_spraying(weather, example)
+        plan = step_spraying(weather, example, models["meta"])
     with right:
         show_result(weather, soil, plan, models)
     with st.expander("Limits: read before trusting a number"):
@@ -315,7 +329,7 @@ def tab_advisor(models, error):
             "would say.\n"
             "- All simulations are for **one herbicide (Flufenacet) on winter cereals**. Other products and crops "
             "are **not covered**.\n" + ad.spray_limits(models["meta"]) +
-            "  The app warns above the result when your spray day or dose is outside what the models have seen.\n"
+            "- The app warns above the result when your spray day is outside what the models have seen.\n"
             "- The limit for a flagged day is a share of the dose that you choose. Which share is serious depends "
             "on the compound; no value here is an official limit.\n"
             "- \"Loss\" is pesticide leaving the field edge with runoff water. What reaches a stream is not modelled.\n"
@@ -688,8 +702,8 @@ Which share is serious depends on the compound. No value in this app is an offic
 #### Limits
 - One substance (Flufenacet) and one crop (winter cereals).
 - A fixed crop calendar: the crop emerges on 12 Nov every year.
-- Only the spray windows and doses the models have seen (below). Compounds sprayed at a few grams per hectare
-  are outside that range.
+- Only doses the models have seen can be entered (below). A spray day outside the trained windows is still
+  a guess. Compounds sprayed at a few grams per hectare are outside the dose range.
 - Weak on the most extreme rain days (80 mm or more in a day).
 - Some settings of the simulator are still to be confirmed by the model owner in Landau.
 - The advisor was not tested as a decision tool with farmers or advisers.

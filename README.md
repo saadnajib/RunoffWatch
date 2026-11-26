@@ -64,6 +64,8 @@ Course project, ETX8 Landscape modelling, RPTU Kaiserslautern-Landau.
   weak year 1990 turned out to be the warm-up year: its rows were not a fair test and also
   disturbed training. Without them, daily loss R² rose from 0.917 to 0.965 (varied data). The
   copy is still weakest on the most extreme rain days (80 mm and more).
+  There is no untouched final test set: every year 1991-1999 was a test year once, so the scores
+  may be slightly optimistic.
 - **Spray date (read straight from PRZM).** Sprayed in autumn (1 Oct - 30 Nov), the mean share of
   the dose lost per season is 0.19 to 0.66 %; sprayed in spring (15 Feb - 30 Apr) it is 0.08 to
   0.10 % (warm-up left out). The chemistry per millimetre of runoff is the same; the difference is how
@@ -145,7 +147,7 @@ pip install -e ".[dev,app]"
 python -m pytest -q
 ```
 
-With PyTorch installed you should see `571 passed`. Without PyTorch the LSTM tests are skipped
+With PyTorch installed you should see `576 passed`. Without PyTorch the LSTM tests are skipped
 and show as `skipped`; that is fine.
 
 **Step 5. Ask the model a question.** This compares 7 possible spray days for a made-up weather example.
@@ -181,6 +183,9 @@ belongs to; details are in fold-out boxes.
 In the app a high-loss day is a day on which the field loses at least a chosen share of the dose
 (start value 0.1 %, adjustable from 0.01 to 0.5 %). The 0.1 % is our own starting value, not an
 official limit.
+
+The dose box in the first tab only takes doses the models were trained on (0.24 to 2.4 kg/ha
+for the current models).
 
 The app reads only the models and result tables that are in the repository. No simulation data
 is needed. Stop it with `Ctrl+C` in the terminal.
@@ -466,7 +471,7 @@ report for one single run.
 | `runoffwatch/lstm.py` | Second surrogate: an LSTM, compared with the trees |
 | `runoffwatch/longrun.py` | Surrogate on 45 years of Agri4Cast weather for France |
 | `runoffwatch/design.py` | Generator for new simulation runs (run files and task archives) |
-| `tests/` | 571 tests on synthetic run folders (no project data in git) |
+| `tests/` | 576 tests on synthetic run folders (no project data in git) |
 | `runoffwatch/pipeline.py`, `plots.py`, `przm_spikes.py`, `examples/` | Earlier exploration code, kept for reference |
 
 Code and documents were written with the help of an AI assistant (Claude).

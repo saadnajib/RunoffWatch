@@ -52,9 +52,21 @@ def test_spray_windows_and_limits():
     days = list(range(46, 122)) + list(range(274, 336))
     assert ad.spray_windows(days) == "15 Feb-30 Apr and 1 Oct-30 Nov"
     assert ad.spray_windows([60, 61]) == "1 Mar"
-    assert "only know" in ad.spray_limits({"trained_on": {}})
+    one = ad.spray_limits({"trained_on": {}})                        # nothing stated: 1 March, the standard dose
+    assert "only know **spraying on 1 Mar**" in one and "one dose, **2,400 g/ha**, so the dose is fixed" in one
     text = ad.spray_limits({"trained_on": {"spray_days_seen": days, "doses_kgha": [0.24, 2.4]}})
-    assert "240 to 2,400 g/ha" in text
+    assert "240 to 2,400 g/ha" in text and "A dose outside this range cannot be entered" in text
+    assert "A spray day outside these windows is still a guess" in text
+    assert "scaled in proportion" not in one + text                 # another dose can no longer be entered
+
+
+def test_trained_doses_and_default_dose():
+    assert ad.trained_doses({"trained_on": {"doses_kgha": [2.4, 0.24, 1.2, 1.2]}}) == [0.24, 1.2, 2.4]
+    for meta in (None, {}, {"trained_on": {}}, {"trained_on": {"doses_kgha": []}}, {"trained_on": {"doses_kgha": "x"}},
+                 {"trained_on": {"doses_kgha": [None, 0, -1]}}):
+        assert ad.trained_doses(meta) == [2.4]                      # the key is missing or unusable: the standard dose
+    assert ad.default_dose([0.24, 1.2, 2.4]) == 2.4 and ad.default_dose([2.4]) == 2.4
+    assert ad.default_dose([0.24, 1.2]) == 1.2 and ad.default_dose([3.0, 4.0]) == 4.0     # 2.4 outside: the highest
 
 
 def test_read_csv_safely(tmp_path):
@@ -210,6 +222,56 @@ def test_app_with_repo_files(monkeypatch):
     at.radio[0].set_value("Upload my own CSV").run()
     assert not at.exception
     assert "Upload a file to continue" in texts(at)
+
+
+def dose_box(at):
+    return next(n for n in at.number_input if n.label == "Dose (kg/ha)")
+
+
+@needs_models
+def test_dose_box_has_the_trained_range(monkeypatch):
+    """The dose can only be set inside the doses the loaded models were trained on."""
+    doses = ad.trained_doses(json.loads((ROOT / ad.model_set(ROOT)["models"] / "meta.json").read_text()))
+    at = run_app(ROOT, monkeypatch)
+    assert not at.exception, [e.value for e in at.exception]
+    if errors(at):                                   # models mid-rewrite
+        return
+    box = dose_box(at)
+    assert (box.min, box.max) == (doses[0], doses[-1])
+    assert box.value == ad.default_dose(doses) and box.step == 0.01 and not box.disabled
+    assert f"The models were trained on doses from {doses[0]:g} to {doses[-1]:g} kg/ha." in texts(at)
+    if len(doses) > 1:
+        box.set_value(doses[0]).run()                # the lowest trained dose can be reached exactly
+        assert not at.exception
+        assert not any("outside the doses" in str(w.value) for w in at.warning)
+        assert f"You spray {1000 * doses[0]:,.0f} g/ha" in texts(at)
+
+
+@needs_models
+@pytest.mark.parametrize("doses, value, disabled", [([1.2], 1.2, True), ([0.24, 1.2], 1.2, False), (None, 2.4, True)])
+def test_dose_box_follows_the_meta_file(tmp_path, monkeypatch, doses, value, disabled):
+    """One trained dose: the box is fixed at it. Standard dose outside the range: the highest trained dose.
+    No doses stated in the meta file: treated as the standard dose only."""
+    shutil.copytree(ROOT / "models", tmp_path / "models", ignore=shutil.ignore_patterns("delivered", "lstm.pt"))
+    path = tmp_path / ad.model_set(tmp_path)["models"].relative_to(tmp_path) / "meta.json"
+    meta = json.loads(path.read_text())
+    if doses is None:
+        meta["trained_on"].pop("doses_kgha", None)
+    else:
+        meta["trained_on"]["doses_kgha"] = doses
+    path.write_text(json.dumps(meta))
+    at = run_app(tmp_path, monkeypatch)
+    assert not at.exception, [e.value for e in at.exception]
+    assert not errors(at)
+    box = dose_box(at)
+    assert box.value == value and box.disabled is disabled
+    body = texts(at)
+    assert "Lowest predicted loss: spraying on" in body
+    if disabled:
+        assert f"Fixed: the models were trained on one dose only ({value:g} kg/ha)." in body
+        assert f"You spray {1000 * value:,.0f} g/ha" in body
+    else:
+        assert (box.min, box.max) == (doses[0], doses[-1])
 
 
 @needs_models
