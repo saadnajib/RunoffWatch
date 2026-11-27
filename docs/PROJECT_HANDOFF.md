@@ -1155,9 +1155,40 @@ Alarms by share of the dose (alarms that are right / high-loss days found):
   independent test still needs new fields from the Landau group
   (section 13).
 
+**Year by year (checked 27 Nov 2026).** No year is weak. The fingerprint
+stored in the result file is the frozen one, so the frozen models were used.
+
+| Year | Rain days with trusted pesticide | Runoff R² | Pesticide loss R² | Total loss, copy / PRZM | Loss R² in the year-by-year test |
+|---|---|---|---|---|---|
+| 1990 | 4,210 | 0.989 | 0.995 | 1.006 | not a test year |
+| 1991 | 50,623 | 0.991 | 0.990 | 0.989 | 0.973 |
+| 1992 | 78,149 | 0.982 | 0.972 | 0.987 | 0.955 |
+| 1993 | 73,222 | 0.980 | 0.954 | 1.058 | 0.907 |
+| 1994 | 67,576 | 0.988 | 0.969 | 0.982 | 0.954 |
+| 1995 | 61,743 | 0.994 | 0.982 | 0.961 | 0.974 |
+| 1996 | 80,071 | 0.989 | 0.977 | 0.943 | 0.972 |
+| 1997 | 86,577 | 0.986 | 0.976 | 1.020 | 0.972 |
+| 1998 | 77,483 | 0.987 | 0.983 | 0.928 | 0.966 |
+| 1999 | 50,744 | 0.991 | 0.980 | 1.019 | 0.976 |
+
+- Pesticide loss R² lies between 0.954 and 0.995, runoff R² between 0.980
+  and 0.994.
+- 1990 holds only the sprayings made after the warm-up ended on 12 Nov 1990,
+  so it is a small sample (24 high-loss days at the 0.1 % limit).
+- 1993 is the lowest year here, as in the year-by-year test. The total is
+  6 % too high in 1993 and 7 % too low in 1998. These years were in the
+  training data, so this error does not come from unseen weather. It comes
+  with a few storm days the copy does not match well.
+- By spray season: autumn loss R² 0.979 (total 0.977), spring 0.983
+  (total 1.015).
+- Alarms at 0.1 % of the dose, per year: 87 % to 100 % of the alarms are
+  right and 89 % to 100 % of the high-loss days are found. Spring has few
+  high-loss days at the strictest limit (25 at 0.5 %), so that one number
+  is weak evidence.
+
 The result files are `new_runs_check.json` and
-`new_runs_check_by_year.csv` in `docs/results/varied/dose_check/`. They were
-made on the project PC and are committed from there.
+`new_runs_check_by_year.csv` in `docs/results/varied/dose_check/` (in the
+repository since 27 Nov 2026).
 
 ---
 
@@ -1764,12 +1795,13 @@ decks. New since 17 Nov:
   test-only data set `dosecheck` and `rerun --sample` were added, and the
   whole chain was rehearsed on 40 existing run folders. 594 tests pass.
 - **Done (27 Nov): the 0.6 kg/ha dose check was run and passed** (6.12).
-  It tests the dose only.
+  It tests the dose only. The result files are in the repository and the
+  per-year scores were checked: no weak year.
 
 Next, in this order:
-1. If they are not in the repository yet: commit the result files of the
-   dose check from the project PC (`docs/results/varied/dose_check/` and
-   `docs/figures/varied/dose_check/`, never `data/`).
+1. Look at the storm days behind the 1993 and 1998 totals (6.12): the copy
+   is 6 % too high and 7 % too low there, also on runs whose fields and
+   weather it knows.
 2. Ask the Landau group for a small batch of new PRZM runs the models have
    never seen, as an independent test: for example a middle dose such as
    0.6 kg/ha and some new fields. This would give the first score on data
