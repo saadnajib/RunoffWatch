@@ -1178,7 +1178,8 @@ stored in the result file is the frozen one, so the frozen models were used.
 - 1993 is the lowest year here, as in the year-by-year test. The total is
   6 % too high in 1993 and 7 % too low in 1998. These years were in the
   training data, so this error does not come from unseen weather. It comes
-  with a few storm days the copy does not match well.
+  with a few days the copy does not match well (traced in 6.13: an extreme
+  storm in 1998, a medium rain on a dry field in 1993).
 - By spray season: autumn loss R² 0.979 (total 0.977), spring 0.983
   (total 1.015).
 - Alarms at 0.1 % of the dose, per year: 87 % to 100 % of the alarms are
@@ -1189,6 +1190,64 @@ stored in the result file is the frozen one, so the frozen models were used.
 The result files are `new_runs_check.json` and
 `new_runs_check_by_year.csv` in `docs/results/varied/dose_check/` (in the
 repository since 27 Nov 2026).
+
+### 6.13 The days behind the 1993 and 1998 totals (27 Nov 2026)
+
+Question: why is the copy's yearly total too high in 1993 and too low in
+1998? Checked on the saved held-out predictions of the year-by-year test
+(varied runs). The day-by-day predictions of the dose check are on the
+project PC, so this uses the same years from the year-by-year test, where
+the totals are 8.2 % too high (1993) and 4.6 % too low (1998).
+
+**In every year a handful of dates decides the score.** The five dates with
+the largest error hold 65 % to 92 % of a year's squared error.
+
+**1998: the big storm, and the error is in the pesticide, not in the water.**
+- 3 and 4 November 1998 (up to 153 mm and 136 mm of rain in a day) hold
+  82 % of the year's shortfall and 76 % of its squared error. These two
+  days carry 39 % of the year's pesticide loss.
+- The copy gets the runoff water right on both days (99 % of PRZM's). It
+  predicts 7 % and 13 % too little pesticide loss. So it underestimates how
+  much pesticide one millimetre of such an extreme runoff carries.
+- Without the three dates with the largest shortfall the yearly total is
+  right (ratio 0.996).
+- This confirms the known limit on extreme rain (6.9, limit list).
+
+**1993: not a storm. One ordinary rain day on a dry field.**
+- One date, 1 November 1993, explains all of it: it alone adds more than
+  the whole yearly excess (the other days together are slightly too low),
+  and it holds 78 % of the year's squared error.
+- That day was not extreme: 15 mm of rain (median over the fields), 14 °C,
+  and almost no rain in the seven days before (0.5 mm on average). The
+  field was bare (before the crop emerges).
+- PRZM lets only 10 % of that rain run off. The plain curve-number formula
+  gives 2.2 times as much. The copy, with 1993 held out, predicts 1.9 times
+  PRZM's runoff, and so 1.9 times the pesticide loss.
+- Reason: PRZM lowers the runoff when the topsoil is dry. For a medium
+  rain (10 to 20 mm) on a bare field, PRZM's runoff is about half of the
+  formula's after a dry week (less than 2 mm in seven days), and 1.2 to 1.3
+  times the formula's after a wet week.
+- This situation is rare in the data. A medium rain on a bare field after
+  a dry and warm week occurs on 3,542 field-days in all runs, and 63 % of
+  them are this one date. With 1993 held out, the copy has few examples
+  left to learn from.
+- Even the final models, which were trained on this day, still predict 1.4
+  times PRZM's runoff for it. So the inputs do not carry enough information
+  about how dry the soil is. The copy knows the rain sums of the last 7, 14
+  and 30 days; PRZM keeps a real soil-water balance.
+
+**What follows.**
+- The two years are wrong for different reasons: 1998 in the pesticide
+  concentration on an extreme storm, 1993 in the runoff water on a dry
+  field.
+- The 1993 case is the more useful one. It points to a missing input: a
+  measure of soil wetness that looks further back than rain sums (for
+  example a simple running water balance). This was not tried: the models
+  are frozen (6.12). If it is tried later, it must go into a new model
+  folder and be judged with the year-by-year test.
+- For the spray-day advisor this matters in one situation: the first
+  medium rain after a dry, warm spell on a bare field. There the copy
+  overestimates the loss, which is the cautious side.
 
 ---
 
@@ -1721,6 +1780,11 @@ Reports in `docs/`: `DATA_REPORT.md`, `MODEL_REPORT.md`, `RELATED_WORK.md`,
    26 Nov 2026 the models are frozen (6.12), so a later test on new runs is
    honest. The 0.6 kg/ha check tests the dose only; it does not replace an
    independent test with new fields.
+16. **The copy has no real memory of soil water.** It uses the rain sums of
+   the last 7, 14 and 30 days as a stand-in. After a dry, warm week it
+   overestimates the runoff of a medium rain on a bare field (1.9 times
+   PRZM's on 1 Nov 1993 when that year was held out, still 1.4 times after
+   training on it; 6.13).
 
 ---
 
@@ -1794,14 +1858,17 @@ decks. New since 17 Nov:
 - **Done (26 Nov): models frozen, `check` command ready** (6.12). The
   test-only data set `dosecheck` and `rerun --sample` were added, and the
   whole chain was rehearsed on 40 existing run folders. 594 tests pass.
+- **Done (27 Nov): the days behind the 1993 and 1998 totals were traced**
+  (6.13): an extreme storm in 1998, a medium rain on a dry field in 1993.
 - **Done (27 Nov): the 0.6 kg/ha dose check was run and passed** (6.12).
   It tests the dose only. The result files are in the repository and the
   per-year scores were checked: no weak year.
 
 Next, in this order:
-1. Look at the storm days behind the 1993 and 1998 totals (6.12): the copy
-   is 6 % too high and 7 % too low there, also on runs whose fields and
-   weather it knows.
+1. Optional, and only in a new model folder (the saved models are frozen):
+   try an input for soil wetness that looks further back than rain sums,
+   and judge it with the year-by-year test. The days behind the 1993 and
+   1998 totals are explained in 6.13.
 2. Ask the Landau group for a small batch of new PRZM runs the models have
    never seen, as an independent test: for example a middle dose such as
    0.6 kg/ha and some new fields. This would give the first score on data
