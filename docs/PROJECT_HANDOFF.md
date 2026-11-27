@@ -2,15 +2,16 @@
 
 Paste this whole file into a new chat with an AI assistant so it knows the
 project. It is written to be read without any other context. State as of
-26 November 2026 (first written 17 November 2026).
+27 November 2026 (first written 17 November 2026).
 
 **How to use this with an assistant:** it cannot see the code or the data, only
 this text. When you ask for code changes, paste the relevant file from the
 repository as well. Numbers below marked "measured" come from running the code
 on the full data; do not let an assistant change them from memory.
 
-> **State on 26 Nov 2026: the high-loss limit is now a share of the dose,
-> the app is simpler, 1991 is explained, the models are frozen.** No model
+> **State on 26 Nov 2026 (dose check added 27 Nov): the high-loss limit is
+> now a share of the dose, the app is simpler, 1991 is explained, the models
+> are frozen.** No model
 > was retrained; the new
 > scores in 6.10 come from the saved held-out predictions of the
 > year-by-year test.
@@ -45,9 +46,9 @@ on the full data; do not let an assistant change them from memory.
 > - **New command `check` and test-only data set `dosecheck`** (6.12,
 >   section 10). `check` scores the frozen models on runs they were not
 >   trained on. It trains nothing.
-> - **The 0.6 kg/ha dose check is prepared, but not run yet** (6.12, 8.3).
->   The code is ready. The PRZM runs must still be made on the Windows PC.
->   No result exists yet.
+> - **The 0.6 kg/ha dose check was run on 27 Nov and passed** (6.12, 8.3):
+>   runoff R² 0.988, pesticide loss R² 0.980 on 500 runs with a dose the
+>   models never saw. It tests the dose only: fields and weather were known.
 > - 594 tests pass (before: 576).
 >
 > *25 Nov 2026, late evening (kept for context):*
@@ -1118,11 +1119,45 @@ models. It tests the models in `models/varied/`. The data set is
 the copy hold between the trained doses?). It is not an independent test.
 That still needs new fields from the Landau group (section 13).
 
-**Status.** The code is ready. The whole chain was rehearsed on 40
-existing run folders (inventory, qc, audit, features and check ran without
-error). The 0.6 kg/ha runs themselves are NOT made yet: PRZM only runs on
-Windows, so the project owner has to run them on their own PC (steps in
-8.3). No result exists yet.
+**Result (run on the project PC, recorded 27 Nov 2026).** All seven steps
+of 8.3 ran without error. PRZM finished all 500 runs; all 500 were trusted
+(4,915 of 4,915 run-years, 320 different weather files). The feature table
+has 672,066 rain days, 630,398 of them with trusted pesticide results. The
+models were the frozen ones in `models/varied/`.
+
+| Score | New runs at 0.6 kg/ha | Year-by-year test (6.4) |
+|---|---|---|
+| Runoff R² | 0.988 | 0.986 |
+| Pesticide loss R² | 0.980 | 0.965 |
+| Total loss, copy / PRZM | 0.983 | 0.985 |
+
+Alarms by share of the dose (alarms that are right / high-loss days found):
+
+| Limit (% of dose) | High-loss days | New runs at 0.6 kg/ha | Year-by-year test (6.10) |
+|---|---|---|---|
+| 0.01 | 10,009 | 93 % / 96 % | 94 % / 94 % |
+| 0.02 | 7,498 | 93 % / 96 % | 94 % / 93 % |
+| 0.05 | 4,597 | 93 % / 95 % | 93 % / 93 % |
+| 0.1 | 2,779 | 93 % / 93 % | 92 % / 92 % |
+| 0.2 | 1,422 | 94 % / 92 % | 90 % / 91 % |
+| 0.5 | 476 | 95 % / 90 % | 89 % / 88 % |
+
+**How to read it.**
+- The copy holds at a dose it never saw. At 0.6 kg/ha it is as close to
+  PRZM as at the trained doses. So a dose between 0.24 and 2.4 kg/ha in the
+  app is not a guess.
+- The scores are a little higher than in the year-by-year test. That is
+  not a sign of a better model. It is the sign of an easier test: the
+  fields, their weather and the years were all in the training data. For
+  comparison, the same command on the 1-March training runs themselves
+  gives a pesticide loss R² of 0.984.
+- So this result says nothing about new fields or new weather. The
+  independent test still needs new fields from the Landau group
+  (section 13).
+
+The result files are `new_runs_check.json` and
+`new_runs_check_by_year.csv` in `docs/results/varied/dose_check/`. They were
+made on the project PC and are committed from there.
 
 ---
 
@@ -1358,8 +1393,8 @@ python -m runoffwatch --dataset dosecheck check
    trains nothing.
 
 Afterwards commit only the files in `docs/results/varied/dose_check/` (and
-the figures in `docs/figures/varied/dose_check/`), never `data/`. Then
-write the result into 6.12.
+the figures in `docs/figures/varied/dose_check/`), never `data/`. The
+result of the run of 27 Nov 2026 is in 6.12.
 
 ---
 
@@ -1728,10 +1763,13 @@ decks. New since 17 Nov:
 - **Done (26 Nov): models frozen, `check` command ready** (6.12). The
   test-only data set `dosecheck` and `rerun --sample` were added, and the
   whole chain was rehearsed on 40 existing run folders. 594 tests pass.
+- **Done (27 Nov): the 0.6 kg/ha dose check was run and passed** (6.12).
+  It tests the dose only.
 
 Next, in this order:
-1. Run the seven steps of the 0.6 kg/ha dose check on the Windows PC (8.3)
-   and write the result into 6.12. This tests the dose only.
+1. If they are not in the repository yet: commit the result files of the
+   dose check from the project PC (`docs/results/varied/dose_check/` and
+   `docs/figures/varied/dose_check/`, never `data/`).
 2. Ask the Landau group for a small batch of new PRZM runs the models have
    never seen, as an independent test: for example a middle dose such as
    0.6 kg/ha and some new fields. This would give the first score on data

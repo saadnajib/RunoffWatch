@@ -404,6 +404,8 @@ set needs about 5 GB of free disk space (measured on the delivered data); both n
 
 The data set `dosecheck` is a test only: 500 extra runs with 0.6 kg/ha, a dose the models have not
 seen, made with `--dataset dosecheck rerun` (steps in docs/PROJECT_HANDOFF.md, section 8.3).
+Result of 27 Nov 2026: runoff R² 0.988 and pesticide loss R² 0.980, as good as at the trained doses.
+This tests the dose only, because the fields and their weather were in the training data.
 The saved models are frozen: `models/FROZEN.json` holds a fingerprint of every model file, and
 `train` refuses to overwrite a frozen folder (`train --cv` still works).
 
